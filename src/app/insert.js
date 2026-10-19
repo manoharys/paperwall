@@ -61,6 +61,14 @@ export class InsertPanel {
   }
 
   open(tab) {
+    if (window.matchMedia('(max-width: 900px)').matches) {
+      // Phones: the rail always opens its sheet.
+      this.tab = tab;
+      this.el.classList.remove('collapsed');
+      this.query = '';
+      this.onOpen?.();
+      return this.render();
+    }
     if (this.tab === tab && !this.el.classList.contains('collapsed')) {
       this.el.classList.toggle('collapsed');
     } else {
@@ -197,7 +205,7 @@ export class InsertPanel {
     fill();
     return [
       this.search(`Search ${ICONS.length} icons and ${STICKERS.length} stickers`, fill),
-      section('Icons', h('p', { class: 'hint' }, 'Change their color in the panel on the right.'), iconsGrid),
+      section('Icons', h('p', { class: 'hint' }, 'Change the color of an icon after you add it.'), iconsGrid),
       section('Stickers', stickerGrid),
       h('p', { class: 'hint' }, 'All drawn for Placard and free for any use (CC0).'),
     ];
@@ -260,7 +268,7 @@ export class InsertPanel {
       section('Charts', h('div', { class: 'thumb-grid two', 'data-testid': 'chart-grid' }, kinds.map((k) => h('button', {
         type: 'button', class: 'thumb wide', title: k.label, 'aria-label': k.label, 'data-testid': `chart-${k.type}`, onClick: () => ed.addChart(k.type),
         html: renderElementOnly(PREVIEW_DOC, createChart(k.type, { w: 200, h: 130, showValues: false }), { measure }),
-      }))), h('p', { class: 'hint' }, 'Type your numbers in the panel on the right.')),
+      }))), h('p', { class: 'hint' }, 'Add one, then type your own numbers.')),
       section('Tables', h('div', { class: 'thumb-grid two', 'data-testid': 'table-grid' }, tables.map((t) => h('button', {
         type: 'button', class: 'thumb wide', title: t.label, 'aria-label': t.label, 'data-testid': `table-${t.label}`, onClick: () => ed.addTable(t.props),
         html: renderElementOnly(PREVIEW_DOC, createTable({ ...t.props, w: 200, h: 120, size: 13 }), { measure }),

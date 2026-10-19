@@ -166,8 +166,23 @@ test('[APP-03] works on a phone: tap, drag and resize with touch', async () => {
   await touchDrag(page, se, { x: se.x + 30, y: se.y + 30 });
   el = (await elements(page))[0];
   assert.ok(el.w > s.w, 'resized by touch');
-  // The editor fits on the phone screen without sideways scrolling.
+  // The editor fits on the phone screen: nothing pokes out past the edges.
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   assert.ok(overflow <= 0, `page is ${overflow}px too wide`);
+  const offscreen = await page.evaluate(() => [...document.querySelectorAll('.editor *')]
+    .filter((e) => e.offsetParent && !e.closest('.rail, .page-list, .stage, .popover') && e.getBoundingClientRect().right > innerWidth + 1)
+    .map((e) => e.className || e.tagName));
+  assert.deepEqual(offscreen, []);
+  for (const id of ['download', 'undo', 'redo', 'rail-text', 'zoom-fit']) {
+    const b = await page.locator(`[data-testid="${id}"]`).boundingBox();
+    assert.ok(b && b.x >= 0 && b.x + b.width <= 390, `${id} is on screen`);
+  }
+  // Selecting shows the properties sheet; a tool in the bottom bar shows the add sheet.
+  assert.ok(await page.locator('[data-testid="inspector"]').isVisible());
+  await page.locator('[data-testid="rail-shapes"]').tap();
+  assert.ok(await page.locator('[data-testid="shape-grid"]').isVisible());
+  assert.ok(!(await page.locator('[data-testid="inspector"]').isVisible()));
+  await page.locator('[data-testid="shape-Heart"]').tap();
+  assert.equal((await elements(page)).at(-1).shape, 'heart');
   await context.close();
 });

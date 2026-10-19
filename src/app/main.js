@@ -139,8 +139,24 @@ async function openEditor(id) {
       iconButton('moon', 'Dark mode', toggleTheme, { 'data-testid': 'theme-toggle' }),
       h('button', { type: 'button', class: 'btn primary', 'data-testid': 'download', onClick: () => exportDialog(editor) }, icon('download'), h('span', null, 'Download'))));
 
+  // On small screens one sheet shows at a time: "insert" (add things) or "edit" (properties).
+  const workspace = h('div', { class: 'workspace', 'data-sheet': 'none' }, insert.el, canvas.el, inspector.el);
+  const setSheet = (name) => {
+    if (workspace.dataset.sheet === name) return;
+    workspace.dataset.sheet = name;
+    // The canvas just changed size on phones; fit the page into it again.
+    if (window.matchMedia('(max-width: 900px)').matches) requestAnimationFrame(() => canvas.zoomToFit());
+  };
+  insert.onOpen = () => setSheet('insert');
+  editor.on((what) => {
+    if (what === 'selection' && editor.selection.length) setSheet('edit');
+  });
+  const closeSheet = iconButton('down', 'Hide panel', () => setSheet('none'), { class: 'icon-btn sheet-close', 'data-testid': 'sheet-close' });
+  inspector.el.prepend(closeSheet);
+  insert.el.querySelector('.insert-panel').prepend(closeSheet.cloneNode(true));
+  insert.el.querySelector('.insert-panel .sheet-close').addEventListener('click', () => setSheet('none'));
   clear(root);
-  root.append(h('div', { class: 'editor' }, top, h('div', { class: 'workspace' }, insert.el, canvas.el, inspector.el), strip.el));
+  root.append(h('div', { class: 'editor' }, top, workspace, strip.el));
   const unbindKeys = bindShortcuts(editor, canvas, { exportDialog: () => exportDialog(editor) });
   const offTop = editor.on(syncTop);
   const onResize = () => canvas.layout();
