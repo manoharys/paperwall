@@ -50,8 +50,11 @@ export class Canvas {
       if (e.code === 'Space') this.spaceDown = false;
     });
     editor.on((what) => {
-      if (what === 'view') this.layout();
-      this.schedule();
+      if (what === 'live') return this.schedule();
+      // Discrete changes draw right away; drags are batched per frame.
+      if (this.frame) cancelAnimationFrame(this.frame);
+      this.frame = 0;
+      this.render();
     });
   }
 

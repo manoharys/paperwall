@@ -26,8 +26,14 @@ export function normalizeHex(v) {
 let openPopover = null;
 
 export function closePopover() {
-  openPopover?.remove();
+  if (!openPopover) return;
+  openPopover.remove();
   openPopover = null;
+  document.dispatchEvent(new Event('placard:popover-closed'));
+}
+
+export function popoverOpen() {
+  return !!openPopover;
 }
 
 document.addEventListener('pointerdown', (e) => {
@@ -87,6 +93,13 @@ export function colorButton({ label, value, onChange, getContext = () => ({}), t
       row('In this design', ctx.used),
       row('Brand kit', ctx.brand),
       PALETTES.map((p) => row(p.name, p.colors)));
+    pop.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        closePopover();
+        btn.focus();
+      }
+    });
     document.body.append(pop);
     const r = btn.getBoundingClientRect();
     const top = Math.min(window.innerHeight - pop.offsetHeight - 8, r.bottom + 6);

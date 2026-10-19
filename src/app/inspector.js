@@ -2,7 +2,7 @@
 // is, and the layers list.
 
 import { h, icon, iconButton, clear, toast, pickFile, readFileAsDataUrl, dialog, mod } from './ui.js';
-import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover } from './widgets.js';
+import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover, popoverOpen } from './widgets.js';
 import { FONTS } from '../model/fonts.js';
 import { SHAPES, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid } from '../model/doc.js';
 import { collectColors, cropZoom } from '../model/commands.js';
@@ -34,10 +34,24 @@ export class Inspector {
       this.tabButton('edit', 'Edit'),
       this.tabButton('layers', 'Layers'));
     this.el = h('aside', { class: 'inspector', 'data-testid': 'inspector', 'aria-label': 'Properties' }, this.tabs, this.body);
+    this.stale = false;
     editor.on((what) => {
       if (what === 'live') return this.refreshGeometry();
-      if (what === 'doc' && this.el.contains(document.activeElement) && document.activeElement.tagName !== 'BUTTON') return;
+      // Don't pull the rug out from under a field or color picker in use.
+      const busy = (this.el.contains(document.activeElement) && document.activeElement.tagName !== 'BUTTON') || popoverOpen();
+      if (what === 'doc' && busy) {
+        this.stale = true;
+        return this.refreshGeometry();
+      }
       this.render();
+    });
+    document.addEventListener('placard:popover-closed', () => {
+      if (this.stale) this.render();
+    });
+    this.el.addEventListener('focusout', () => {
+      setTimeout(() => {
+        if (this.stale && !this.el.contains(document.activeElement) && !popoverOpen()) this.render();
+      }, 0);
     });
     getSetting('brand', { colors: [] }).then((b) => (this.brand = b || { colors: [] }));
   }
@@ -52,6 +66,7 @@ export class Inspector {
   colorContext = () => ({ used: collectColors(this.ed.doc).slice(0, 12), brand: this.brand.colors || [] });
 
   render() {
+    this.stale = false;
     closePopover();
     for (const b of this.tabs.children) b.setAttribute('aria-selected', String(b.dataset.tab === this.tab));
     clear(this.body);

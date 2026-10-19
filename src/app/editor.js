@@ -284,7 +284,8 @@ export class Editor {
     const ids = this.selection;
     const removed = this.change(() => cmd.deleteElements(this.doc, this.page, ids));
     if (removed < ids.length) toast('Locked elements were kept. Unlock them to delete.');
-    this.selection = [];
+    // Whatever was locked stays selected, so it can be unlocked right away.
+    this.selection = ids.filter((id) => cmd.findElement(this.pageData, id));
     this.emit('selection');
   }
 

@@ -263,31 +263,34 @@ export class InsertPanel {
   brand() {
     const ed = this.ed;
     const wrap = h('div', { 'data-testid': 'brand-kit' });
+    let current = { colors: [] };
     const draw = (brand) => {
+      current = brand;
       clear(wrap);
-      const save = async (next) => {
-        await store.setSetting('brand', next);
-        draw(next);
+      // Changes apply to the latest kit right away, so quick edits never overwrite each other.
+      const save = (next) => {
+        const merged = { ...current, ...next, colors: next.colors ?? current.colors };
+        draw(merged);
+        store.setSetting('brand', merged);
       };
       const colors = h('div', { class: 'brand-colors', 'data-testid': 'brand-colors' },
         (brand.colors || []).map((c, i) => h('div', { class: 'brand-color' },
           colorButton({ label: `Brand color ${i + 1}`, value: c, onChange: (v, live) => {
             if (live) return;
-            const next = { ...brand, colors: brand.colors.map((x, k) => (k === i ? v : x)) };
-            save(next);
+            save({ colors: current.colors.map((x, k) => (k === i ? v : x)) });
           } }),
-          iconButton('close', 'Remove color', () => save({ ...brand, colors: brand.colors.filter((_, k) => k !== i) }))),
+          iconButton('close', 'Remove color', () => save({ colors: current.colors.filter((_, k) => k !== i) }))),
         ),
         (brand.colors || []).length < 10 ? h('button', { type: 'button', class: 'add-color', title: 'Add a brand color', 'aria-label': 'Add a brand color', 'data-testid': 'brand-add-color', onClick: () => {
-          const used = collectColors(ed.doc).find((c) => !(brand.colors || []).includes(c) && c !== '#ffffff') || '#f25c2a';
-          save({ ...brand, colors: [...(brand.colors || []), used] });
+          const used = collectColors(ed.doc).find((c) => !(current.colors || []).includes(c) && c !== '#ffffff') || '#f25c2a';
+          save({ colors: [...(current.colors || []), used] });
         } }, icon('plus')) : null);
       const fontOpts = [{ value: '', label: '(keep as is)' }, ...FONTS.map((f) => ({ value: f.name, label: f.name }))];
       wrap.append(
         section('Brand colors', colors, h('p', { class: 'hint' }, 'They appear in every color picker.')),
         section('Brand fonts',
-          selectField({ label: 'Headings', value: brand.headingFont || '', options: fontOpts, testid: 'brand-heading-font', onChange: (v) => save({ ...brand, headingFont: v || null }) }),
-          selectField({ label: 'Body text', value: brand.bodyFont || '', options: fontOpts, testid: 'brand-body-font', onChange: (v) => save({ ...brand, bodyFont: v || null }) })),
+          selectField({ label: 'Headings', value: brand.headingFont || '', options: fontOpts, testid: 'brand-heading-font', onChange: (v) => save({ headingFont: v || null }) }),
+          selectField({ label: 'Body text', value: brand.bodyFont || '', options: fontOpts, testid: 'brand-body-font', onChange: (v) => save({ bodyFont: v || null }) })),
         h('button', { type: 'button', class: 'btn primary wide', 'data-testid': 'brand-apply', disabled: !(brand.colors?.length || brand.headingFont || brand.bodyFont), onClick: () => {
           ed.applyBrand(brand);
           toast('Brand kit applied. Undo if you don\'t like it.');
