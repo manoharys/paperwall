@@ -25,8 +25,19 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
 // ---------- theme ----------
 
+function quickTheme(value) {
+  // A synchronous copy, so the theme survives closing the tab right after a switch.
+  try {
+    if (value === undefined) return localStorage.getItem('placard-theme');
+    localStorage.setItem('placard-theme', value);
+  } catch {
+    /* storage can be blocked; IndexedDB still has it */
+  }
+  return null;
+}
+
 async function applyTheme() {
-  const theme = await store.getSetting('theme', null);
+  const theme = quickTheme() || (await store.getSetting('theme', null));
   if (theme) document.documentElement.dataset.theme = theme;
   else delete document.documentElement.dataset.theme;
 }
@@ -37,6 +48,7 @@ async function toggleTheme() {
     : window.matchMedia('(prefers-color-scheme: dark)').matches;
   const next = dark ? 'light' : 'dark';
   document.documentElement.dataset.theme = next;
+  quickTheme(next);
   await store.setSetting('theme', next);
 }
 
@@ -48,16 +60,17 @@ function route() {
   else showHome();
 }
 
-function closeEditor() {
+async function closeEditor() {
   if (!current) return;
-  current.editor.flush();
-  current.unbind();
+  const { editor, unbind } = current;
   current = null;
+  unbind();
   window.placard = null;
+  await editor.flush();
 }
 
-function showHome() {
-  closeEditor();
+async function showHome() {
+  await closeEditor();
   document.title = 'Placard: free design tool that works offline';
   renderHome(root, {
     openDesign: (id) => (location.hash = `#/d/${id}`),
@@ -75,7 +88,7 @@ function showHome() {
 let pendingFit = false;
 
 async function openEditor(id) {
-  closeEditor();
+  await closeEditor();
   let doc = await store.loadDesign(id);
   if (!doc) {
     toast("That design isn't on this device.", 'error');

@@ -115,7 +115,7 @@ export function debounce(fn, ms) {
   };
   wrapped.flush = () => {
     clearTimeout(t);
-    fn();
+    return fn();
   };
   return wrapped;
 }

@@ -94,8 +94,9 @@ export class Editor {
     }
   }
 
+  /** Save now. Resolves when the design is on disk. */
   flush() {
-    this.save.flush();
+    return this.save.flush();
   }
 
   undo() {
@@ -465,7 +466,7 @@ export class Editor {
     const copy = cmd.resizeDesign(this.doc, width, height);
     copy.name = name || `${this.doc.name} (${width} × ${height})`;
     copy.createdAt = Date.now();
-    this.flush();
+    await this.flush();
     await store.saveDesign(copy, null);
     this.onOpenDesign?.(copy.id);
     return copy;
