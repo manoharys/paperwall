@@ -257,3 +257,28 @@ test('[TPL-05] every template is original and free for any use (CC0)', () => {
   const readme = readFileSync(new URL('../../README.md', import.meta.url), 'utf8');
   assert.match(readme, /CC0/);
 });
+
+test('[EXP-12] PDF with real, selectable and searchable text', async () => {
+  const { page, context } = await newDesign('a4');
+  await addText(page);
+  await page.evaluate(() => window.placard.editor.update({ text: 'Spring fair at Café Lumière', align: 'center' }));
+  const { bytes } = await downloadVia(page, () => page.click('[data-testid="export-format"] [data-value="pdf"]'));
+  const raw = bytes.toString('latin1');
+  assert.ok(raw.includes('Caf\xe9') && raw.includes('Lumi\xe8re'), 'accents survive as single bytes');
+  try {
+    execFileSync('pdftotext', ['-v'], { stdio: 'ignore' });
+  } catch {
+    return context.close();
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'placard-pdf-'));
+  writeFileSync(join(dir, 'a.pdf'), bytes);
+  const text = execFileSync('pdftotext', ['-enc', 'UTF-8', join(dir, 'a.pdf'), '-']).toString();
+  assert.match(text.replace(/\s+/g, ' '), /Spring fair at Café Lumière/);
+  // The words sit where the picture shows them: centered on an A4 page.
+  const html = execFileSync('pdftotext', ['-bbox', join(dir, 'a.pdf'), '-']).toString();
+  const words = [...html.matchAll(/xMin="([\d.]+)" yMin="[\d.]+" xMax="([\d.]+)"[^>]*>([^<]+)</g)].map((m) => ({ x1: +m[1], x2: +m[2], w: m[3] }));
+  const left = Math.min(...words.map((w) => w.x1));
+  const right = Math.max(...words.map((w) => w.x2));
+  assert.ok(Math.abs((left + right) / 2 - 297.6) < 15, `centered: ${left}..${right}`);
+  await context.close();
+});

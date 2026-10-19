@@ -1,5 +1,5 @@
-// A small PDF writer: one JPEG image per page. Enough for print-quality PDFs
-// with no dependencies. (PDFs with selectable text are on the roadmap.)
+// A small PDF writer: one JPEG image per page, with an invisible text layer
+// on top so the text can be selected, searched and copied. No dependencies.
 
 const enc = new TextEncoder();
 
@@ -8,8 +8,53 @@ export function pxToPt(px, dpi = 96) {
   return (px / dpi) * 72;
 }
 
+// Glyph widths of Helvetica (a standard PDF font, never embedded) for
+// printable ASCII, in 1/1000 em. Used to stretch the invisible text layer so
+// selections line up with the text in the picture.
+const HELVETICA = [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278,
+  556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015,
+  667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611,
+  278, 278, 278, 469, 556, 333,
+  556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500,
+  334, 260, 334, 584];
+
+export function helveticaWidth(text, size) {
+  let w = 0;
+  for (const ch of text) {
+    const c = ch.charCodeAt(0);
+    w += c >= 32 && c <= 126 ? HELVETICA[c - 32] : 556;
+  }
+  return (w * size) / 1000;
+}
+
+/** Text that Helvetica with WinAnsi encoding can carry; other characters become '?'. */
+export function pdfText(s) {
+  return String(s).replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/[\u2013\u2014]/g, '-').replace(/\u2022/g, '*')
+    .replace(/[^\x20-\x7e\xa0-\xff]/g, '?').replace(/([\\()])/g, '\\$1');
+}
+
 /**
- * pages: [{ jpeg: Uint8Array, pxWidth, pxHeight, ptWidth, ptHeight }]
+ * Invisible, selectable text: runs of { text, x, y, size, width, angle } in
+ * points, with (x, y) the left end of the baseline measured from the top-left.
+ */
+function textLayer(runs, pageHeight) {
+  const ops = [];
+  for (const r of runs) {
+    const text = pdfText(r.text);
+    if (!text.trim()) continue;
+    const natural = helveticaWidth(r.text, r.size) || 1;
+    const scale = Math.max(1, Math.min(1000, (r.width / natural) * 100));
+    const a = ((r.angle || 0) * Math.PI) / 180;
+    const cos = round(Math.cos(a));
+    const sin = round(Math.sin(a));
+    // PDF's y axis points up; rotation is clockwise on the page.
+    ops.push(`BT 3 Tr /F1 ${round(r.size)} Tf ${round(scale)} Tz ${cos} ${-sin} ${sin} ${cos} ${round(r.x)} ${round(pageHeight - r.y)} Tm (${text}) Tj ET`);
+  }
+  return ops.join('\n');
+}
+
+/**
+ * pages: [{ jpeg: Uint8Array, pxWidth, pxHeight, ptWidth, ptHeight, text?: runs }]
  * Returns the PDF file as a Uint8Array.
  */
 export function buildPdf(pages, { title = 'Placard design' } = {}) {
@@ -29,20 +74,23 @@ export function buildPdf(pages, { title = 'Placard design' } = {}) {
     write('\nendobj\n');
   };
 
-  // Objects: 1 catalog, 2 page tree, 3 info, then 3 per page (page, content, image).
-  const first = 4;
+  // Objects: 1 catalog, 2 page tree, 3 info, 4 font, then 3 per page (page, content, image).
+  const first = 5;
   const kids = pages.map((_, i) => `${first + i * 3} 0 R`).join(' ');
   write('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
   obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
   obj(2, `<< /Type /Pages /Kids [${kids}] /Count ${pages.length} >>`);
   obj(3, `<< /Title (${pdfString(title)}) /Producer (Placard) >>`);
+  obj(4, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
   pages.forEach((p, i) => {
     const pageNo = first + i * 3;
     const w = round(p.ptWidth);
     const h = round(p.ptHeight);
-    const content = `q ${w} 0 0 ${h} 0 0 cm /Im0 Do Q`;
-    obj(pageNo, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w} ${h}] /Resources << /XObject << /Im0 ${pageNo + 2} 0 R >> >> /Contents ${pageNo + 1} 0 R >>`);
-    obj(pageNo + 1, [`<< /Length ${content.length} >>\nstream\n`, content, '\nendstream']);
+    const layer = p.text?.length ? `\n${textLayer(p.text, h)}` : '';
+    const content = `q ${w} 0 0 ${h} 0 0 cm /Im0 Do Q${layer}`;
+    obj(pageNo, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w} ${h}] /Resources << /XObject << /Im0 ${pageNo + 2} 0 R >> /Font << /F1 4 0 R >> >> /Contents ${pageNo + 1} 0 R >>`);
+    const bytes = latin1(content);
+    obj(pageNo + 1, [`<< /Length ${bytes.length} >>\nstream\n`, bytes, '\nendstream']);
     obj(pageNo + 2, [
       `<< /Type /XObject /Subtype /Image /Width ${p.pxWidth} /Height ${p.pxHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.jpeg.length} >>\nstream\n`,
       p.jpeg,
@@ -62,6 +110,12 @@ export function buildPdf(pages, { title = 'Placard design' } = {}) {
     out.set(c, pos);
     pos += c.length;
   }
+  return out;
+}
+
+function latin1(s) {
+  const out = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i) & 0xff;
   return out;
 }
 

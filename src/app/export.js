@@ -1,7 +1,7 @@
 // Downloads: PNG, JPG, SVG, PDF, a zip of pages, printing, copying to the
 // clipboard, and Placard project files. All of it happens on your device.
 
-import { renderPage } from '../model/render.js';
+import { renderPage, textRuns } from '../model/render.js';
 import { buildPdf } from '../model/pdf.js';
 import { buildZip } from '../model/zip.js';
 import { validateDesign, clone } from '../model/doc.js';
@@ -72,7 +72,9 @@ export async function exportPdf(doc, pages, { quality = 0.92 } = {}) {
   for (const i of pages) {
     const canvas = await rasterize(doc, i, { scale: pts.renderScale, background: '#ffffff' });
     const jpeg = await blobBytes(await toBlob(canvas, 'image/jpeg', quality));
-    out.push({ jpeg, pxWidth: canvas.width, pxHeight: canvas.height, ptWidth: pts.ptWidth, ptHeight: pts.ptHeight });
+    const k = pts.ptWidth / doc.width;
+    const text = textRuns(doc, i, measure).map((r) => ({ ...r, x: r.x * k, y: r.y * k, size: r.size * k, width: r.width * k }));
+    out.push({ jpeg, pxWidth: canvas.width, pxHeight: canvas.height, ptWidth: pts.ptWidth, ptHeight: pts.ptHeight, text });
   }
   return new Blob([buildPdf(out, { title: doc.name })], { type: 'application/pdf' });
 }

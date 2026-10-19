@@ -193,3 +193,22 @@ test('[SEL-11] [SEL-12] snapping to the page center and to other elements', () =
   assert.equal(o.dy, -3);
   assert.equal(snapMove({ x: 100, y: 100, w: 10, h: 10 }, [], page, 6).guides.length, 0);
 });
+
+test('[EXP-12] PDF text layer: selectable text, placed on the page, Latin-1 safe', async () => {
+  const { textRuns } = await import('../../src/model/render.js');
+  const doc = createDesign({ width: 1000, height: 500 });
+  addElement(doc, 0, createText({ text: 'Café menu (today)', x: 100, y: 50, w: 800, size: 40, align: 'center' }));
+  const runs = textRuns(doc, 0, fixed);
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].text, 'Café menu (today)');
+  assert.ok(Math.abs(runs[0].x + runs[0].width / 2 - 500) < 0.01, 'centered like the picture');
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
+  const pdf = buildPdf([{ jpeg, pxWidth: 1, pxHeight: 1, ptWidth: 750, ptHeight: 375, text: runs }]);
+  const text = Buffer.from(pdf).toString('latin1');
+  assert.match(text, /\/BaseFont \/Helvetica/);
+  assert.ok(text.includes('(Caf\xe9 menu \\(today\\)) Tj'), 'escaped and single-byte');
+  assert.match(text, /BT 3 Tr/, 'invisible over the picture');
+  const startxref = Number(text.match(/startxref\n(\d+)/)[1]);
+  const entries = [...text.slice(startxref).matchAll(/(\d{10}) 00000 n/g)].map((m) => Number(m[1]));
+  entries.forEach((off, i) => assert.ok(text.slice(off).startsWith(`${i + 1} 0 obj`)));
+});

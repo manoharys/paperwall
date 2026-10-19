@@ -294,3 +294,50 @@ export function renderElementOnly(doc, el, opts = {}) {
   const body = renderElement(ctx, { ...el, x: 0, y: 0, rotation: 0 });
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${f(el.w)} ${f(el.h)}"><defs>${ctx.defs.join('')}</defs>${body}</svg>`;
 }
+
+/**
+ * Where every line of text sits on a page, for the PDF text layer.
+ * Returns runs in page pixels: { text, x, y (baseline), size, width, angle }.
+ */
+export function textRuns(doc, pageIndex, measure = approxMeasure) {
+  const runs = [];
+  const visit = (els, ox, oy) => {
+    for (const el of els) {
+      if (el.hidden) continue;
+      if (el.type === 'group') {
+        if (!el.rotation) visit(el.children, ox + el.x, oy + el.y);
+        continue;
+      }
+      if (el.type !== 'text') continue;
+      const x0 = ox + el.x;
+      const y0 = oy + el.y;
+      const cx = x0 + el.w / 2;
+      const cy = y0 + el.h / 2;
+      const rot = ((el.rotation || 0) * Math.PI) / 180;
+      const place = (lx, ly) => {
+        const dx = x0 + lx - cx;
+        const dy = y0 + ly - cy;
+        return { x: cx + dx * Math.cos(rot) - dy * Math.sin(rot), y: cy + dx * Math.sin(rot) + dy * Math.cos(rot) };
+      };
+      if (el.curve) {
+        const text = displayText(el).replace(/\s*\n\s*/g, ' ');
+        const p = place(0, el.h * 0.6);
+        runs.push({ text, x: p.x, y: p.y, size: el.size, width: el.w, angle: el.rotation || 0 });
+        continue;
+      }
+      const { lines, lineHeight } = layoutText(el, measure);
+      const pad = el.highlight ? el.highlight.padding ?? 0 : 0;
+      lines.forEach((line, i) => {
+        if (!line.text) return;
+        const baseline = pad + i * lineHeight + (lineHeight - el.size) / 2 + el.size * 0.8;
+        let x = line.indent;
+        if (el.align === 'center') x = line.indent + (el.w - line.indent - line.width) / 2;
+        else if (el.align === 'right') x = el.w - line.width;
+        const p = place(x, baseline);
+        runs.push({ text: (line.prefix ? line.prefix.trim() + ' ' : '') + line.text, x: p.x, y: p.y, size: el.size, width: line.width, angle: el.rotation || 0 });
+      });
+    }
+  };
+  visit(doc.pages[pageIndex].elements, 0, 0);
+  return runs;
+}

@@ -201,7 +201,7 @@
         { "id": "EXP-09", "title": "No watermark, ever" },
         { "id": "EXP-10", "title": "Exported SVG carries its fonts, so it looks the same anywhere" },
         { "id": "EXP-11", "title": "Copy the design to the clipboard as an image" },
-        { "id": "EXP-12", "title": "PDF with real, selectable text" }
+        { "id": "EXP-12", "title": "PDF with real, selectable and searchable text" }
       ]
     },
     {
