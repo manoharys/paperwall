@@ -281,12 +281,27 @@ export function pruneAssets(doc) {
 /** Check that a parsed file looks like a Placard design. Throws a readable error if not. */
 export function validateDesign(doc) {
   if (!doc || typeof doc !== 'object') throw new Error('This file is not a Placard design');
+  doc.width = Number(doc.width);
+  doc.height = Number(doc.height);
+  if (typeof doc.name !== 'string') doc.name = 'Untitled design';
   if (doc.version !== FORMAT_VERSION) throw new Error(`Unsupported design version: ${doc.version}`);
   if (!(doc.width > 0 && doc.height > 0)) throw new Error('This design has no size');
   if (!Array.isArray(doc.pages) || !doc.pages.length) throw new Error('This design has no pages');
   if (!doc.assets || typeof doc.assets !== 'object') doc.assets = {};
+  // Files can come from anyone: keep only well-formed elements with numeric geometry.
+  const NUMERIC = ['x', 'y', 'w', 'h', 'rotation', 'opacity', 'size', 'weight', 'lineHeight', 'letterSpacing', 'curve', 'strokeWidth', 'radius', 'sides', 'innerRatio'];
+  const clean = (els) => els.filter((el) => el && typeof el === 'object' && typeof el.type === 'string' && typeof el.id === 'string').map((el) => {
+    for (const k of NUMERIC) if (k in el && el[k] !== null) el[k] = Number.isFinite(+el[k]) ? +el[k] : 0;
+    if (el.type === 'group') el.children = Array.isArray(el.children) ? clean(el.children) : [];
+    return el;
+  });
   for (const p of doc.pages) {
-    if (!Array.isArray(p.elements)) throw new Error('A page in this design is damaged');
+    if (!p || !Array.isArray(p.elements)) throw new Error('A page in this design is damaged');
+    p.elements = clean(p.elements);
+  }
+  for (const [id, a] of Object.entries(doc.assets)) {
+    if (!a || typeof a.dataUrl !== 'string' || !/^data:(image|font)\//.test(a.dataUrl)) delete doc.assets[id];
+    else if (a.type === 'font') a.family = String(a.family || 'My font').replace(/[^\w\s-]/g, '').trim() || 'My font';
   }
   return doc;
 }

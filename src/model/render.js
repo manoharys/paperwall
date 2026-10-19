@@ -7,6 +7,7 @@ import { iconById, stickerById } from './graphics.js';
 import { qrMatrix, qrPath } from './qr.js';
 
 const f = (n) => Math.round(n * 100) / 100;
+const num = (v, fallback) => (Number.isFinite(+v) ? +v : fallback);
 
 export function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -168,7 +169,7 @@ function renderQr(ctx, el) {
 }
 
 export function textAttrs(el) {
-  return `font-family="${esc(el.font)}, sans-serif" font-size="${f(el.size)}" font-weight="${el.weight || 400}"${el.italic ? ' font-style="italic"' : ''}${el.letterSpacing ? ` letter-spacing="${f(el.letterSpacing)}"` : ''}`;
+  return `font-family="${esc(el.font)}, sans-serif" font-size="${f(el.size)}" font-weight="${num(el.weight, 400)}"${el.italic ? ' font-style="italic"' : ''}${el.letterSpacing ? ` letter-spacing="${f(el.letterSpacing)}"` : ''}`;
 }
 
 /** Radius and height for curved text. curve is -100…100. */
@@ -361,7 +362,7 @@ export function renderElement(ctx, el) {
   const attrs = [`transform="${transformOf(el)}"`];
   if ((el.opacity ?? 1) < 1) attrs.push(`opacity="${f(el.opacity)}"`);
   if (el.shadow) attrs.push(`filter="url(#${shadowFilter(ctx, el.shadow)})"`);
-  if (ctx.editor) attrs.push(`data-id="${esc(el.id)}" data-type="${el.type}"`);
+  if (ctx.editor) attrs.push(`data-id="${esc(el.id)}" data-type="${esc(el.type)}"`);
   return `<g ${attrs.join(' ')}>${body}</g>`;
 }
 
@@ -386,8 +387,8 @@ export function renderPage(doc, pageIndex, opts = {}) {
   const page = doc.pages[pageIndex];
   if (!page) throw new Error(`No page ${pageIndex + 1}`);
   const ctx = makeCtx(doc, opts);
-  const w = doc.width;
-  const h = doc.height;
+  const w = num(doc.width, 1);
+  const h = num(doc.height, 1);
   const bg = opts.transparent ? '' : renderBackground(ctx, page.background, w, h);
   const body = page.elements.map((el) => renderElement(ctx, el)).join('');
   const style = opts.fontCss ? `<style>${opts.fontCss}</style>` : '';

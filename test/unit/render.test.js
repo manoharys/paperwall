@@ -226,3 +226,19 @@ test('[ELM-05] [ELM-06] charts and tables render as valid SVG', async () => {
   assert.ok(svg.includes('…'), 'long cells are shortened to fit');
   assert.equal((svg.match(/<g /g) || []).length, (svg.match(/<\/g>/g) || []).length);
 });
+
+test('a hostile design file cannot inject markup into the page', async () => {
+  const { validateDesign } = await import('../../src/model/doc.js');
+  const evil = '"><img src=x onerror=alert(1)>';
+  const doc = createDesign({ width: 400, height: 400 });
+  const t = createText({ text: evil, font: evil, color: evil, weight: evil, size: evil });
+  const s = createShape('rect', { fill: evil, stroke: evil, strokeWidth: 3, x: evil });
+  doc.pages[0].elements.push(t, s, { ...createIcon('heart'), type: evil });
+  doc.pages[0].background = { type: 'color', color: evil };
+  doc.assets.bad = { type: 'image', dataUrl: 'javascript:alert(1)' };
+  const parsed = validateDesign(JSON.parse(JSON.stringify(doc)));
+  assert.ok(!parsed.assets.bad, 'non-data URLs are dropped');
+  const svg = renderPage(parsed, 0, { measure: fixed, editor: true });
+  assert.ok(!svg.includes('<img'), 'no raw tags');
+  assert.ok(!/onerror=/.test(svg.replace(/&quot;&gt;&lt;img src=x onerror=alert\(1\)&gt;/g, '')), 'only escaped copies remain');
+});
