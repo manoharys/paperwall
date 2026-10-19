@@ -235,7 +235,116 @@ function renderText(ctx, el) {
   return parts.join('');
 }
 
+function chartText(el, x, y, text, size, { anchor = 'middle', weight = 400, color } = {}) {
+  return `<text x="${f(x)}" y="${f(y)}" font-family="${esc(el.font)}, sans-serif" font-size="${f(size)}" font-weight="${weight}" fill="${esc(color || el.textColor)}" text-anchor="${anchor}">${esc(text)}</text>`;
+}
+
+function renderChart(ctx, el) {
+  const data = (el.data || []).filter((d) => Number.isFinite(d.value));
+  if (!data.length) return `<rect width="${f(el.w)}" height="${f(el.h)}" fill="none" stroke="${esc(el.textColor)}" stroke-dasharray="6 6"/>`;
+  const colors = el.colors?.length ? el.colors : ['#f25c2a'];
+  const color = (i) => esc(colors[i % colors.length]);
+  const fs = Math.max(8, Math.min(el.h, el.w) * 0.055);
+  const out = [];
+  if (el.chartType === 'pie' || el.chartType === 'donut') {
+    const total = data.reduce((s, d) => s + Math.max(0, d.value), 0) || 1;
+    const legend = el.w > el.h * 1.25;
+    const d = Math.min(el.h, legend ? el.w * 0.55 : el.w) * 0.94;
+    const cx = legend ? d / 2 + el.h * 0.03 : el.w / 2;
+    const cy = el.h / 2;
+    const r = d / 2;
+    let a = -Math.PI / 2;
+    data.forEach((item, i) => {
+      const share = Math.max(0, item.value) / total;
+      if (share <= 0) return;
+      if (share >= 0.9999) {
+        out.push(`<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r)}" fill="${color(i)}"/>`);
+        return;
+      }
+      const b = a + share * Math.PI * 2;
+      const large = b - a > Math.PI ? 1 : 0;
+      out.push(`<path d="M${f(cx)} ${f(cy)} L${f(cx + r * Math.cos(a))} ${f(cy + r * Math.sin(a))} A${f(r)} ${f(r)} 0 ${large} 1 ${f(cx + r * Math.cos(b))} ${f(cy + r * Math.sin(b))} Z" fill="${color(i)}"/>`);
+      a = b;
+    });
+    if (el.chartType === 'donut') out.push(`<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r * 0.55)}" fill="${esc(el.holeColor || '#ffffff')}"/>`);
+    if (legend) {
+      const lx = cx + r + el.w * 0.05;
+      const row = Math.min(fs * 1.9, el.h / data.length);
+      const top = cy - (row * data.length) / 2;
+      data.forEach((item, i) => {
+        const y = top + i * row + row / 2;
+        out.push(`<rect x="${f(lx)}" y="${f(y - fs * 0.4)}" width="${f(fs * 0.8)}" height="${f(fs * 0.8)}" rx="${f(fs * 0.15)}" fill="${color(i)}"/>`);
+        const pct = Math.round((Math.max(0, item.value) / total) * 100);
+        out.push(chartText(el, lx + fs * 1.2, y + fs * 0.35, el.showValues ? `${item.label} · ${pct}%` : item.label, fs, { anchor: 'start' }));
+      });
+    }
+    return out.join('');
+  }
+  const max = Math.max(...data.map((d) => d.value), 0) || 1;
+  const min = Math.min(...data.map((d) => d.value), 0);
+  const top = el.showValues ? fs * 1.6 : fs * 0.5;
+  const bottom = el.h - fs * 1.8;
+  const span = max - min || 1;
+  const y = (v) => bottom - ((v - min) / span) * (bottom - top);
+  const slot = el.w / data.length;
+  out.push(`<line x1="0" y1="${f(y(0))}" x2="${f(el.w)}" y2="${f(y(0))}" stroke="${esc(el.textColor)}" stroke-opacity="0.25" stroke-width="${f(Math.max(1, fs * 0.08))}"/>`);
+  if (el.chartType === 'line') {
+    const pts = data.map((d, i) => [slot * i + slot / 2, y(d.value)]);
+    out.push(`<polyline points="${pts.map(([px, py]) => `${f(px)},${f(py)}`).join(' ')}" fill="none" stroke="${color(0)}" stroke-width="${f(Math.max(2, fs * 0.22))}" stroke-linejoin="round" stroke-linecap="round"/>`);
+    pts.forEach(([px, py], i) => {
+      out.push(`<circle cx="${f(px)}" cy="${f(py)}" r="${f(Math.max(3, fs * 0.3))}" fill="${color(0)}"/>`);
+      if (el.showValues) out.push(chartText(el, px, py - fs * 0.6, String(data[i].value), fs * 0.9, { weight: 700 }));
+    });
+  } else {
+    data.forEach((d, i) => {
+      const bw = slot * 0.62;
+      const x = slot * i + (slot - bw) / 2;
+      const y1 = Math.min(y(d.value), y(0));
+      const hgt = Math.abs(y(d.value) - y(0));
+      out.push(`<rect x="${f(x)}" y="${f(y1)}" width="${f(bw)}" height="${f(Math.max(0.5, hgt))}" rx="${f(Math.min(bw * 0.12, hgt / 2))}" fill="${color(i)}"/>`);
+      if (el.showValues) out.push(chartText(el, x + bw / 2, y1 - fs * 0.4, String(d.value), fs * 0.9, { weight: 700 }));
+    });
+  }
+  data.forEach((d, i) => out.push(chartText(el, slot * i + slot / 2, el.h - fs * 0.35, d.label, fs)));
+  return out.join('');
+}
+
+function fitCell(ctx, text, width, el, weight) {
+  const style = { ...el, weight, letterSpacing: 0 };
+  if (ctx.measure(text, style) <= width) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measure(t + '…', style) > width) t = t.slice(0, -1);
+  return t + '…';
+}
+
+function renderTable(ctx, el) {
+  const rows = el.rows?.length ? el.rows : [['']];
+  const cols = Math.max(1, ...rows.map((r) => r.length));
+  const rh = el.h / rows.length;
+  const cw = el.w / cols;
+  const pad = Math.min(cw * 0.12, el.size * 0.6);
+  const out = [];
+  rows.forEach((row, r) => {
+    const isHead = el.header && r === 0;
+    const fill = isHead ? el.headerFill : el.stripes && r % 2 === (el.header ? 0 : 1) ? el.stripeFill : null;
+    if (fill) out.push(`<rect x="0" y="${f(r * rh)}" width="${f(el.w)}" height="${f(rh)}" fill="${esc(fill)}"/>`);
+    for (let c = 0; c < cols; c++) {
+      const text = fitCell(ctx, String(row[c] ?? ''), cw - pad * 2, el, isHead ? 700 : 400);
+      const x = el.align === 'center' ? c * cw + cw / 2 : el.align === 'right' ? (c + 1) * cw - pad : c * cw + pad;
+      const anchor = el.align === 'center' ? 'middle' : el.align === 'right' ? 'end' : 'start';
+      out.push(`<text x="${f(x)}" y="${f(r * rh + rh / 2 + el.size * 0.35)}" font-family="${esc(el.font)}, sans-serif" font-size="${f(el.size)}" font-weight="${isHead ? 700 : 400}" fill="${esc(isHead ? el.headerColor : el.color)}" text-anchor="${anchor}">${esc(text)}</text>`);
+    }
+  });
+  const line = esc(el.lineColor || '#dddddd');
+  const lw = Math.max(1, el.size * 0.05);
+  for (let r = 1; r < rows.length; r++) out.push(`<line x1="0" y1="${f(r * rh)}" x2="${f(el.w)}" y2="${f(r * rh)}" stroke="${line}" stroke-width="${f(lw)}"/>`);
+  out.push(`<rect width="${f(el.w)}" height="${f(el.h)}" fill="none" stroke="${line}" stroke-width="${f(lw)}"/>`);
+  return out.join('');
+}
+
 const RENDERERS = {
+  chart: renderChart,
+  table: renderTable,
   shape: renderShape,
   line: renderLine,
   image: renderImage,

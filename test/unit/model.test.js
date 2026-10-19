@@ -370,3 +370,13 @@ test('updateElements merges nested objects but replaces fills', () => {
   assert.equal(s.fill, '#ffffff');
   assert.deepEqual(clone(s).fill, '#ffffff');
 });
+
+test('[ELM-05] [ELM-06] chart and table data parse from plain text', async () => {
+  const { parseChartData, chartDataText, parseTable, tableText, createChart } = await import('../../src/model/doc.js');
+  assert.deepEqual(parseChartData('Mon, 3\nTue: 4.5\nbroken line\nWed\t-2'), [
+    { label: 'Mon', value: 3 }, { label: 'Tue', value: 4.5 }, { label: 'Wed', value: -2 },
+  ]);
+  assert.deepEqual(parseChartData(chartDataText(createChart('bar').data)), createChart('bar').data);
+  assert.deepEqual(parseTable('a, b, c\nd\n\ne\tf'), [['a', 'b', 'c'], ['d', '', ''], ['e', 'f', '']]);
+  assert.equal(tableText([['x', 'y']]), 'x, y');
+});

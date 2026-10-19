@@ -373,6 +373,11 @@ test('no panel ever shows stray "null" or "undefined" text', async () => {
   await page.fill('[data-testid="qr-input"]', 'hello');
   await page.click('[data-testid="qr-add"]');
   await check('qr');
+  await openTab(page, 'charts');
+  await page.click('[data-testid="chart-donut"]');
+  await check('chart');
+  await page.click('[data-testid="table-Schedule"]');
+  await check('table');
   await uploadImages(page, [await makePng(page)]);
   await check('image');
   await page.click('[data-testid="crop-btn"]');
@@ -387,5 +392,49 @@ test('no panel ever shows stray "null" or "undefined" text', async () => {
     await openTab(page, tab);
     await check(tab);
   }
+  await context.close();
+});
+
+test('[ELM-05] charts from your numbers', async () => {
+  const { page, context } = await newDesign('slides');
+  await openTab(page, 'charts');
+  await page.click('[data-testid="chart-bar"]');
+  const chart = await last(page);
+  assert.equal(chart.type, 'chart');
+  await page.fill('[data-testid="chart-data"]', 'North, 40\nSouth, 25\nEast, 60\nWest, 10');
+  await page.waitForFunction(() => window.placard.editor.single.data.length === 4);
+  assert.deepEqual((await last(page)).data.map((d) => d.value), [40, 25, 60, 10]);
+  assert.equal(await dom(page, chart.id).locator('rect').count(), 4, 'one bar per value');
+  assert.ok((await dom(page, chart.id).locator('text').allTextContents()).includes('East'));
+  await page.click('[data-testid="chart-type"] [data-value="pie"]');
+  assert.equal((await last(page)).chartType, 'pie');
+  assert.equal(await dom(page, chart.id).locator('path').count(), 4, 'one slice per value');
+  assert.ok((await dom(page, chart.id).locator('text').allTextContents()).some((t) => /East · 44%/.test(t)));
+  await page.selectOption('[data-testid="chart-palette"]', 'Lagoon');
+  assert.equal((await last(page)).colors[0], '#0a9396');
+  await page.keyboard.press(`${mod}+z`);
+  assert.notEqual((await last(page)).colors[0], '#0a9396');
+  await context.close();
+});
+
+test('[ELM-06] tables', async () => {
+  const { page, context } = await newDesign('slides');
+  await openTab(page, 'charts');
+  await page.click('[data-testid="table-Simple table"]');
+  const table = await last(page);
+  assert.equal(table.type, 'table');
+  await page.fill('[data-testid="table-data"]', 'Name, Role, City\nAda, Engineer, London\nGrace, Admiral, Arlington\nLinus, Maintainer, Portland');
+  await page.waitForFunction(() => window.placard.editor.single.rows.length === 4);
+  const t = await last(page);
+  assert.deepEqual(t.rows[2], ['Grace', 'Admiral', 'Arlington']);
+  assert.ok(t.h > table.h, 'the table grew for the new row');
+  const cells = await dom(page, table.id).locator('text').allTextContents();
+  assert.equal(cells.length, 12);
+  assert.ok(cells.includes('Portland'));
+  await page.click('[data-testid="table-header"]');
+  assert.equal((await last(page)).header, false);
+  // It exports with its fonts like everything else.
+  const svg = await page.evaluate(async () => (await window.placard.export.exportSvg(window.placard.editor.doc, 0)).text());
+  assert.match(svg, /font-family:"Inter";font-weight:700/);
   await context.close();
 });

@@ -148,6 +148,7 @@ export function scaleElement(el, sx, sy) {
     if (el.outline) el.outline = { ...el.outline, width: el.outline.width * s };
     if (el.highlight) el.highlight = { ...el.highlight, padding: (el.highlight.padding ?? 0) * s };
   }
+  if (el.type === 'table') el.size = Math.max(1, round(el.size * s));
   if (el.strokeWidth) el.strokeWidth *= s;
   if (el.radius) el.radius *= s;
   if (el.shadow) el.shadow = { ...el.shadow, x: el.shadow.x * s, y: el.shadow.y * s, blur: el.shadow.blur * s };

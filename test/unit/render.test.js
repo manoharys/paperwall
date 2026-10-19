@@ -212,3 +212,17 @@ test('[EXP-12] PDF text layer: selectable text, placed on the page, Latin-1 safe
   const entries = [...text.slice(startxref).matchAll(/(\d{10}) 00000 n/g)].map((m) => Number(m[1]));
   entries.forEach((off, i) => assert.ok(text.slice(off).startsWith(`${i + 1} 0 obj`)));
 });
+
+test('[ELM-05] [ELM-06] charts and tables render as valid SVG', async () => {
+  const { createChart, createTable } = await import('../../src/model/doc.js');
+  const doc = createDesign({ width: 800, height: 800 });
+  for (const t of ['bar', 'line', 'pie', 'donut']) addElement(doc, 0, createChart(t, { data: [{ label: 'A', value: 5 }, { label: 'B', value: 0 }, { label: 'C & D', value: 10 }] }));
+  addElement(doc, 0, createChart('bar', { data: [{ label: 'Up', value: 4 }, { label: 'Down', value: -3 }] }));
+  addElement(doc, 0, createTable({ rows: [['Name', 'Note'], ['A very long cell that will not fit', '<b>']] }));
+  const svg = renderPage(doc, 0, { measure: fixed });
+  assert.ok(!svg.includes('NaN') && !svg.includes('undefined'));
+  assert.ok(svg.includes('C &amp; D'));
+  assert.ok(svg.includes('&lt;b&gt;'));
+  assert.ok(svg.includes('…'), 'long cells are shortened to fit');
+  assert.equal((svg.match(/<g /g) || []).length, (svg.match(/<\/g>/g) || []).length);
+});

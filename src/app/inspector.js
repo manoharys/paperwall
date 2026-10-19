@@ -2,16 +2,16 @@
 // is, and the layers list.
 
 import { h, icon, iconButton, clear, toast, pickFile, readFileAsDataUrl, dialog, mod } from './ui.js';
-import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover, popoverOpen } from './widgets.js';
+import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover, popoverOpen, PALETTES } from './widgets.js';
 import { FONTS } from '../model/fonts.js';
-import { SHAPES, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid } from '../model/doc.js';
+import { SHAPES, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, parseChartData, chartDataText, parseTable, tableText } from '../model/doc.js';
 import { collectColors, cropZoom } from '../model/commands.js';
 import { renderElementOnly } from '../model/render.js';
 import { measure, addCustomFont, customFontNames } from './fonts.js';
 import { iconById, stickerById } from '../model/graphics.js';
 import { getSetting } from './store.js';
 
-const TYPE_NAMES = { text: 'Text', shape: 'Shape', line: 'Line', image: 'Image', icon: 'Icon', sticker: 'Sticker', qr: 'QR code', group: 'Group' };
+const TYPE_NAMES = { text: 'Text', shape: 'Shape', line: 'Line', image: 'Image', icon: 'Icon', sticker: 'Sticker', qr: 'QR code', group: 'Group', chart: 'Chart', table: 'Table' };
 const SHAPE_NAMES = { rect: 'Rectangle', ellipse: 'Circle', triangle: 'Triangle', star: 'Star', polygon: 'Polygon', heart: 'Heart', arrow: 'Arrow', bubble: 'Speech bubble', diamond: 'Diamond' };
 
 const FILTER_PRESETS = {
@@ -96,7 +96,7 @@ export class Inspector {
       iconButton('dup', `Duplicate (${mod}+D)`, () => ed.duplicate(), { 'data-testid': 'act-duplicate' }),
       iconButton(locked ? 'unlock' : 'lock', locked ? 'Unlock' : `Lock (${mod}+L)`, () => ed.toggleLock(), { 'data-testid': 'act-lock' }),
       iconButton('paint', 'Copy style', () => ed.copyStyle(), { 'data-testid': 'act-copy-style', disabled: !el }),
-      iconButton('more', 'Paste style', () => ed.pasteStyle(), { 'data-testid': 'act-paste-style', disabled: !ed.hasStyle }),
+      iconButton('pasteStyle', 'Paste style', () => ed.pasteStyle(), { 'data-testid': 'act-paste-style', disabled: !ed.hasStyle }),
       iconButton('trash', 'Delete (Del)', () => ed.deleteSelection(), { 'data-testid': 'act-delete' }));
   }
 
@@ -185,6 +185,8 @@ export class Inspector {
       icon: () => [section('Color', h('div', { class: 'field inline' }, h('span', null, 'Icon color'), colorButton({ label: 'Icon color', testid: 'icon-color', value: el.color, getContext: this.colorContext, onChange: (c, l) => this.up({ color: c }, l ? 'color' : null) })),
         slider({ label: 'Line weight', value: el.strokeWidth || 1.8, min: 0.5, max: 4, step: 0.1, onChange: (v, l) => this.up({ strokeWidth: v }, l ? 'sw' : null) }))],
       qr: () => this.qrPanel(el),
+      chart: () => this.chartPanel(el),
+      table: () => this.tablePanel(el),
     }[el.type];
     if (specific) out.push(...specific());
     out.push(this.arrange(1), this.geometry(el), this.effects());
@@ -368,6 +370,62 @@ export class Inspector {
         slider({ label: 'Corner rounding', value: el.radius || 0, min: 0, max: Math.round(Math.min(el.w, el.h) / 2), testid: 'image-radius', onChange: this.live('radius') }),
         toggle({ label: 'Circle crop', checked: el.mask === 'circle', testid: 'circle-mask', onChange: (on) => this.up({ mask: on ? 'circle' : 'none' }) })),
     ];
+  }
+
+  chartPanel(el) {
+    const data = h('textarea', { rows: '6', 'data-testid': 'chart-data', 'aria-label': 'Chart data, one "label, value" per line', spellcheck: 'false' });
+    data.value = chartDataText(el.data);
+    data.addEventListener('input', () => {
+      const parsed = parseChartData(data.value);
+      if (parsed.length) this.up({ data: parsed }, 'chart-data');
+    });
+    const fonts = FONTS.map((f) => ({ value: f.name, label: f.name }));
+    return [section('Chart',
+      segmented({ label: 'Chart type', value: el.chartType, testid: 'chart-type', onChange: (chartType) => this.up({ chartType }), options: [
+        { value: 'bar', label: 'Bars', text: 'Bars' },
+        { value: 'line', label: 'Line', text: 'Line' },
+        { value: 'pie', label: 'Pie', text: 'Pie' },
+        { value: 'donut', label: 'Donut', text: 'Donut' },
+      ] }),
+      h('label', { class: 'field' }, h('span', null, 'Data: one "label, value" per line'), data),
+      selectField({ label: 'Colors', value: '', testid: 'chart-palette', options: [{ value: '', label: 'Pick a palette…' }, { value: 'brand', label: 'Brand kit' }, ...PALETTES.map((p) => ({ value: p.name, label: p.name }))], onChange: (name) => {
+        const colors = name === 'brand' ? this.brand.colors : PALETTES.find((p) => p.name === name)?.colors;
+        if (colors?.length) this.up({ colors: [...colors] });
+      } }),
+      h('div', { class: 'row' },
+        h('div', { class: 'field inline' }, h('span', null, 'First color'), colorButton({ label: 'Chart color', testid: 'chart-color', value: el.colors[0], getContext: this.colorContext, onChange: (c, l) => this.up({ colors: [c, ...el.colors.slice(1)] }, l ? 'cc' : null) })),
+        h('div', { class: 'field inline' }, h('span', null, 'Labels'), colorButton({ label: 'Label color', value: el.textColor, getContext: this.colorContext, onChange: (c, l) => this.up({ textColor: c }, l ? 'tc' : null) }))),
+      selectField({ label: 'Font', value: el.font, options: fonts, onChange: (font) => this.up({ font }) }),
+      toggle({ label: el.chartType === 'pie' || el.chartType === 'donut' ? 'Show percentages' : 'Show values', checked: el.showValues, testid: 'chart-values', onChange: (showValues) => this.up({ showValues }) }))];
+  }
+
+  tablePanel(el) {
+    const cells = h('textarea', { rows: '6', 'data-testid': 'table-data', 'aria-label': 'Table cells, comma between cells, one row per line', spellcheck: 'false' });
+    cells.value = tableText(el.rows);
+    cells.addEventListener('input', () => {
+      const rows = parseTable(cells.value);
+      if (!rows.length) return;
+      const rh = el.h / el.rows.length;
+      this.up({ rows, h: Math.max(rh, rh * rows.length) }, 'table-data');
+    });
+    const fonts = FONTS.map((f) => ({ value: f.name, label: f.name }));
+    return [section('Table',
+      h('label', { class: 'field' }, h('span', null, 'Cells: commas between cells, one row per line'), cells),
+      h('div', { class: 'row' },
+        toggle({ label: 'Header row', checked: el.header, testid: 'table-header', onChange: (header) => this.up({ header }) }),
+        toggle({ label: 'Stripes', checked: el.stripes, testid: 'table-stripes', onChange: (stripes) => this.up({ stripes }) })),
+      h('div', { class: 'row' },
+        numberField({ label: 'Text size', short: 'Size', value: el.size, min: 4, max: 400, testid: 'table-size', onChange: (size) => this.up({ size }) }),
+        segmented({ label: 'Cell alignment', value: el.align, onChange: (align) => this.up({ align }), options: [
+          { value: 'left', label: 'Align left', icon: 'tAlignLeft' },
+          { value: 'center', label: 'Center', icon: 'tAlignCenter' },
+          { value: 'right', label: 'Align right', icon: 'tAlignRight' },
+        ] })),
+      selectField({ label: 'Font', value: el.font, options: fonts, onChange: (font) => this.up({ font }) }),
+      h('div', { class: 'row' },
+        h('div', { class: 'field inline' }, h('span', null, 'Header'), colorButton({ label: 'Header color', testid: 'table-header-fill', value: el.headerFill, getContext: this.colorContext, onChange: (c, l) => this.up({ headerFill: c }, l ? 'hf' : null) })),
+        h('div', { class: 'field inline' }, h('span', null, 'Text'), colorButton({ label: 'Table text color', value: el.color, getContext: this.colorContext, onChange: (c, l) => this.up({ color: c }, l ? 'tc' : null) })),
+        h('div', { class: 'field inline' }, h('span', null, 'Stripes'), colorButton({ label: 'Stripe color', value: el.stripeFill, getContext: this.colorContext, onChange: (c, l) => this.up({ stripeFill: c }, l ? 'sf' : null) }))))];
   }
 
   qrPanel(el) {

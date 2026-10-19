@@ -4,7 +4,7 @@
 import { History } from '../model/history.js';
 import * as cmd from '../model/commands.js';
 import {
-  createText, createShape, createLine, createImage, createIcon, createSticker, createQr, addAsset, uid,
+  createText, createShape, createLine, createImage, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
   TEXT_STYLES, clone,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
@@ -197,6 +197,17 @@ export class Editor {
 
   addQr(data) {
     return this.insert(this.scaled(createQr(data), 0.3));
+  }
+
+  addChart(chartType, props = {}) {
+    return this.insert(this.scaled(createChart(chartType, props), 0.55));
+  }
+
+  addTable(props = {}) {
+    const el = createTable(props);
+    const s = (this.doc.width * 0.7) / el.w;
+    cmd.scaleElement(el, s, s);
+    return this.insert(el);
   }
 
   /** Add an image (from a file, the clipboard or the uploads library). */

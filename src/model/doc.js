@@ -176,6 +176,77 @@ export function createQr(data, props = {}) {
   return base('qr', { w: 300, h: 300, data, fg: '#000000', bg: '#ffffff', ...props });
 }
 
+export const CHART_TYPES = ['bar', 'line', 'pie', 'donut'];
+
+export function createChart(chartType = 'bar', props = {}) {
+  if (!CHART_TYPES.includes(chartType)) throw new Error(`Unknown chart: ${chartType}`);
+  return base('chart', {
+    w: 640,
+    h: 420,
+    chartType,
+    data: [
+      { label: 'Mon', value: 12 },
+      { label: 'Tue', value: 19 },
+      { label: 'Wed', value: 8 },
+      { label: 'Thu', value: 15 },
+      { label: 'Fri', value: 22 },
+    ],
+    colors: ['#f25c2a', '#ff9f43', '#ffd166', '#06d6a0', '#118ab2', '#5b5bd6'],
+    font: 'Inter',
+    textColor: '#16161d',
+    showValues: true,
+    ...props,
+  });
+}
+
+export function createTable(props = {}) {
+  return base('table', {
+    w: 640,
+    h: 240,
+    rows: [
+      ['Item', 'Size', 'Price'],
+      ['Coffee', 'Small', '3.00'],
+      ['Coffee', 'Large', '4.20'],
+    ],
+    header: true,
+    stripes: true,
+    font: 'Inter',
+    size: 26,
+    color: '#16161d',
+    headerColor: '#ffffff',
+    headerFill: '#16161d',
+    stripeFill: '#f3f0ea',
+    lineColor: '#e6e1d8',
+    align: 'left',
+    ...props,
+  });
+}
+
+/** "Label, value" lines → chart data. Lines that don't parse are skipped. */
+export function parseChartData(text) {
+  const out = [];
+  for (const line of String(text).split('\n')) {
+    const m = line.match(/^\s*(.*?)\s*[,\t:]\s*(-?[\d.]+)\s*$/);
+    if (m && Number.isFinite(+m[2])) out.push({ label: m[1], value: +m[2] });
+  }
+  return out;
+}
+
+export function chartDataText(data) {
+  return data.map((d) => `${d.label}, ${d.value}`).join('\n');
+}
+
+/** Rows of text, cells split by tabs or commas → table rows (all the same width). */
+export function parseTable(text) {
+  const rows = String(text).split('\n').filter((l) => l.trim()).map((l) => l.split(l.includes('\t') ? '\t' : ',').map((c) => c.trim()));
+  const cols = Math.max(1, ...rows.map((r) => r.length));
+  return rows.map((r) => [...r, ...Array(cols - r.length).fill('')]);
+}
+
+export function tableText(rows) {
+  return rows.map((r) => r.join(', ')).join('\n');
+}
+
 export function createGroup(children, props = {}) {
   return base('group', { children, ...props });
 }

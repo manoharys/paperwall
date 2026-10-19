@@ -52,12 +52,16 @@ export function fontsUsed(doc) {
   const used = new Map();
   const visit = (els) => {
     for (const el of els) {
-      if (el.type === 'text') {
-        const font = fontByName(el.font);
-        if (font) {
-          const w = nearestWeight(el.font, el.weight || 400);
-          used.set(`${font.slug}-${w}`, { font, weight: w });
-        }
+      const add = (name, weight) => {
+        const font = fontByName(name);
+        if (!font) return;
+        const w = nearestWeight(name, weight);
+        used.set(`${font.slug}-${w}`, { font, weight: w });
+      };
+      if (el.type === 'text') add(el.font, el.weight || 400);
+      if (el.type === 'chart' || el.type === 'table') {
+        add(el.font, 400);
+        add(el.font, 700);
       }
       if (el.type === 'group') visit(el.children);
     }

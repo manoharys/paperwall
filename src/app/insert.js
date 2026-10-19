@@ -5,7 +5,7 @@ import { colorButton, selectField, section } from './widgets.js';
 import { FONTS, FONT_PAIRS } from '../model/fonts.js';
 import { ICONS, STICKERS, searchGraphics } from '../model/graphics.js';
 import { renderPage, renderElementOnly } from '../model/render.js';
-import { createShape, createIcon, createSticker, createText, TEXT_STYLES } from '../model/doc.js';
+import { createShape, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES } from '../model/doc.js';
 import { collectColors } from '../model/commands.js';
 import { TEMPLATES, TEMPLATE_CATEGORIES, templateDoc } from '../templates/index.js';
 import { measure } from './fonts.js';
@@ -17,6 +17,7 @@ const TABS = [
   { id: 'shapes', label: 'Shapes', icon: 'shapes' },
   { id: 'graphics', label: 'Graphics', icon: 'graphics' },
   { id: 'uploads', label: 'Uploads', icon: 'uploads' },
+  { id: 'charts', label: 'Charts', icon: 'chart' },
   { id: 'qr', label: 'QR code', icon: 'qr' },
   { id: 'brand', label: 'Brand', icon: 'brand' },
 ];
@@ -79,6 +80,7 @@ export class InsertPanel {
       shapes: () => this.shapes(),
       graphics: () => this.graphics(),
       uploads: () => this.uploads(),
+      charts: () => this.charts(),
       qr: () => this.qr(),
       brand: () => this.brand(),
     }[this.tab];
@@ -236,6 +238,33 @@ export class InsertPanel {
       upload,
       h('p', { class: 'hint' }, `Or drag images onto the page, or paste with ${mod}+V. Your images stay on this device: nothing is uploaded anywhere.`),
       grid,
+    ];
+  }
+
+  // ---------- charts and tables ----------
+
+  charts() {
+    const ed = this.ed;
+    const kinds = [
+      { type: 'bar', label: 'Bar chart' },
+      { type: 'line', label: 'Line chart' },
+      { type: 'pie', label: 'Pie chart' },
+      { type: 'donut', label: 'Donut chart' },
+    ];
+    const tables = [
+      { label: 'Simple table', props: {} },
+      { label: 'Price list', props: { rows: [['Service', 'Price'], ['Haircut', '25'], ['Color', '60'], ['Styling', '35']], align: 'left', headerFill: '#f25c2a' } },
+      { label: 'Schedule', props: { rows: [['Day', 'Class', 'Time'], ['Mon', 'Yoga', '7 am'], ['Wed', 'Spin', '6 pm'], ['Fri', 'HIIT', '7 am']], stripes: true, align: 'center' } },
+    ];
+    return [
+      section('Charts', h('div', { class: 'thumb-grid two', 'data-testid': 'chart-grid' }, kinds.map((k) => h('button', {
+        type: 'button', class: 'thumb wide', title: k.label, 'aria-label': k.label, 'data-testid': `chart-${k.type}`, onClick: () => ed.addChart(k.type),
+        html: renderElementOnly(PREVIEW_DOC, createChart(k.type, { w: 200, h: 130, showValues: false }), { measure }),
+      }))), h('p', { class: 'hint' }, 'Type your numbers in the panel on the right.')),
+      section('Tables', h('div', { class: 'thumb-grid two', 'data-testid': 'table-grid' }, tables.map((t) => h('button', {
+        type: 'button', class: 'thumb wide', title: t.label, 'aria-label': t.label, 'data-testid': `table-${t.label}`, onClick: () => ed.addTable(t.props),
+        html: renderElementOnly(PREVIEW_DOC, createTable({ ...t.props, w: 200, h: 120, size: 13 }), { measure }),
+      })))),
     ];
   }
 
