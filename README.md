@@ -11,6 +11,10 @@ No account. No upload. No watermark. No "Pro" wall.
 
 **[Open Placard](https://manoharys.github.io/paperwall/)** · [download the one-file app](https://github.com/manoharys/paperwall/releases/latest) · [scoreboard](SCOREBOARD.md)
 
+<img src="docs/assets/demo.gif" width="800" alt="Placard in use: pick a template, edit the headline, change the background gradient, add a sticker, resize the story to a square post, and download a transparent PNG with no watermark">
+
+<sub>20 seconds, recorded from the real app by <code>scripts/record-demo.mjs</code> · <a href="docs/assets/demo.mp4">MP4</a></sub>
+
 </div>
 
 ---

@@ -5,8 +5,8 @@
     "verified": 127,
     "failing": 0,
     "todo": 4,
-    "e2eTests": 94,
-    "e2ePassing": 94,
+    "e2eTests": 96,
+    "e2ePassing": 96,
     "unitTests": 45,
     "unitPassing": 45
   },

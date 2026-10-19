@@ -112,7 +112,10 @@ export function buildHtml({ pwa = false } = {}) {
   let html = readFileSync(join(root, 'src/app/index.html'), 'utf8');
   html = html.replace('<!--CSP-->', `<meta http-equiv="Content-Security-Policy" content="${csp(scripts.map(sha256), pwa)}">`);
   html = html.replace('<!--HEAD-->', pwa
-    ? '<link rel="manifest" href="manifest.webmanifest">\n<link rel="apple-touch-icon" href="icons/icon-192.png">'
+    ? '<link rel="manifest" href="manifest.webmanifest">\n<link rel="apple-touch-icon" href="icons/icon-192.png">\n' +
+      '<meta property="og:title" content="Placard: design anything, free and offline">\n' +
+      '<meta property="og:description" content="An open-source design tool that runs on your device. No account, no watermark, no paywall.">\n' +
+      '<meta property="og:image" content="og.png">\n<meta name="twitter:card" content="summary_large_image">'
     : '');
   html = html.replace('<link rel="stylesheet" href="/src/app/styles.css">', `<style>\n${css}\n</style>`);
   html = html.replace('<script type="module" src="/src/app/main.js"></script>', scripts.map((s) => `<script>${s}</script>`).join('\n'));
@@ -168,6 +171,7 @@ export function build() {
   writeFileSync(join(dist, 'sw.js'), serviceWorker(pkg.version));
   writeFileSync(join(dist, 'manifest.webmanifest'), manifest());
   for (const f of ['icon-192.png', 'icon-512.png']) copyFileSync(join(root, 'assets/icons', f), join(dist, 'icons', f));
+  copyFileSync(join(root, 'assets/icons/og.png'), join(dist, 'og.png'));
   return { files: single.files, size: Buffer.byteLength(single.html) };
 }
 
