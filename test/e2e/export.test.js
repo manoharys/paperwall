@@ -155,6 +155,16 @@ test('[EXP-08] print', async () => {
   await context.close();
 });
 
+test('the download dialog never shows stray "null" text', async () => {
+  const { page, context } = await newDesign('square');
+  await page.click('[data-testid="download"]');
+  for (const f of ['png', 'jpg', 'pdf', 'svg']) {
+    await page.click(`[data-testid="export-format"] [data-value="${f}"]`);
+    assert.ok(!/null|undefined/.test(await page.innerText('[data-testid="export-dialog"]')), f);
+  }
+  await context.close();
+});
+
 test('[EXP-09] no watermark, ever', async () => {
   const { page, context } = await newDesign('square');
   const { bytes } = await downloadVia(page);

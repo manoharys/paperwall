@@ -351,3 +351,41 @@ test('nothing else is selected after undoing an image insert', async () => {
   assert.equal((await elements(page)).length, 0);
   await context.close();
 });
+
+test('no panel ever shows stray "null" or "undefined" text', async () => {
+  const { page, context } = await newDesign('square');
+  const check = async (what) => {
+    const text = await page.innerText('body');
+    assert.ok(!/\bnull\b|\bundefined\b|NaN/.test(text), `${what}: ${text.match(/.{20}(null|undefined|NaN).{20}/)?.[0]}`);
+  };
+  await check('page panel');
+  await addShape(page, 'Star');
+  await check('shape');
+  await openTab(page, 'shapes');
+  await page.click('[data-testid="line-Arrow line"]');
+  await check('line');
+  await openTab(page, 'graphics');
+  await page.click('[data-testid="icon-heart"]');
+  await check('icon');
+  await page.click('[data-testid="sticker-burst"]');
+  await check('sticker');
+  await openTab(page, 'qr');
+  await page.fill('[data-testid="qr-input"]', 'hello');
+  await page.click('[data-testid="qr-add"]');
+  await check('qr');
+  await uploadImages(page, [await makePng(page)]);
+  await check('image');
+  await page.click('[data-testid="crop-btn"]');
+  await check('cropping');
+  await page.keyboard.press(`${mod}+a`);
+  await check('many selected');
+  await page.click('[data-testid="act-group"]');
+  await check('group');
+  await page.click('[data-testid="tab-layers"]');
+  await check('layers');
+  for (const tab of ['templates', 'text', 'uploads', 'brand']) {
+    await openTab(page, tab);
+    await check(tab);
+  }
+  await context.close();
+});

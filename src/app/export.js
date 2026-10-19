@@ -139,7 +139,7 @@ export function exportDialog(editor) {
   const state = { format: 'png', scale: 1, transparent: false, quality: 92, pages: new Set(doc.pages.map((_, i) => i)) };
   const body = h('div', { class: 'export' });
   const draw = () => {
-    body.replaceChildren(
+    body.replaceChildren(...[
       section('File type', segmented({ label: 'File type', value: state.format, testid: 'export-format', onChange: (v) => {
         state.format = v;
         draw();
@@ -181,7 +181,8 @@ export function exportDialog(editor) {
           d.close();
           await printDesign(doc, [...state.pages].sort((a, b) => a - b));
         } }, 'Print')),
-      h('p', { class: 'fine' }, 'No watermark. Made on your device; nothing is uploaded.'));
+      h('p', { class: 'fine' }, 'No watermark. Made on your device; nothing is uploaded.'),
+    ].filter(Boolean));
   };
   const run = async () => {
     const pages = [...state.pages].sort((a, b) => a - b);
