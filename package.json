@@ -1,0 +1,17 @@
+{
+  "name": "placard-app",
+  "version": "0.1.0",
+  "description": "Free, offline, open-source design tool. An alternative to Canva that runs on your device.",
+  "license": "MIT",
+  "author": "Manohar",
+  "type": "module",
+  "repository": "github:manoharys/paperwall",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test test/unit/*.test.js",
+    "test:e2e": "node --test --test-concurrency=1 test/e2e/*.test.js",
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/serve.mjs",
+    "scoreboard": "node scripts/scoreboard.mjs"
+  }
+}
