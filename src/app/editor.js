@@ -11,6 +11,7 @@ import { fitHeight } from '../model/text-layout.js';
 import { curveGeometry } from '../model/render.js';
 import { unionBounds } from '../model/geometry.js';
 import { measure } from './fonts.js';
+import { removePlainBackground } from '../model/bgremove.js';
 import { readFileAsDataUrl, loadImage, toast, debounce } from './ui.js';
 import * as store from './store.js';
 
@@ -244,6 +245,28 @@ export class Editor {
       const pic = upload.width / upload.height;
       el.crop = pic > frame ? { x: (1 - frame / pic) / 2, y: 0, w: frame / pic, h: 1 } : { x: 0, y: (1 - pic / frame) / 2, w: 1, h: pic / frame };
     });
+  }
+
+  /** Make a plain background see-through. Returns how much of the picture was cleared (0..1). */
+  async removeBackground(tolerance = 0.12) {
+    const el = this.single;
+    if (!el || el.type !== 'image') return 0;
+    const asset = this.doc.assets[el.assetId];
+    const img = await loadImage(asset.dataUrl);
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const g = canvas.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0);
+    const pixels = g.getImageData(0, 0, canvas.width, canvas.height);
+    const cleared = removePlainBackground(pixels.data, canvas.width, canvas.height, { tolerance });
+    if (!cleared) return 0;
+    g.putImageData(pixels, 0, 0);
+    const dataUrl = canvas.toDataURL('image/png');
+    this.change(() => {
+      el.assetId = addAsset(this.doc, { mime: 'image/png', dataUrl, width: canvas.width, height: canvas.height, name: `${asset.name || 'image'} (no background)` });
+    });
+    return cleared / (canvas.width * canvas.height);
   }
 
   setImageAsBackground() {

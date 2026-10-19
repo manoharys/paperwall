@@ -1,14 +1,14 @@
 {
   "summary": {
     "date": "2026-10-19",
-    "total": 131,
-    "verified": 127,
+    "total": 132,
+    "verified": 131,
     "failing": 0,
-    "todo": 4,
-    "e2eTests": 96,
-    "e2ePassing": 96,
-    "unitTests": 45,
-    "unitPassing": 45
+    "todo": 1,
+    "e2eTests": 100,
+    "e2ePassing": 100,
+    "unitTests": 49,
+    "unitPassing": 49
   },
   "areas": [
     {
@@ -531,6 +531,11 @@
           "id": "IMG-12",
           "title": "Drop shadow on images and shapes",
           "status": "verified"
+        },
+        {
+          "id": "IMG-13",
+          "title": "Remove a plain, single-color background (logos, product shots) on your device",
+          "status": "verified"
         }
       ]
     },
@@ -561,12 +566,12 @@
         {
           "id": "ELM-05",
           "title": "Charts from your numbers",
-          "status": "todo"
+          "status": "verified"
         },
         {
           "id": "ELM-06",
           "title": "Tables",
-          "status": "todo"
+          "status": "verified"
         }
       ]
     },
@@ -709,8 +714,8 @@
         },
         {
           "id": "EXP-12",
-          "title": "PDF with real, selectable text",
-          "status": "todo"
+          "title": "PDF with real, selectable and searchable text",
+          "status": "verified"
         }
       ]
     },

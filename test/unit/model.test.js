@@ -380,3 +380,25 @@ test('[ELM-05] [ELM-06] chart and table data parse from plain text', async () =>
   assert.deepEqual(parseTable('a, b, c\nd\n\ne\tf'), [['a', 'b', 'c'], ['d', '', ''], ['e', 'f', '']]);
   assert.equal(tableText([['x', 'y']]), 'x, y');
 });
+
+test('[IMG-13] plain backgrounds are removed; the subject and enclosed areas stay', async () => {
+  const { removePlainBackground, edgeColor } = await import('../../src/model/bgremove.js');
+  const w = 20;
+  const h = 20;
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let p = 0; p < w * h; p++) {
+    const x = p % w;
+    const y = (p / w) | 0;
+    const ring = x >= 5 && x < 15 && y >= 5 && y < 15 && !(x >= 8 && x < 12 && y >= 8 && y < 12);
+    const c = ring ? [200, 20, 20] : [250, 250, 248];
+    data.set([...c, 255], p * 4);
+  }
+  assert.deepEqual(edgeColor(data, w, h).map(Math.round), [250, 250, 248]);
+  const cleared = removePlainBackground(data, w, h);
+  const alpha = (x, y) => data[(y * w + x) * 4 + 3];
+  assert.equal(alpha(0, 0), 0);
+  assert.equal(alpha(19, 10), 0);
+  assert.equal(alpha(6, 6), 255, 'the subject stays');
+  assert.equal(alpha(10, 10), 255, 'a white area inside the subject is not background');
+  assert.equal(cleared, 20 * 20 - 10 * 10);
+});

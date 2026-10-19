@@ -438,3 +438,29 @@ test('[ELM-06] tables', async () => {
   assert.match(svg, /font-family:"Inter";font-weight:700/);
   await context.close();
 });
+
+test('[IMG-13] remove a plain background on your device', async () => {
+  const { page, context, img } = await withImage();
+  await page.click('[data-testid="remove-bg"]');
+  await page.waitForFunction((a) => window.placard.editor.single?.assetId !== a, img.assetId);
+  // Export with a transparent page: the blue surround is gone, the white center stays.
+  const png = await page.evaluate(async () => {
+    const { editor, export: ex } = window.placard;
+    const doc = structuredClone(editor.doc);
+    const el = doc.pages[0].elements[0];
+    Object.assign(el, { x: 0, y: 0, w: doc.width, h: doc.width / 2 });
+    const blob = await ex.exportImage(doc, 0, { transparent: true, scale: 0.5 });
+    const bmp = await createImageBitmap(blob);
+    const cv = document.createElement('canvas');
+    cv.width = bmp.width;
+    cv.height = bmp.height;
+    const g = cv.getContext('2d');
+    g.drawImage(bmp, 0, 0);
+    const a = (x, y) => g.getImageData(x, y, 1, 1).data[3];
+    return { corner: a(5, 5), center: a(cv.width / 2, cv.width / 4) };
+  });
+  assert.deepEqual(png, { corner: 0, center: 255 });
+  await page.keyboard.press(`${mod}+z`);
+  assert.equal((await last(page)).assetId, img.assetId, 'one undo brings the original back');
+  await context.close();
+});

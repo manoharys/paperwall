@@ -353,6 +353,18 @@ export class Inspector {
           slider({ label: 'Zoom', value: Math.round(cropZoom(el, asset.width, asset.height) * 100), min: 100, max: 400, unit: '%', testid: 'crop-zoom', onChange: (v, l) => {
             ed.change(() => this.canvas.setCropZoom(el, v / 100), { key: l ? `cropzoom:${el.id}` : null });
           } })) : null,
+        h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'remove-bg', onClick: async (e) => {
+          const btn = e.currentTarget;
+          btn.disabled = true;
+          try {
+            const share = await ed.removeBackground();
+            toast(share > 0.01 ? 'Background removed. Undo if it took too much.' : 'No plain background found around the edges.');
+          } catch {
+            toast('That image could not be processed.', 'error');
+          } finally {
+            btn.disabled = false;
+          }
+        } }, icon('crop'), 'Remove plain background'),
         h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'image-to-bg', onClick: () => ed.setImageAsBackground() }, icon('background'), 'Use as page background')),
       section('Adjust',
         segmented({ label: 'Filter', value: presetName, testid: 'filter-presets', onChange: (name) => this.up({ filters: { ...FILTER_PRESETS[name] } }), options: [

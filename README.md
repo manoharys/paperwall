@@ -32,7 +32,8 @@ All of it. Including the things other tools put behind a subscription:
 - **Transparent PNGs**, and PNGs at 2x and 3x size
 - **Resize a design** to another format in one click (post → story → slides)
 - **A brand kit**: your colors and fonts, applied in one click
-- **Multi-page PDF**, SVG with fonts inside, JPG, a zip of pages, print
+- **Multi-page PDF with selectable text**, SVG with fonts inside, JPG, a zip of pages, print
+- **Charts, tables, QR codes**, and removing plain backgrounds, all on your device
 - **No watermark, ever**, and no account
 
 ## The scoreboard
@@ -42,7 +43,7 @@ end-to-end test in a real browser** or listed as **not done yet**. This table
 is generated from the test run, never written by hand.
 
 <!-- scoreboard:start -->
-**127 of 131 features verified** by browser tests · 4 not done yet · [full scoreboard](SCOREBOARD.md)
+**131 of 132 features verified** by browser tests · 1 not done yet · [full scoreboard](SCOREBOARD.md)
 
 | Area | Verified |
 | --- | --- |
@@ -53,21 +54,21 @@ is generated from the test run, never written by hand.
 | Editing | 18 / 18 |
 | Text | 20 / 20 |
 | Shapes and lines | 8 / 8 |
-| Images | 11 / 12 |
-| Graphics | 4 / 6 |
+| Images | 12 / 13 |
+| Graphics | 6 / 6 |
 | Color | 4 / 4 |
 | Brand kit | 3 / 3 |
 | Templates | 5 / 5 |
-| Export | 11 / 12 |
+| Export | 12 / 12 |
 | The app | 6 / 6 |
 
-Not done yet: remove an image's background on your device; charts from your numbers; tables; pdf with real, selectable text.
+Not done yet: remove an image's background on your device.
 <!-- scoreboard:end -->
 
 ## Use it
 
 - **In your browser:** [manoharys.github.io/paperwall](https://manoharys.github.io/paperwall/). Install it from the address bar to get an app that works offline.
-- **As one file:** download `placard.html` from the [latest release](https://github.com/manoharys/paperwall/releases/latest) and double-click it. That's the whole app (about 900 KB, fonts included).
+- **As one file:** download `placard.html` from the [latest release](https://github.com/manoharys/paperwall/releases/latest) and double-click it. That's the whole app (under 1 MB, fonts included).
 - **From source:**
 
   ```bash
