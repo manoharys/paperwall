@@ -163,7 +163,7 @@ async function boot() {
   await applyTheme();
   await loadFonts();
   route();
-  if ('serviceWorker' in navigator && location.protocol === 'https:' && globalThis.PLACARD_SW) {
+  if ('serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:' && globalThis.PLACARD_SW) {
     navigator.serviceWorker.register(globalThis.PLACARD_SW).catch(() => null);
   }
   document.body.classList.add('ready');
