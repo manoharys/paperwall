@@ -1,0 +1,220 @@
+{
+  "about": "Every feature Placard aims for, in our own words. A feature is verified only when a test whose name contains its id passes. scripts/scoreboard.mjs turns the test run into SCOREBOARD.md.",
+  "areas": [
+    {
+      "id": "DOC",
+      "name": "Designs",
+      "features": [
+        { "id": "DOC-01", "title": "Start a design from a size preset (square post, story, slides, A4, letter, poster, thumbnail, banner, business card)" },
+        { "id": "DOC-02", "title": "Start a design at a custom width and height" },
+        { "id": "DOC-03", "title": "Rename a design" },
+        { "id": "DOC-04", "title": "See all your designs on a home screen" },
+        { "id": "DOC-05", "title": "Duplicate a design" },
+        { "id": "DOC-06", "title": "Delete a design" },
+        { "id": "DOC-07", "title": "Designs save automatically on your device" },
+        { "id": "DOC-08", "title": "Reopen a design exactly as you left it after closing the tab" },
+        { "id": "DOC-09", "title": "Save a design to a file and open it again later or on another computer" },
+        { "id": "DOC-10", "title": "Resize a design to another format with everything rescaled to fit" },
+        { "id": "DOC-11", "title": "Print sizes in millimetres and inches" }
+      ]
+    },
+    {
+      "id": "PAGE",
+      "name": "Pages",
+      "features": [
+        { "id": "PAGE-01", "title": "Add a blank page" },
+        { "id": "PAGE-02", "title": "Duplicate a page" },
+        { "id": "PAGE-03", "title": "Delete a page" },
+        { "id": "PAGE-04", "title": "Reorder pages" },
+        { "id": "PAGE-05", "title": "Page background color" },
+        { "id": "PAGE-06", "title": "Page background gradient" },
+        { "id": "PAGE-07", "title": "Page background image" },
+        { "id": "PAGE-08", "title": "Move between pages from a page strip" }
+      ]
+    },
+    {
+      "id": "VIEW",
+      "name": "Viewing",
+      "features": [
+        { "id": "VIEW-01", "title": "Zoom in and out" },
+        { "id": "VIEW-02", "title": "Zoom to fit the page" },
+        { "id": "VIEW-03", "title": "Scroll around a zoomed-in page" },
+        { "id": "VIEW-04", "title": "Dark mode" },
+        { "id": "VIEW-05", "title": "Present pages full screen and move with the arrow keys" }
+      ]
+    },
+    {
+      "id": "SEL",
+      "name": "Selecting and moving",
+      "features": [
+        { "id": "SEL-01", "title": "Click an element to select it" },
+        { "id": "SEL-02", "title": "Shift-click to select several elements" },
+        { "id": "SEL-03", "title": "Drag a box over empty space to select everything inside" },
+        { "id": "SEL-04", "title": "Select everything on the page" },
+        { "id": "SEL-05", "title": "Drag to move" },
+        { "id": "SEL-06", "title": "Nudge with the arrow keys (bigger steps with Shift)" },
+        { "id": "SEL-07", "title": "Resize from corner and side handles" },
+        { "id": "SEL-08", "title": "Keep proportions when resizing from a corner" },
+        { "id": "SEL-09", "title": "Rotate with a handle, snapping to 15 degrees with Shift" },
+        { "id": "SEL-10", "title": "Type an exact position, size and angle" },
+        { "id": "SEL-11", "title": "Snap to the page center and edges, with guide lines" },
+        { "id": "SEL-12", "title": "Snap to the edges and centers of other elements" },
+        { "id": "SEL-13", "title": "Deselect with Escape or a click on empty space" }
+      ]
+    },
+    {
+      "id": "EDIT",
+      "name": "Editing",
+      "features": [
+        { "id": "EDIT-01", "title": "Undo" },
+        { "id": "EDIT-02", "title": "Redo" },
+        { "id": "EDIT-03", "title": "Delete the selection" },
+        { "id": "EDIT-04", "title": "Duplicate the selection" },
+        { "id": "EDIT-05", "title": "Copy and paste, including onto another page" },
+        { "id": "EDIT-06", "title": "Cut" },
+        { "id": "EDIT-07", "title": "Group and ungroup" },
+        { "id": "EDIT-08", "title": "Lock an element so it can't move" },
+        { "id": "EDIT-09", "title": "Bring forward and send backward" },
+        { "id": "EDIT-10", "title": "Bring to front and send to back" },
+        { "id": "EDIT-11", "title": "Layers list: see, select, reorder and hide elements" },
+        { "id": "EDIT-12", "title": "Align to the page: left, center, right, top, middle, bottom" },
+        { "id": "EDIT-13", "title": "Align several elements to each other" },
+        { "id": "EDIT-14", "title": "Space several elements evenly" },
+        { "id": "EDIT-15", "title": "Flip horizontally and vertically" },
+        { "id": "EDIT-16", "title": "Transparency" },
+        { "id": "EDIT-17", "title": "Copy the style of one element onto another" },
+        { "id": "EDIT-18", "title": "Keyboard shortcuts, with a cheat sheet" }
+      ]
+    },
+    {
+      "id": "TXT",
+      "name": "Text",
+      "features": [
+        { "id": "TXT-01", "title": "Add a heading, subheading or body text" },
+        { "id": "TXT-02", "title": "Double-click text to edit it in place" },
+        { "id": "TXT-03", "title": "Text wraps inside its box" },
+        { "id": "TXT-04", "title": "Choose from bundled open-license fonts" },
+        { "id": "TXT-05", "title": "Font size" },
+        { "id": "TXT-06", "title": "Bold and italic" },
+        { "id": "TXT-07", "title": "Underline and strikethrough" },
+        { "id": "TXT-08", "title": "Text color" },
+        { "id": "TXT-09", "title": "Align left, center, right" },
+        { "id": "TXT-10", "title": "Line spacing" },
+        { "id": "TXT-11", "title": "Letter spacing" },
+        { "id": "TXT-12", "title": "All caps" },
+        { "id": "TXT-13", "title": "Bulleted and numbered lists" },
+        { "id": "TXT-14", "title": "Text shadow" },
+        { "id": "TXT-15", "title": "Text outline" },
+        { "id": "TXT-16", "title": "Colored box behind text" },
+        { "id": "TXT-17", "title": "Curved text" },
+        { "id": "TXT-18", "title": "Text box grows as you type" },
+        { "id": "TXT-19", "title": "Ready-made heading and body font pairs" },
+        { "id": "TXT-20", "title": "Use your own font file" }
+      ]
+    },
+    {
+      "id": "SHP",
+      "name": "Shapes and lines",
+      "features": [
+        { "id": "SHP-01", "title": "Rectangle, rounded rectangle, circle, triangle" },
+        { "id": "SHP-02", "title": "Star, polygon, heart, arrow, speech bubble" },
+        { "id": "SHP-03", "title": "Lines, with optional arrowheads" },
+        { "id": "SHP-04", "title": "Fill color" },
+        { "id": "SHP-05", "title": "Border color, width and dashes" },
+        { "id": "SHP-06", "title": "Rounded corners" },
+        { "id": "SHP-07", "title": "Gradient fill" },
+        { "id": "SHP-08", "title": "Number of sides or star points" }
+      ]
+    },
+    {
+      "id": "IMG",
+      "name": "Images",
+      "features": [
+        { "id": "IMG-01", "title": "Add an image from your device" },
+        { "id": "IMG-02", "title": "Drag and drop images onto the page" },
+        { "id": "IMG-03", "title": "Paste an image from the clipboard" },
+        { "id": "IMG-04", "title": "Reuse images you added before" },
+        { "id": "IMG-05", "title": "Crop an image" },
+        { "id": "IMG-06", "title": "Brightness, contrast and saturation" },
+        { "id": "IMG-07", "title": "Black and white, sepia and blur" },
+        { "id": "IMG-08", "title": "Rounded corners and circle crop" },
+        { "id": "IMG-09", "title": "Replace an image and keep its place and size" },
+        { "id": "IMG-10", "title": "Use an image as the page background" },
+        { "id": "IMG-11", "title": "Remove an image's background on your device" },
+        { "id": "IMG-12", "title": "Drop shadow on images and shapes" }
+      ]
+    },
+    {
+      "id": "ELM",
+      "name": "Graphics",
+      "features": [
+        { "id": "ELM-01", "title": "Original icon library, any color" },
+        { "id": "ELM-02", "title": "Search icons and shapes" },
+        { "id": "ELM-03", "title": "Original decorative stickers" },
+        { "id": "ELM-04", "title": "QR code generator" },
+        { "id": "ELM-05", "title": "Charts from your numbers" },
+        { "id": "ELM-06", "title": "Tables" }
+      ]
+    },
+    {
+      "id": "CLR",
+      "name": "Color",
+      "features": [
+        { "id": "CLR-01", "title": "Color picker with hex input" },
+        { "id": "CLR-02", "title": "Colors already used in this design, one click away" },
+        { "id": "CLR-03", "title": "Pick a color from anywhere on screen" },
+        { "id": "CLR-04", "title": "Ready-made palettes" }
+      ]
+    },
+    {
+      "id": "BRD",
+      "name": "Brand kit",
+      "features": [
+        { "id": "BRD-01", "title": "Save your brand colors" },
+        { "id": "BRD-02", "title": "Save your brand fonts for headings and body" },
+        { "id": "BRD-03", "title": "Apply your brand colors and fonts to a design in one click" }
+      ]
+    },
+    {
+      "id": "TPL",
+      "name": "Templates",
+      "features": [
+        { "id": "TPL-01", "title": "Browse templates by category" },
+        { "id": "TPL-02", "title": "Search templates" },
+        { "id": "TPL-03", "title": "Start a design from a template" },
+        { "id": "TPL-04", "title": "Add a template as a new page in your design" },
+        { "id": "TPL-05", "title": "Every template is original and free for any use (CC0)" }
+      ]
+    },
+    {
+      "id": "EXP",
+      "name": "Export",
+      "features": [
+        { "id": "EXP-01", "title": "Download as PNG" },
+        { "id": "EXP-02", "title": "PNG at 1x, 2x or 3x size" },
+        { "id": "EXP-03", "title": "PNG with a transparent background" },
+        { "id": "EXP-04", "title": "Download as JPG with a quality setting" },
+        { "id": "EXP-05", "title": "Download as SVG (vector)" },
+        { "id": "EXP-06", "title": "Download as PDF with all pages" },
+        { "id": "EXP-07", "title": "Download only the pages you pick" },
+        { "id": "EXP-08", "title": "Print" },
+        { "id": "EXP-09", "title": "No watermark, ever" },
+        { "id": "EXP-10", "title": "Exported SVG carries its fonts, so it looks the same anywhere" },
+        { "id": "EXP-11", "title": "Copy the design to the clipboard as an image" },
+        { "id": "EXP-12", "title": "PDF with real, selectable text" }
+      ]
+    },
+    {
+      "id": "APP",
+      "name": "The app",
+      "features": [
+        { "id": "APP-01", "title": "Install to your home screen or desktop" },
+        { "id": "APP-02", "title": "One HTML file that works when opened from disk" },
+        { "id": "APP-03", "title": "Works on a phone: tap, drag and resize with touch" },
+        { "id": "APP-04", "title": "No account, no sign-in" },
+        { "id": "APP-05", "title": "Makes no network requests after loading, enforced by the browser" },
+        { "id": "APP-06", "title": "Works offline after the first visit" }
+      ]
+    }
+  ]
+}
