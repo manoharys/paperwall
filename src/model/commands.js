@@ -449,3 +449,37 @@ export function applyBrand(doc, brand) {
   }
   touch(doc);
 }
+
+/**
+ * Crop an image so its picture fills the element's frame without stretching.
+ * zoom 1 shows as much of the picture as fits; higher zooms in. The crop
+ * stays centered where it was.
+ */
+export function coverCrop(el, naturalW, naturalH, zoom = 1) {
+  const frame = el.w / el.h;
+  const pic = naturalW / naturalH;
+  let w = 1;
+  let h = 1;
+  if (pic > frame) w = frame / pic;
+  else h = pic / frame;
+  w /= Math.max(1, zoom);
+  h /= Math.max(1, zoom);
+  const c = el.crop || { x: 0, y: 0, w: 1, h: 1 };
+  const cx = c.x + c.w / 2;
+  const cy = c.y + c.h / 2;
+  el.crop = {
+    x: Math.max(0, Math.min(1 - w, cx - w / 2)),
+    y: Math.max(0, Math.min(1 - h, cy - h / 2)),
+    w,
+    h,
+  };
+  return el;
+}
+
+/** How far an image is zoomed into its picture (1 = as much as fits). */
+export function cropZoom(el, naturalW, naturalH) {
+  const frame = el.w / el.h;
+  const pic = naturalW / naturalH;
+  const full = pic > frame ? frame / pic : 1;
+  return el.crop ? full / el.crop.w : 1;
+}

@@ -1,0 +1,221 @@
+// Downloads: PNG, JPG, SVG, PDF, a zip of pages, printing, copying to the
+// clipboard, and Placard project files. All of it happens on your device.
+
+import { renderPage } from '../model/render.js';
+import { buildPdf } from '../model/pdf.js';
+import { buildZip } from '../model/zip.js';
+import { validateDesign, clone } from '../model/doc.js';
+import { measure, fontCssFor, registerDesignFonts } from './fonts.js';
+import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage } from './ui.js';
+import { section, segmented, slider, toggle } from './widgets.js';
+
+const MAX_SIDE = 16000;
+const MAX_PIXELS = 120e6;
+
+export function maxScale(doc, wanted) {
+  const side = MAX_SIDE / Math.max(doc.width, doc.height);
+  const area = Math.sqrt(MAX_PIXELS / (doc.width * doc.height));
+  return Math.max(0.05, Math.min(wanted, side, area));
+}
+
+/** The page as a standalone SVG with its fonts and images inside. */
+export async function pageSvg(doc, pageIndex, { transparent = false, scale = 1 } = {}) {
+  const fontCss = await fontCssFor(doc);
+  return renderPage(doc, pageIndex, { measure, fontCss, transparent, scale, idPrefix: `ex${pageIndex}` });
+}
+
+/** Draw a page into a canvas at the given scale. */
+export async function rasterize(doc, pageIndex, { scale = 1, transparent = false, background = null } = {}) {
+  const s = maxScale(doc, scale);
+  const svg = await pageSvg(doc, pageIndex, { transparent, scale: s });
+  const img = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
+  if (img.decode) await img.decode().catch(() => null);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(doc.width * s);
+  canvas.height = Math.round(doc.height * s);
+  const ctx = canvas.getContext('2d');
+  if (background) {
+    ctx.fillStyle = background;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+function toBlob(canvas, type, quality) {
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Export failed: the image is too large for this browser'))), type, quality));
+}
+
+async function blobBytes(blob) {
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+export async function exportImage(doc, pageIndex, { format = 'png', scale = 1, transparent = false, quality = 0.92 } = {}) {
+  const jpg = format === 'jpg';
+  const canvas = await rasterize(doc, pageIndex, { scale, transparent: transparent && !jpg, background: jpg ? '#ffffff' : null });
+  return toBlob(canvas, jpg ? 'image/jpeg' : 'image/png', jpg ? quality : undefined);
+}
+
+export async function exportSvg(doc, pageIndex, { transparent = false } = {}) {
+  return new Blob([await pageSvg(doc, pageIndex, { transparent })], { type: 'image/svg+xml' });
+}
+
+/** Print designs (mm/in sizes) are 300 DPI; screen designs are 96 DPI. */
+export function pagePoints(doc) {
+  const dpi = doc.unit === 'mm' || doc.unit === 'in' ? 300 : 96;
+  return { ptWidth: (doc.width / dpi) * 72, ptHeight: (doc.height / dpi) * 72, renderScale: dpi === 300 ? 1 : 2 };
+}
+
+export async function exportPdf(doc, pages, { quality = 0.92 } = {}) {
+  const pts = pagePoints(doc);
+  const out = [];
+  for (const i of pages) {
+    const canvas = await rasterize(doc, i, { scale: pts.renderScale, background: '#ffffff' });
+    const jpeg = await blobBytes(await toBlob(canvas, 'image/jpeg', quality));
+    out.push({ jpeg, pxWidth: canvas.width, pxHeight: canvas.height, ptWidth: pts.ptWidth, ptHeight: pts.ptHeight });
+  }
+  return new Blob([buildPdf(out, { title: doc.name })], { type: 'application/pdf' });
+}
+
+/** A small preview for the home screen. */
+export async function thumbnail(doc) {
+  const scale = 360 / Math.max(doc.width, doc.height);
+  const canvas = await rasterize(doc, 0, { scale, background: '#ffffff' });
+  return canvas.toDataURL('image/jpeg', 0.82);
+}
+
+export async function copyToClipboard(doc, pageIndex) {
+  if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') throw new Error("This browser can't copy images. Download instead.");
+  const blob = await exportImage(doc, pageIndex, { format: 'png', scale: 1 });
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+}
+
+export async function printDesign(doc, pages) {
+  const imgs = [];
+  for (const i of pages) imgs.push((await rasterize(doc, i, { scale: maxScale(doc, 2), background: '#ffffff' })).toDataURL('image/png'));
+  const root = h('div', { id: 'print-root' }, imgs.map((src) => h('img', { src, alt: '' })));
+  const pts = pagePoints(doc);
+  const style = h('style', null, `@page{size:${pts.ptWidth}pt ${pts.ptHeight}pt;margin:0}`);
+  document.body.append(root, style);
+  document.body.classList.add('printing');
+  const done = () => {
+    document.body.classList.remove('printing');
+    root.remove();
+    style.remove();
+    window.removeEventListener('afterprint', done);
+  };
+  window.addEventListener('afterprint', done);
+  await Promise.all([...root.querySelectorAll('img')].map((im) => (im.decode ? im.decode().catch(() => null) : null)));
+  window.print();
+  setTimeout(done, 1000);
+}
+
+// ---------- project files ----------
+
+export function projectBlob(doc) {
+  return new Blob([JSON.stringify(doc)], { type: 'application/json' });
+}
+
+export function saveProjectFile(doc) {
+  download(projectBlob(doc), `${safeFilename(doc.name)}.placard.json`);
+}
+
+export async function readProjectFile(file) {
+  let doc;
+  try {
+    doc = JSON.parse(await readFileAsText(file));
+  } catch {
+    throw new Error(`${file.name} isn't a Placard design file`);
+  }
+  validateDesign(doc);
+  await registerDesignFonts(doc);
+  return doc;
+}
+
+// ---------- the download dialog ----------
+
+export function exportDialog(editor) {
+  const doc = editor.doc;
+  const state = { format: 'png', scale: 1, transparent: false, quality: 92, pages: new Set(doc.pages.map((_, i) => i)) };
+  const body = h('div', { class: 'export' });
+  const draw = () => {
+    body.replaceChildren(
+      section('File type', segmented({ label: 'File type', value: state.format, testid: 'export-format', onChange: (v) => {
+        state.format = v;
+        draw();
+      }, options: [
+        { value: 'png', label: 'PNG: best for sharing', text: 'PNG' },
+        { value: 'jpg', label: 'JPG: smaller files', text: 'JPG' },
+        { value: 'pdf', label: 'PDF: for printing', text: 'PDF' },
+        { value: 'svg', label: 'SVG: vector, any size', text: 'SVG' },
+      ] }),
+      h('p', { class: 'hint' }, {
+        png: 'Sharp images for social media and the web.',
+        jpg: 'Smaller files, no transparency.',
+        pdf: 'One file with every page you pick. Great for printing.',
+        svg: 'Vector file that stays sharp at any size. Fonts are included.',
+      }[state.format])),
+      state.format === 'png' || state.format === 'jpg' ? section('Size', segmented({ label: 'Size', value: state.scale, testid: 'export-scale', onChange: (v) => {
+        state.scale = v;
+        draw();
+      }, options: [1, 2, 3].map((s) => ({ value: s, label: `${s}x`, text: `${s}x · ${Math.round(doc.width * maxScale(doc, s))} × ${Math.round(doc.height * maxScale(doc, s))}` })) })) : null,
+      state.format === 'png' || state.format === 'svg' ? toggle({ label: 'Transparent background', checked: state.transparent, testid: 'export-transparent', onChange: (v) => (state.transparent = v) }) : null,
+      state.format === 'jpg' ? slider({ label: 'Quality', value: state.quality, min: 40, max: 100, unit: '%', testid: 'export-quality', onChange: (v) => (state.quality = v) }) : null,
+      doc.pages.length > 1 ? section('Pages', h('div', { class: 'page-picks', 'data-testid': 'export-pages' }, doc.pages.map((_, i) => {
+        const cb = h('input', { type: 'checkbox', 'data-testid': `export-page-${i + 1}` });
+        cb.checked = state.pages.has(i);
+        cb.addEventListener('change', () => (cb.checked ? state.pages.add(i) : state.pages.delete(i)));
+        return h('label', { class: 'toggle' }, cb, h('span', null, `Page ${i + 1}`));
+      }))) : null,
+      h('div', { class: 'export-actions' },
+        h('button', { type: 'button', class: 'btn primary big', 'data-testid': 'export-download', onClick: () => run() }, icon('download'), 'Download'),
+        h('button', { type: 'button', class: 'btn', 'data-testid': 'export-copy', onClick: async () => {
+          try {
+            await copyToClipboard(doc, editor.page);
+            toast('Copied. Paste it anywhere.');
+          } catch (e) {
+            toast(e.message, 'error');
+          }
+        } }, icon('copy'), 'Copy image'),
+        h('button', { type: 'button', class: 'btn', 'data-testid': 'export-print', onClick: async () => {
+          d.close();
+          await printDesign(doc, [...state.pages].sort((a, b) => a - b));
+        } }, 'Print')),
+      h('p', { class: 'fine' }, 'No watermark. Made on your device; nothing is uploaded.'));
+  };
+  const run = async () => {
+    const pages = [...state.pages].sort((a, b) => a - b);
+    if (!pages.length) return toast('Pick at least one page.');
+    const name = safeFilename(doc.name);
+    const btn = body.querySelector('[data-testid="export-download"]');
+    btn.disabled = true;
+    btn.lastChild.textContent = 'Preparing…';
+    try {
+      if (state.format === 'pdf') {
+        download(await exportPdf(doc, pages), `${name}.pdf`);
+      } else {
+        const ext = state.format;
+        const make = (i) => (ext === 'svg' ? exportSvg(doc, i, { transparent: state.transparent }) : exportImage(doc, i, { format: ext, scale: state.scale, transparent: state.transparent, quality: state.quality / 100 }));
+        if (pages.length === 1) {
+          download(await make(pages[0]), `${name}${doc.pages.length > 1 ? `-${pages[0] + 1}` : ''}.${ext}`);
+        } else {
+          const files = [];
+          for (const i of pages) files.push({ name: `${name}-${i + 1}.${ext}`, data: await blobBytes(await make(i)) });
+          download(new Blob([buildZip(files)], { type: 'application/zip' }), `${name}.zip`);
+        }
+      }
+      toast('Downloaded');
+      d.close();
+    } catch (e) {
+      toast(e.message || 'Export failed', 'error');
+      btn.disabled = false;
+      btn.lastChild.textContent = 'Download';
+    }
+  };
+  draw();
+  const d = dialog('Download', body, { testid: 'export-dialog' });
+  return d;
+}
+
+/** For tests and power users: everything above, without the dialog. */
+export const api = { exportImage, exportSvg, exportPdf, thumbnail, projectBlob, rasterize, dataUrlToBytes, clone };

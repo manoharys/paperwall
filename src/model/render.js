@@ -21,6 +21,7 @@ function makeCtx(doc, opts) {
     measure: opts.measure || approxMeasure,
     href: opts.assetHref || ((assetId) => doc.assets[assetId]?.dataUrl || ''),
     editor: !!opts.editor,
+    skip: opts.skip || null,
   };
 }
 
@@ -246,7 +247,7 @@ const RENDERERS = {
 };
 
 export function renderElement(ctx, el) {
-  if (el.hidden) return '';
+  if (el.hidden || ctx.skip?.has(el.id)) return '';
   const body = (RENDERERS[el.type] || (() => ''))(ctx, el);
   const attrs = [`transform="${transformOf(el)}"`];
   if ((el.opacity ?? 1) < 1) attrs.push(`opacity="${f(el.opacity)}"`);
