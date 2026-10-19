@@ -1,0 +1,23 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run build
+      - name: Publish placard.html
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum dist/placard.html > dist/placard.html.sha256
+          gh release create "$GITHUB_REF_NAME" dist/placard.html dist/placard.html.sha256 \
+            --title "Placard $GITHUB_REF_NAME" \
+            --notes "Download placard.html and open it in your browser. That's the whole app: it works offline and never sends your designs anywhere. Check the file with placard.html.sha256. Only download Placard from this page."

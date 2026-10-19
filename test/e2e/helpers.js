@@ -44,6 +44,7 @@ export function distFile(name) {
 export async function openApp(opts = {}) {
   const { browser: b, baseUrl: url } = await setup();
   const context = await b.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true, ...opts });
+  context.setDefaultTimeout(10000);
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -98,9 +99,16 @@ export async function elementCenter(page, id) {
   return screenPoint(page, el.x + el.w / 2, el.y + el.h / 2);
 }
 
-export async function clickElement(page, id, modifiers) {
+export async function clickElement(page, id, modifiers = []) {
   const p = await elementCenter(page, id);
-  await page.mouse.click(p.x, p.y, { modifiers });
+  for (const m of modifiers) await page.keyboard.down(m);
+  await page.mouse.click(p.x, p.y);
+  for (const m of modifiers) await page.keyboard.up(m);
+}
+
+/** Wait until the canvas has redrawn after a change. */
+export async function settled(page) {
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 }
 
 export async function drag(page, from, to, { steps = 8, modifiers = [] } = {}) {
@@ -114,18 +122,33 @@ export async function drag(page, from, to, { steps = 8, modifiers = [] } = {}) {
 
 /** Screen position of a selection handle (n, se, rotate, ...). */
 export async function handle(page, name) {
-  const box = await page.locator(`.overlay [data-handle="${name}"]`).boundingBox();
-  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await settled(page);
+  const p = await page.waitForFunction((n) => {
+    const el = document.querySelector(`.overlay [data-handle="${n}"]`);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }, name);
+  return p.jsonValue();
+}
+
+/** Open a tab of the left panel (clicking an open tab would close it). */
+export async function openTab(page, id) {
+  const open = await page.evaluate((t) => {
+    const b = document.querySelector(`[data-testid="rail-${t}"]`);
+    return b?.getAttribute('aria-current') === 'true' && !document.querySelector('.insert.collapsed');
+  }, id);
+  if (!open) await page.click(`[data-testid="rail-${id}"]`);
 }
 
 export async function addText(page, style = 'heading') {
-  await page.click('[data-testid="rail-text"]');
+  await openTab(page, 'text');
   await page.click(`[data-testid="add-${style}"]`);
   return (await elements(page)).at(-1);
 }
 
 export async function addShape(page, label = 'Square') {
-  await page.click('[data-testid="rail-shapes"]');
+  await openTab(page, 'shapes');
   await page.click(`[data-testid="shape-${label}"]`);
   return (await elements(page)).at(-1);
 }
@@ -150,7 +173,7 @@ export async function makePng(page, { w = 400, h = 300, color = '#3a86ff', name 
 
 /** Upload images through the Uploads panel. */
 export async function uploadImages(page, files) {
-  await page.click('[data-testid="rail-uploads"]');
+  await openTab(page, 'uploads');
   const chooser = page.waitForEvent('filechooser');
   await page.click('[data-testid="upload-btn"]');
   await (await chooser).setFiles(files);

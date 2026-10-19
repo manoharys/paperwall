@@ -1,0 +1,754 @@
+{
+  "summary": {
+    "date": "2026-10-19",
+    "total": 131,
+    "verified": 127,
+    "failing": 0,
+    "todo": 4,
+    "e2eTests": 94,
+    "e2ePassing": 94,
+    "unitTests": 45,
+    "unitPassing": 45
+  },
+  "areas": [
+    {
+      "id": "DOC",
+      "name": "Designs",
+      "features": [
+        {
+          "id": "DOC-01",
+          "title": "Start a design from a size preset (square post, story, slides, A4, letter, poster, thumbnail, banner, business card)",
+          "status": "verified"
+        },
+        {
+          "id": "DOC-02",
+          "title": "Start a design at a custom width and height",
+          "status": "verified"
+        },
+        {
+          "id": "DOC-03",
+          "title": "Rename a design",
+          "status": "verified"
+        },
+        {
+          "id": "DOC-04",
+          "title": "See all your designs on a home screen",
+          "status": "verified"
+        },
+        {
+          "id": "DOC-05",
+          "title": "Duplicate a design",
+          "status": "verified"
+        },
+        {
+          "id": "DOC-06",
+          "title": "Delete a design",
+          "status": "verified"
+        },
+        {
+          "id": "DOC-07",
+          "title": "Designs save automatically on your device",
+          "status": "verified"
+        },
+        {
+          "id": "DOC-08",
+          "title": "Reopen a design exactly as you left it after closing the tab",
+          "status": "verified"
+        },
+        {
+          "id": "DOC-09",
+          "title": "Save a design to a file and open it again later or on another computer",
+          "status": "verified"
+        },
+        {
+          "id": "DOC-10",
+          "title": "Resize a design to another format with everything rescaled to fit",
+          "status": "verified"
+        },
+        {
+          "id": "DOC-11",
+          "title": "Print sizes in millimetres and inches",
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "id": "PAGE",
+      "name": "Pages",
+      "features": [
+        {
+          "id": "PAGE-01",
+          "title": "Add a blank page",
+          "status": "verified"
+        },
+        {
+          "id": "PAGE-02",
+          "title": "Duplicate a page",
+          "status": "verified"
+        },
+        {
+          "id": "PAGE-03",
+          "title": "Delete a page",
+          "status": "verified"
+        },
+        {
+          "id": "PAGE-04",
+          "title": "Reorder pages",
+          "status": "verified"
+        },
+        {
+          "id": "PAGE-05",
+          "title": "Page background color",
+          "status": "verified"
+        },
+        {
+          "id": "PAGE-06",
+          "title": "Page background gradient",
+          "status": "verified"
+        },
+        {
+          "id": "PAGE-07",
+          "title": "Page background image",
+          "status": "verified"
+        },
+        {
+          "id": "PAGE-08",
+          "title": "Move between pages from a page strip",
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "id": "VIEW",
+      "name": "Viewing",
+      "features": [
+        {
+          "id": "VIEW-01",
+          "title": "Zoom in and out",
+          "status": "verified"
+        },
+        {
+          "id": "VIEW-02",
+          "title": "Zoom to fit the page",
+          "status": "verified"
+        },
+        {
+          "id": "VIEW-03",
+          "title": "Scroll around a zoomed-in page",
+          "status": "verified"
+        },
+        {
+          "id": "VIEW-04",
+          "title": "Dark mode",
+          "status": "verified"
+        },
+        {
+          "id": "VIEW-05",
+          "title": "Present pages full screen and move with the arrow keys",
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "id": "SEL",
+      "name": "Selecting and moving",
+      "features": [
+        {
+          "id": "SEL-01",
+          "title": "Click an element to select it",
+          "status": "verified"
+        },
+        {
+          "id": "SEL-02",
+          "title": "Shift-click to select several elements",
+          "status": "verified"
+        },
+        {
+          "id": "SEL-03",
+          "title": "Drag a box over empty space to select everything inside",
+          "status": "verified"
+        },
+        {
+          "id": "SEL-04",
+          "title": "Select everything on the page",
+          "status": "verified"
+        },
+        {
+          "id": "SEL-05",
+          "title": "Drag to move",
+          "status": "verified"
+        },
+        {
+          "id": "SEL-06",
+          "title": "Nudge with the arrow keys (bigger steps with Shift)",
+          "status": "verified"
+        },
+        {
+          "id": "SEL-07",
+          "title": "Resize from corner and side handles",
+          "status": "verified"
+        },
+        {
+          "id": "SEL-08",
+          "title": "Keep proportions when resizing from a corner",
+          "status": "verified"
+        },
+        {
+          "id": "SEL-09",
+          "title": "Rotate with a handle, snapping to 15 degrees with Shift",
+          "status": "verified"
+        },
+        {
+          "id": "SEL-10",
+          "title": "Type an exact position, size and angle",
+          "status": "verified"
+        },
+        {
+          "id": "SEL-11",
+          "title": "Snap to the page center and edges, with guide lines",
+          "status": "verified"
+        },
+        {
+          "id": "SEL-12",
+          "title": "Snap to the edges and centers of other elements",
+          "status": "verified"
+        },
+        {
+          "id": "SEL-13",
+          "title": "Deselect with Escape or a click on empty space",
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "id": "EDIT",
+      "name": "Editing",
+      "features": [
+        {
+          "id": "EDIT-01",
+          "title": "Undo",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-02",
+          "title": "Redo",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-03",
+          "title": "Delete the selection",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-04",
+          "title": "Duplicate the selection",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-05",
+          "title": "Copy and paste, including onto another page",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-06",
+          "title": "Cut",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-07",
+          "title": "Group and ungroup",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-08",
+          "title": "Lock an element so it can't move",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-09",
+          "title": "Bring forward and send backward",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-10",
+          "title": "Bring to front and send to back",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-11",
+          "title": "Layers list: see, select, reorder and hide elements",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-12",
+          "title": "Align to the page: left, center, right, top, middle, bottom",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-13",
+          "title": "Align several elements to each other",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-14",
+          "title": "Space several elements evenly",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-15",
+          "title": "Flip horizontally and vertically",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-16",
+          "title": "Transparency",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-17",
+          "title": "Copy the style of one element onto another",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-18",
+          "title": "Keyboard shortcuts, with a cheat sheet",
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "id": "TXT",
+      "name": "Text",
+      "features": [
+        {
+          "id": "TXT-01",
+          "title": "Add a heading, subheading or body text",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-02",
+          "title": "Double-click text to edit it in place",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-03",
+          "title": "Text wraps inside its box",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-04",
+          "title": "Choose from bundled open-license fonts",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-05",
+          "title": "Font size",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-06",
+          "title": "Bold and italic",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-07",
+          "title": "Underline and strikethrough",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-08",
+          "title": "Text color",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-09",
+          "title": "Align left, center, right",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-10",
+          "title": "Line spacing",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-11",
+          "title": "Letter spacing",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-12",
+          "title": "All caps",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-13",
+          "title": "Bulleted and numbered lists",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-14",
+          "title": "Text shadow",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-15",
+          "title": "Text outline",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-16",
+          "title": "Colored box behind text",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-17",
+          "title": "Curved text",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-18",
+          "title": "Text box grows as you type",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-19",
+          "title": "Ready-made heading and body font pairs",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-20",
+          "title": "Use your own font file",
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "id": "SHP",
+      "name": "Shapes and lines",
+      "features": [
+        {
+          "id": "SHP-01",
+          "title": "Rectangle, rounded rectangle, circle, triangle",
+          "status": "verified"
+        },
+        {
+          "id": "SHP-02",
+          "title": "Star, polygon, heart, arrow, speech bubble",
+          "status": "verified"
+        },
+        {
+          "id": "SHP-03",
+          "title": "Lines, with optional arrowheads",
+          "status": "verified"
+        },
+        {
+          "id": "SHP-04",
+          "title": "Fill color",
+          "status": "verified"
+        },
+        {
+          "id": "SHP-05",
+          "title": "Border color, width and dashes",
+          "status": "verified"
+        },
+        {
+          "id": "SHP-06",
+          "title": "Rounded corners",
+          "status": "verified"
+        },
+        {
+          "id": "SHP-07",
+          "title": "Gradient fill",
+          "status": "verified"
+        },
+        {
+          "id": "SHP-08",
+          "title": "Number of sides or star points",
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "id": "IMG",
+      "name": "Images",
+      "features": [
+        {
+          "id": "IMG-01",
+          "title": "Add an image from your device",
+          "status": "verified"
+        },
+        {
+          "id": "IMG-02",
+          "title": "Drag and drop images onto the page",
+          "status": "verified"
+        },
+        {
+          "id": "IMG-03",
+          "title": "Paste an image from the clipboard",
+          "status": "verified"
+        },
+        {
+          "id": "IMG-04",
+          "title": "Reuse images you added before",
+          "status": "verified"
+        },
+        {
+          "id": "IMG-05",
+          "title": "Crop an image",
+          "status": "verified"
+        },
+        {
+          "id": "IMG-06",
+          "title": "Brightness, contrast and saturation",
+          "status": "verified"
+        },
+        {
+          "id": "IMG-07",
+          "title": "Black and white, sepia and blur",
+          "status": "verified"
+        },
+        {
+          "id": "IMG-08",
+          "title": "Rounded corners and circle crop",
+          "status": "verified"
+        },
+        {
+          "id": "IMG-09",
+          "title": "Replace an image and keep its place and size",
+          "status": "verified"
+        },
+        {
+          "id": "IMG-10",
+          "title": "Use an image as the page background",
+          "status": "verified"
+        },
+        {
+          "id": "IMG-11",
+          "title": "Remove an image's background on your device",
+          "status": "todo"
+        },
+        {
+          "id": "IMG-12",
+          "title": "Drop shadow on images and shapes",
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "id": "ELM",
+      "name": "Graphics",
+      "features": [
+        {
+          "id": "ELM-01",
+          "title": "Original icon library, any color",
+          "status": "verified"
+        },
+        {
+          "id": "ELM-02",
+          "title": "Search icons and shapes",
+          "status": "verified"
+        },
+        {
+          "id": "ELM-03",
+          "title": "Original decorative stickers",
+          "status": "verified"
+        },
+        {
+          "id": "ELM-04",
+          "title": "QR code generator",
+          "status": "verified"
+        },
+        {
+          "id": "ELM-05",
+          "title": "Charts from your numbers",
+          "status": "todo"
+        },
+        {
+          "id": "ELM-06",
+          "title": "Tables",
+          "status": "todo"
+        }
+      ]
+    },
+    {
+      "id": "CLR",
+      "name": "Color",
+      "features": [
+        {
+          "id": "CLR-01",
+          "title": "Color picker with hex input",
+          "status": "verified"
+        },
+        {
+          "id": "CLR-02",
+          "title": "Colors already used in this design, one click away",
+          "status": "verified"
+        },
+        {
+          "id": "CLR-03",
+          "title": "Pick a color from anywhere on screen",
+          "status": "verified"
+        },
+        {
+          "id": "CLR-04",
+          "title": "Ready-made palettes",
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "id": "BRD",
+      "name": "Brand kit",
+      "features": [
+        {
+          "id": "BRD-01",
+          "title": "Save your brand colors",
+          "status": "verified"
+        },
+        {
+          "id": "BRD-02",
+          "title": "Save your brand fonts for headings and body",
+          "status": "verified"
+        },
+        {
+          "id": "BRD-03",
+          "title": "Apply your brand colors and fonts to a design in one click",
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "id": "TPL",
+      "name": "Templates",
+      "features": [
+        {
+          "id": "TPL-01",
+          "title": "Browse templates by category",
+          "status": "verified"
+        },
+        {
+          "id": "TPL-02",
+          "title": "Search templates",
+          "status": "verified"
+        },
+        {
+          "id": "TPL-03",
+          "title": "Start a design from a template",
+          "status": "verified"
+        },
+        {
+          "id": "TPL-04",
+          "title": "Add a template as a new page in your design",
+          "status": "verified"
+        },
+        {
+          "id": "TPL-05",
+          "title": "Every template is original and free for any use (CC0)",
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "id": "EXP",
+      "name": "Export",
+      "features": [
+        {
+          "id": "EXP-01",
+          "title": "Download as PNG",
+          "status": "verified"
+        },
+        {
+          "id": "EXP-02",
+          "title": "PNG at 1x, 2x or 3x size",
+          "status": "verified"
+        },
+        {
+          "id": "EXP-03",
+          "title": "PNG with a transparent background",
+          "status": "verified"
+        },
+        {
+          "id": "EXP-04",
+          "title": "Download as JPG with a quality setting",
+          "status": "verified"
+        },
+        {
+          "id": "EXP-05",
+          "title": "Download as SVG (vector)",
+          "status": "verified"
+        },
+        {
+          "id": "EXP-06",
+          "title": "Download as PDF with all pages",
+          "status": "verified"
+        },
+        {
+          "id": "EXP-07",
+          "title": "Download only the pages you pick",
+          "status": "verified"
+        },
+        {
+          "id": "EXP-08",
+          "title": "Print",
+          "status": "verified"
+        },
+        {
+          "id": "EXP-09",
+          "title": "No watermark, ever",
+          "status": "verified"
+        },
+        {
+          "id": "EXP-10",
+          "title": "Exported SVG carries its fonts, so it looks the same anywhere",
+          "status": "verified"
+        },
+        {
+          "id": "EXP-11",
+          "title": "Copy the design to the clipboard as an image",
+          "status": "verified"
+        },
+        {
+          "id": "EXP-12",
+          "title": "PDF with real, selectable text",
+          "status": "todo"
+        }
+      ]
+    },
+    {
+      "id": "APP",
+      "name": "The app",
+      "features": [
+        {
+          "id": "APP-01",
+          "title": "Install to your home screen or desktop",
+          "status": "verified"
+        },
+        {
+          "id": "APP-02",
+          "title": "One HTML file that works when opened from disk",
+          "status": "verified"
+        },
+        {
+          "id": "APP-03",
+          "title": "Works on a phone: tap, drag and resize with touch",
+          "status": "verified"
+        },
+        {
+          "id": "APP-04",
+          "title": "No account, no sign-in",
+          "status": "verified"
+        },
+        {
+          "id": "APP-05",
+          "title": "Makes no network requests after loading, enforced by the browser",
+          "status": "verified"
+        },
+        {
+          "id": "APP-06",
+          "title": "Works offline after the first visit",
+          "status": "verified"
+        }
+      ]
+    }
+  ]
+}

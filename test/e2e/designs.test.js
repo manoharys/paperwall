@@ -2,7 +2,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { openApp, newDesign, waitForEditor, state, elements, addText, teardown, setup, distFile, mod } from './helpers.js';
+import { openApp, newDesign, waitForEditor, state, elements, addText, teardown, setup, distFile, mod, openTab } from './helpers.js';
 
 after(teardown);
 
@@ -77,7 +77,7 @@ test('[DOC-04] [DOC-05] [DOC-06] home screen lists designs; duplicate and delete
 test('[DOC-08] reopen a design exactly as you left it after closing the tab', async () => {
   const { page, context, url } = await newDesign();
   const t = await addText(page);
-  await page.click('[data-testid="rail-shapes"]');
+  await openTab(page, 'shapes');
   await page.click('[data-testid="shape-Heart"]');
   await page.waitForTimeout(700);
   const before = await state(page);
@@ -155,7 +155,7 @@ test('[APP-02] one HTML file that works when opened from disk', async () => {
   await page.goto(pathToFileURL(distFile('placard.html')).href);
   await page.click('[data-testid="preset-square"]');
   await waitForEditor(page);
-  await page.click('[data-testid="rail-text"]');
+  await openTab(page, 'text');
   await page.click('[data-testid="add-heading"]');
   assert.equal((await elements(page)).length, 1);
   assert.deepEqual(errors, []);
@@ -171,7 +171,7 @@ test('[APP-05] makes no network requests after loading, enforced by the browser'
   await page.goto(baseUrl + 'placard.html');
   await page.click('[data-testid="template-grand-opening"]');
   await waitForEditor(page);
-  await page.click('[data-testid="rail-graphics"]');
+  await openTab(page, 'graphics');
   await page.click('[data-testid="icon-heart"]');
   const network = requests.filter((u) => u.startsWith('http') && !u.endsWith('/placard.html'));
   assert.deepEqual(network, []);
