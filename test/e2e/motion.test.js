@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { newDesign, state, elements, addShape, clickElement, teardown } from './helpers.js';
+import { newDesign, state, elements, addShape, clickElement, teardown, downloadVia } from './helpers.js';
 
 after(teardown);
 
@@ -93,5 +93,81 @@ test('[MOT-04] presenting plays a page\'s animations too (without moving on by i
   await page.waitForTimeout(1500);
   assert.ok((await page.textContent('.slide-count')).startsWith('1 /'), 'still on the first page');
   await page.keyboard.press('Escape');
+  await context.close();
+});
+
+/** A short animated design: a red square that pops in, then a second page. */
+async function shortMovie(page) {
+  await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    const s = ed.addShape('rect');
+    ed.update({ fill: '#ff0000', anim: { type: 'pop', duration: 0.5 } }, null, [s.id]);
+    ed.setPageMotion(0, { duration: 1 });
+    ed.addPage();
+    ed.setPageMotion(1, { duration: 1, transition: { type: 'fade', duration: 0.4 } });
+    ed.setPage(0);
+  });
+}
+
+test('[MOT-05] download as an animated GIF', async () => {
+  const { page, context } = await newDesign('square');
+  await shortMovie(page);
+  const { name, bytes } = await downloadVia(page, async () => {
+    await page.click('[data-testid="export-format"] [data-value="gif"]');
+    assert.match(await page.textContent('[data-testid="export-length"]'), /2 seconds long/);
+  });
+  assert.match(name, /\.gif$/);
+  assert.equal(bytes.subarray(0, 6).toString('latin1'), 'GIF89a');
+  // The browser can open it, at the GIF size (long side 720 at most).
+  const size = await page.evaluate(async (b64) => {
+    const img = new Image();
+    img.src = `data:image/gif;base64,${b64}`;
+    await img.decode();
+    return [img.naturalWidth, img.naturalHeight];
+  }, bytes.toString('base64'));
+  assert.deepEqual(size, [720, 720]);
+  // More than one frame: the square pops in.
+  const frames = bytes.toString('latin1').split('\x21\xf9\x04').length - 1;
+  assert.ok(frames > 3, `${frames} frames`);
+  await context.close();
+});
+
+test('[MOT-06] download as a video: WebM and MP4', async () => {
+  const { page, context } = await newDesign('square');
+  await shortMovie(page);
+  const can = await page.evaluate(() => typeof VideoEncoder !== 'undefined');
+  assert.ok(can, 'this browser encodes video');
+  // WebM: plays back here, two seconds long.
+  const { name, bytes } = await downloadVia(page, () => page.click('[data-testid="export-format"] [data-value="webm"]'));
+  assert.match(name, /\.webm$/);
+  assert.equal(bytes.readUInt32BE(0), 0x1a45dfa3, 'a Matroska/WebM file');
+  const played = await page.evaluate(async (b64) => {
+    const v = document.createElement('video');
+    v.muted = true;
+    v.src = `data:video/webm;base64,${b64}`;
+    await new Promise((ok, fail) => {
+      v.onloadedmetadata = ok;
+      v.onerror = () => fail(new Error('could not load'));
+    });
+    return { w: v.videoWidth, h: v.videoHeight, d: v.duration };
+  }, bytes.toString('base64'));
+  assert.deepEqual([played.w, played.h], [1080, 1080]);
+  assert.ok(Math.abs(played.d - 2) < 0.2, `duration ${played.d}`);
+  // MP4: the boxes are there, with a sample for every frame.
+  const mp4 = await page.evaluate(async () => {
+    const blob = await window.paperwall.export.exportVideo(window.paperwall.editor.doc, [0, 1], { container: 'mp4' });
+    return [...new Uint8Array(await blob.arrayBuffer())];
+  });
+  const buf = Buffer.from(mp4);
+  assert.equal(buf.subarray(4, 8).toString(), 'ftyp');
+  const types = [];
+  for (let p = 0; p < buf.length;) {
+    const size = buf.readUInt32BE(p);
+    types.push(buf.subarray(p + 4, p + 8).toString());
+    p += size;
+  }
+  assert.deepEqual(types, ['ftyp', 'moov', 'mdat']);
+  const stsz = buf.indexOf('stsz');
+  assert.equal(buf.readUInt32BE(stsz + 12), 60, '2 seconds at 30 frames a second');
   await context.close();
 });

@@ -8,6 +8,8 @@ import { validateDesign, clone, visiblePages, printDpi, pageLabel } from '../mod
 import { measure, fontCssFor, registerDesignFonts } from './fonts.js';
 import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage } from './ui.js';
 import { section, segmented, slider, toggle } from './widgets.js';
+import { exportGif, exportVideo, canMakeVideo } from './motion-export.js';
+import { designMoves, timeline } from '../model/motion.js';
 
 const MAX_SIDE = 16000;
 const MAX_PIXELS = 120e6;
@@ -136,6 +138,29 @@ export async function readProjectFile(file) {
 
 // ---------- the download dialog ----------
 
+const MOVING = new Set(['gif', 'mp4', 'webm']);
+
+/** How long the animation will be, and a nudge when nothing moves yet. */
+function motionNote(doc, pages) {
+  const { total } = timeline(doc, pages);
+  const length = `${Math.round(total * 10) / 10} seconds`;
+  return designMoves(doc, pages) ? `${length} long. Set each page's time and transition with nothing selected.` : `${length} long. Nothing moves yet: pick an animation in the Animate panel.`;
+}
+
+/** The design's soundtrack, decoded, or null. (Soundtracks come with video elements and audio.) */
+export async function soundtrackBuffer(doc) {
+  const a = doc.audio && doc.assets[doc.audio.assetId];
+  if (!a) return null;
+  const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
+  if (!Ctx) return null;
+  const ctx = new Ctx();
+  try {
+    return await ctx.decodeAudioData(dataUrlToBytes(a.dataUrl).buffer);
+  } finally {
+    ctx.close?.();
+  }
+}
+
 export function exportDialog(editor) {
   const doc = editor.doc;
   // Hidden pages start unticked; tick one to download it anyway. If every
@@ -153,13 +178,21 @@ export function exportDialog(editor) {
         { value: 'jpg', label: 'JPG: smaller files', text: 'JPG' },
         { value: 'pdf', label: 'PDF: for printing', text: 'PDF' },
         { value: 'svg', label: 'SVG: vector, any size', text: 'SVG' },
+        { value: 'gif', label: 'GIF: a short animation', text: 'GIF' },
+        { value: 'mp4', label: 'MP4: video', text: 'MP4' },
+        { value: 'webm', label: 'WebM: video', text: 'WebM' },
       ] }),
       h('p', { class: 'hint' }, {
         png: 'Sharp images for social media and the web.',
         jpg: 'Smaller files, no transparency.',
         pdf: 'One file with every page you pick. Great for printing.',
         svg: 'Vector file that stays sharp at any size. Fonts are included.',
-      }[state.format])),
+        gif: 'Plays your animations and pages on a loop. Kept small to share.',
+        mp4: 'A video of your animations and pages, with your soundtrack. Plays everywhere.',
+        webm: 'A video of your animations and pages, with your soundtrack. Smaller; plays in browsers.',
+      }[state.format]),
+      MOVING.has(state.format) ? h('p', { class: 'hint', 'data-testid': 'export-length' }, motionNote(doc, [...state.pages].sort((a, b) => a - b))) : null,
+      (state.format === 'mp4' || state.format === 'webm') && !canMakeVideo() ? h('p', { class: 'hint warn' }, "This browser can't make videos. Try a recent Chrome, Edge, Safari or Firefox, or download a GIF.") : null),
       state.format === 'png' || state.format === 'jpg' ? section('Size', segmented({ label: 'Size', value: state.scale, testid: 'export-scale', onChange: (v) => {
         state.scale = v;
         draw();
@@ -198,7 +231,14 @@ export function exportDialog(editor) {
     btn.disabled = true;
     btn.lastChild.textContent = 'Preparing…';
     try {
-      if (state.format === 'pdf') {
+      if (MOVING.has(state.format)) {
+        // Frames take a while: say how far along it is.
+        const onProgress = (p) => (btn.lastChild.textContent = `Making ${state.format.toUpperCase()}… ${Math.round(p * 100)}%`);
+        const blob = state.format === 'gif'
+          ? await exportGif(doc, pages, { onProgress })
+          : await exportVideo(doc, pages, { container: state.format, audio: await soundtrackBuffer(doc).catch(() => null), onProgress });
+        download(blob, `${name}.${state.format}`);
+      } else if (state.format === 'pdf') {
         download(await exportPdf(doc, pages), `${name}.pdf`);
       } else {
         const ext = state.format;
@@ -225,4 +265,4 @@ export function exportDialog(editor) {
 }
 
 /** For tests and power users: everything above, without the dialog. */
-export const api = { exportImage, exportSvg, exportPdf, thumbnail, projectBlob, rasterize, dataUrlToBytes, clone };
+export const api = { exportImage, exportSvg, exportPdf, exportGif, exportVideo, thumbnail, projectBlob, rasterize, dataUrlToBytes, clone };

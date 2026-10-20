@@ -2,13 +2,13 @@
   "summary": {
     "date": "2026-10-20",
     "total": 163,
-    "verified": 158,
+    "verified": 160,
     "failing": 0,
-    "todo": 5,
-    "e2eTests": 138,
-    "e2ePassing": 138,
-    "unitTests": 113,
-    "unitPassing": 113
+    "todo": 3,
+    "e2eTests": 140,
+    "e2ePassing": 140,
+    "unitTests": 115,
+    "unitPassing": 115
   },
   "areas": [
     {
@@ -795,12 +795,12 @@
         {
           "id": "MOT-05",
           "title": "Download as an animated GIF",
-          "status": "todo"
+          "status": "verified"
         },
         {
           "id": "MOT-06",
           "title": "Download as a video (MP4 or WebM)",
-          "status": "todo"
+          "status": "verified"
         },
         {
           "id": "MOT-07",

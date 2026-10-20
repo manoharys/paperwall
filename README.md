@@ -45,7 +45,7 @@ end-to-end test in a real browser** or listed as **not done yet**. This table
 is generated from the test run, never written by hand.
 
 <!-- scoreboard:start -->
-**158 of 163 features verified** by browser tests · 5 not done yet · [full scoreboard](SCOREBOARD.md)
+**160 of 163 features verified** by browser tests · 3 not done yet · [full scoreboard](SCOREBOARD.md)
 
 | Area | Verified |
 | --- | --- |
@@ -61,11 +61,11 @@ is generated from the test run, never written by hand.
 | Color | 5 / 5 |
 | Brand kit | 3 / 3 |
 | Templates | 9 / 9 |
-| Motion | 4 / 8 |
+| Motion | 6 / 8 |
 | Export | 12 / 12 |
 | The app | 6 / 6 |
 
-Not done yet: remove an image's background on your device; download as an animated gif; download as a video (mp4 or webm); add videos to a design; add a soundtrack that plays in videos and when presenting.
+Not done yet: remove an image's background on your device; add videos to a design; add a soundtrack that plays in videos and when presenting.
 <!-- scoreboard:end -->
 
 ## Use it
