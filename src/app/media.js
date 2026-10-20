@@ -3,6 +3,7 @@
 // for playing, presenting and downloading.
 
 import { videoTime } from '../model/doc.js';
+import { videosIn } from '../model/motion.js';
 import { dataUrlToBlob } from './ui.js';
 
 const LIMITS = { video: 60e6, audio: 25e6 };
@@ -281,16 +282,7 @@ function seeThrough(v) {
   return false;
 }
 
-/** Every video element on the given pages (inside groups too). */
+/** Every video element on the given pages (inside groups too) whose file the design has. */
 export function videosOn(doc, pageIndexes) {
-  const out = [];
-  const walk = (els) => {
-    for (const el of els) {
-      if (el.hidden) continue;
-      if (el.type === 'video' && doc.assets[el.assetId]) out.push(el);
-      if (el.type === 'group') walk(el.children);
-    }
-  };
-  for (const i of pageIndexes) if (doc.pages[i]) walk(doc.pages[i].elements);
-  return out;
+  return pageIndexes.flatMap((i) => (doc.pages[i] ? videosIn(doc.pages[i], doc.assets) : []));
 }

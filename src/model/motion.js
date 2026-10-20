@@ -198,11 +198,23 @@ export function animationsEnd(page) {
   return animations(page).reduce((end, a) => Math.max(end, a.delay + a.duration), 0);
 }
 
-/** Whether a page has a video (inside groups too) that can play: its file is in `assets`, when given. */
+/** A page's shown videos (inside groups too) that can play: their file is in `assets`, when given. */
+export function videosIn(page, assets = null) {
+  const out = [];
+  const walk = (els) => {
+    for (const el of els) {
+      if (el.hidden) continue;
+      if (el.type === 'video' && (!assets || assets[el.assetId])) out.push(el);
+      if (el.type === 'group') walk(el.children);
+    }
+  };
+  walk(page.elements);
+  return out;
+}
+
+/** Whether a page has a video that can play (see videosIn). */
 export function hasVideo(page, assets = null) {
-  const playable = (el) => el.type === 'video' && (!assets || !!assets[el.assetId]);
-  const walk = (els) => els.some((el) => !el.hidden && (playable(el) || (el.type === 'group' && walk(el.children))));
-  return walk(page.elements);
+  return videosIn(page, assets).length > 0;
 }
 
 /** Whether a page has an animation that never ends (breathing, say). */

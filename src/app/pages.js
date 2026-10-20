@@ -213,7 +213,7 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     // just wait for its time to be up.
     // (A page whose videos have all played once, to the end, is still now.)
     const ended = info.keeps && !info.loops && videos.allEnded(info.videos);
-    const moving = local < Math.max(info.end, from !== null ? tr.duration : 0) || (info.keeps && !live && !ended);
+    const moving = !settled || (info.keeps && !live && !ended);
     if (moving) frame = requestAnimationFrame(draw);
     else if (autoplay) {
       wait = setTimeout(() => {
