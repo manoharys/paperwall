@@ -65,7 +65,7 @@ export function replaceText(doc, query, replacement, opts = {}) {
     // A function replacement keeps "$" in the new text literal.
     slot.set(before.replace(re, () => replacement));
     count += n;
-    changed.set(`${slot.page}:${slot.el.id}`, { page: slot.page, id: slot.el.id, el: slot.el });
+    changed.set(`${slot.page}:${slot.el.id}`, { page: slot.page, id: slot.el.id, el: slot.el, owner: slot.owner });
   }
   return { count, changed: [...changed.values()] };
 }

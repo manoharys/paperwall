@@ -24,7 +24,16 @@ function open() {
       const db = req.result;
       for (const s of STORES) if (!db.objectStoreNames.contains(s)) db.createObjectStore(s);
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      // Let a newer version of Paperwall in another tab upgrade the database.
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
+    req.onblocked = () => {
+      // An older tab still has the database open; it upgrades once that tab closes.
+      globalThis.dispatchEvent?.(new CustomEvent('paperwall:storage-blocked'));
+    };
     req.onerror = () => {
       persistent = false;
       resolve(null);
@@ -91,37 +100,65 @@ export async function listDesigns() {
 
 export async function deleteDesign(id) {
   await del('designs', id);
-  for (const v of await listVersions(id)) await del('versions', v.key);
+  await deleteVersions(id);
 }
 
 // ---------- version history (per design, on this device) ----------
+// Keys: "<designId>|v|<time>" for a version (the design without its images)
+// and "<designId>|a|<assetId>" for each image, stored once and shared by
+// every version that uses it.
 
 export const MAX_VERSIONS = 30;
-const versionKey = (designId, at) => `${designId}|${String(at).padStart(15, '0')}`;
+const vKey = (designId, at) => `${designId}|v|${String(at).padStart(15, '0')}`;
+const aKey = (designId, assetId) => `${designId}|a|${assetId}`;
+const range = (prefix) => [prefix, `${prefix}\uffff`];
 
-/** Keep a copy of the design as it is now. The oldest copies beyond MAX_VERSIONS are dropped. */
+async function keysIn(prefix) {
+  const [lo, hi] = range(prefix);
+  const db = await open();
+  if (!db) return [...memory.versions.keys()].filter((k) => k >= lo && k <= hi).sort();
+  return tx(db, 'versions', 'readonly', (s) => s.getAllKeys(IDBKeyRange.bound(lo, hi)));
+}
+
+async function valuesIn(prefix) {
+  const [lo, hi] = range(prefix);
+  const db = await open();
+  if (!db) return [...memory.versions.entries()].filter(([k]) => k >= lo && k <= hi).map(([, v]) => v);
+  return tx(db, 'versions', 'readonly', (s) => s.getAll(IDBKeyRange.bound(lo, hi)));
+}
+
+/** Keep a copy of the design as it is now. The oldest beyond MAX_VERSIONS are dropped. */
 export async function saveVersion(doc, { label = '' } = {}) {
   const at = Date.now();
-  const key = versionKey(doc.id, at);
-  await put('versions', key, { key, designId: doc.id, at, label, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, doc: JSON.parse(JSON.stringify(doc)) });
-  const list = await listVersions(doc.id);
-  for (const old of list.slice(MAX_VERSIONS)) await del('versions', old.key);
+  const key = vKey(doc.id, at);
+  const { assets, ...rest } = JSON.parse(JSON.stringify(doc));
+  const have = new Set(await keysIn(`${doc.id}|a|`));
+  for (const [id, a] of Object.entries(assets || {})) {
+    if (!have.has(aKey(doc.id, id))) await put('versions', aKey(doc.id, id), a);
+  }
+  await put('versions', key, { key, designId: doc.id, at, label, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, assetIds: Object.keys(assets || {}), doc: rest });
+  const keys = await keysIn(`${doc.id}|v|`);
+  for (const old of keys.slice(0, Math.max(0, keys.length - MAX_VERSIONS))) await del('versions', old);
   return key;
 }
 
-/** A design's saved versions, newest first. */
+/** A design's saved versions (without their images), newest first. */
 export async function listVersions(designId) {
-  const db = await open();
-  const lo = `${designId}|`;
-  const hi = `${designId}|\uffff`;
-  let rows;
-  if (!db) rows = [...memory.versions.values()].filter((v) => v.key >= lo && v.key <= hi);
-  else rows = await tx(db, 'versions', 'readonly', (s) => s.getAll(IDBKeyRange.bound(lo, hi)));
-  return rows.sort((a, b) => b.at - a.at);
+  return (await valuesIn(`${designId}|v|`)).sort((a, b) => b.at - a.at);
 }
 
-export async function loadVersion(key) {
-  return get('versions', key);
+/** A version as a whole design again, images included. */
+export async function versionDoc(version) {
+  const assets = {};
+  for (const id of version.assetIds || []) {
+    const a = await get('versions', aKey(version.designId, id));
+    if (a) assets[id] = a;
+  }
+  return { ...version.doc, assets };
+}
+
+async function deleteVersions(designId) {
+  for (const k of await keysIn(`${designId}|`)) await del('versions', k);
 }
 
 // ---------- uploads (reusable across designs) ----------

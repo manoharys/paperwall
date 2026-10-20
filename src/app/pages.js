@@ -43,7 +43,8 @@ export class PageStrip {
       item.addEventListener('dragover', (e) => e.preventDefault());
       item.addEventListener('drop', (e) => {
         e.preventDefault();
-        const from = Number(e.dataTransfer.getData('application/x-paperwall-page'));
+        const raw = e.dataTransfer.getData('application/x-paperwall-page');
+        const from = raw === '' ? NaN : Number(raw); // other drags (an upload, a file) carry no page
         if (Number.isInteger(from) && from !== i) ed.movePage(from, i);
       });
       this.list.append(item);
@@ -79,7 +80,8 @@ export function pageGrid(editor, canvas) {
       card.addEventListener('dragover', (e) => e.preventDefault());
       card.addEventListener('drop', (e) => {
         e.preventDefault();
-        const from = Number(e.dataTransfer.getData('application/x-paperwall-page'));
+        const raw = e.dataTransfer.getData('application/x-paperwall-page');
+        const from = raw === '' ? NaN : Number(raw); // other drags (an upload, a file) carry no page
         if (Number.isInteger(from) && from !== i) {
           editor.movePage(from, i);
           fill();

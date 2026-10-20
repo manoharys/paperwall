@@ -243,3 +243,13 @@ test('[PAGE-11] see all pages in a grid and reorder them there', async () => {
   assert.equal(await state(page, (ed) => ed.page), 1);
   await context.close();
 });
+
+test('a hidden page in a one-page design can still be downloaded', async () => {
+  const { page, context } = await newDesign('square');
+  await page.click('[data-testid="page-hidden"]');
+  await page.click('[data-testid="download"]');
+  const dl = page.waitForEvent('download');
+  await page.click('[data-testid="export-download"]');
+  assert.match((await dl).suggestedFilename(), /\.png$/);
+  await context.close();
+});

@@ -243,7 +243,10 @@ export class Canvas {
       // Pull a new guide out of a ruler.
       e.preventDefault();
       const axis = ruler === this.rulerX ? 'y' : 'x';
-      this.drag = { mode: 'guide', index: ed.addGuide(axis, axis === 'x' ? p.x : p.y), axis, isNew: true };
+      // One undo step for the whole drag, taken now; dropped again if the guide doesn't stay.
+      ed.history.record(ed.doc);
+      ed.pageData.guides = [...(ed.pageData.guides || []), { axis, pos: Math.round(axis === 'x' ? p.x : p.y) }];
+      this.drag = { mode: 'guide', index: ed.pageData.guides.length - 1, axis, isNew: true, moved: false };
       this.el.setPointerCapture(e.pointerId);
       return;
     }
@@ -252,7 +255,7 @@ export class Canvas {
       e.preventDefault();
       const index = +guide.getAttribute('data-guide');
       ed.history.record(ed.doc);
-      this.drag = { mode: 'guide', index, axis: ed.pageData.guides[index].axis };
+      this.drag = { mode: 'guide', index, axis: ed.pageData.guides[index].axis, moved: false };
       this.el.setPointerCapture(e.pointerId);
       return;
     }
@@ -331,6 +334,7 @@ export class Canvas {
       return;
     }
     if (d.mode === 'guide') {
+      d.moved = true;
       ed.moveGuide(d.index, d.axis === 'x' ? p.x : p.y, true);
       return;
     }
@@ -457,11 +461,16 @@ export class Canvas {
       return;
     }
     if (d.mode === 'guide') {
-      // A guide dragged off the page is removed.
+      // A guide dragged off the page is removed. A new guide that never made
+      // it onto the page, or a guide that wasn't moved, leaves no undo step.
       const g = ed.pageData.guides[d.index];
       const size = d.axis === 'x' ? ed.doc.width : ed.doc.height;
-      if (g && (g.pos < 0 || g.pos > size)) ed.removeGuide(d.index);
-      else ed.afterChange();
+      const off = !g || g.pos < 0 || g.pos > size;
+      if (off) ed.pageData.guides.splice(d.index, 1);
+      if ((d.isNew && off) || !d.moved) {
+        ed.history.discard();
+        ed.emit('aids');
+      } else ed.afterChange();
       return;
     }
     if (d.mode === 'draw') {
@@ -498,11 +507,15 @@ export class Canvas {
     e.preventDefault();
     this.el.classList.remove('dropping');
     let at = this.toPage(e);
-    // A picture dropped on a frame goes into the frame; anywhere else it's added.
+    // A picture dropped on a frame goes into the frame; anywhere else (and
+    // every picture after the first, when several are dropped) it's added.
+    let filled = false;
     const place = async (upload) => {
-      const frame = this.ed.frameAt(at);
-      if (frame) this.ed.fillFrame(frame.id, upload);
-      else await this.ed.addImage(upload, { at });
+      const frame = filled ? null : this.ed.frameAt(at);
+      if (frame) {
+        this.ed.fillFrame(frame.id, upload);
+        filled = true;
+      } else await this.ed.addImage(upload, { at });
     };
     const uploadId = e.dataTransfer?.getData('application/x-paperwall-upload');
     if (uploadId) {

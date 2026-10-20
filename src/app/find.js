@@ -4,6 +4,7 @@
 import { h, dialog, toast } from './ui.js';
 import { toggle } from './widgets.js';
 import { findText, replaceText } from '../model/find.js';
+import { refitGroup } from '../model/commands.js';
 
 export function findDialog(editor) {
   const opts = { matchCase: false, wholeWord: false };
@@ -32,6 +33,7 @@ export function findDialog(editor) {
   // Replacing changes text, so boxes are measured again for their new size.
   const refit = (changed) => {
     for (const c of changed) if (c.el.type === 'text') editor.fitText(c.el);
+    for (const g of new Set(changed.map((c) => c.owner).filter((o) => o.type === 'group'))) refitGroup(g);
   };
   const replaceOne = () => {
     if (!hits.length) return;

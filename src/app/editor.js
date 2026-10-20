@@ -148,7 +148,8 @@ export class Editor {
   restoreVersion(versionDoc) {
     const v = JSON.parse(JSON.stringify(versionDoc));
     this.change(() => {
-      Object.assign(this.doc, { name: v.name, width: v.width, height: v.height, unit: v.unit, pages: v.pages, assets: v.assets });
+      // Keep today's images too: undo snapshots share the design's assets.
+      Object.assign(this.doc, { name: v.name, width: v.width, height: v.height, unit: v.unit, pages: v.pages, assets: { ...this.doc.assets, ...v.assets } });
     });
     this.selection = [];
     this.page = -1;

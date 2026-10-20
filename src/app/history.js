@@ -24,15 +24,19 @@ export function historyDialog(editor) {
     if (!rows.length) list.append(h('p', { class: 'empty-note' }, 'No versions yet. One is kept every few minutes while you work, and whenever you leave a design you changed.'));
     for (const v of rows) {
       const img = h('span', { class: 'version-img', style: { aspectRatio: `${v.width} / ${v.height}` } });
-      ensureDesignFonts(v.doc).then(() => (img.innerHTML = renderPage(v.doc, 0, { measure, noSize: true, idPrefix: `v${v.at}` })));
+      store.versionDoc(v).then(async (doc) => {
+        await ensureDesignFonts(doc);
+        img.innerHTML = renderPage(doc, 0, { measure, noSize: true, idPrefix: `v${v.at}` });
+      });
       list.append(h('li', { class: 'version', 'data-testid': 'version' },
         img,
         h('div', { class: 'version-meta' },
           h('b', null, when(v.at)),
           h('small', null, `${v.label ? `${v.label} · ` : ''}${v.pages} page${v.pages === 1 ? '' : 's'} · ${v.width} × ${v.height}`)),
         h('button', { type: 'button', class: 'btn small', 'data-testid': 'version-restore', onClick: async () => {
-          await ensureDesignFonts(v.doc);
-          editor.restoreVersion(v.doc);
+          const doc = await store.versionDoc(v);
+          await ensureDesignFonts(doc);
+          editor.restoreVersion(doc);
           d.close();
           toast('Restored. Undo to go back to how it was.');
         } }, 'Restore')));

@@ -34,7 +34,8 @@ function paint(ctx, p) {
   if (typeof p === 'string') return esc(p);
   if (p.type === 'linear' || p.type === 'radial') {
     const id = ctx.id('grad');
-    const stops = (p.stops || [])
+    const stops = [...(p.stops || [])]
+      .sort((a, b) => (a.offset ?? 0) - (b.offset ?? 0))
       .map((s) => `<stop offset="${f(s.offset)}" stop-color="${esc(s.color)}"${s.opacity !== undefined ? ` stop-opacity="${f(s.opacity)}"` : ''}/>`)
       .join('');
     if (p.type === 'radial') {

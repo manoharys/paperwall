@@ -460,3 +460,13 @@ test('[EDIT-20] spell check while editing text', async () => {
   assert.equal(await page.getAttribute('[data-testid="text-editor"]', 'spellcheck'), 'true');
   await context.close();
 });
+
+test('clicking a ruler without dragging leaves no guide and no undo step', async () => {
+  const { page, context } = await newDesign('square');
+  await page.keyboard.press('Shift+R');
+  const r = await page.locator('[data-testid="ruler-x"]').boundingBox();
+  await page.mouse.click(r.x + 100, r.y + 10);
+  assert.equal((await state(page, (ed) => ed.pageData.guides || [])).length, 0);
+  assert.equal(await state(page, (ed) => ed.history.canUndo), false);
+  await context.close();
+});

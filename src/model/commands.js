@@ -66,14 +66,46 @@ export function deleteElements(doc, pageIndex, ids) {
   return before - page.elements.length;
 }
 
-function freshIds(el) {
-  const copy = clone(el);
-  const walk = (e) => {
-    e.id = uid();
-    if (e.type === 'group') e.children.forEach(walk);
-  };
-  walk(copy);
-  return copy;
+/**
+ * Copies of elements with new ids. Connectors copied along with what they
+ * join are re-attached to the copies; an end whose element wasn't copied
+ * comes loose (it stays where it was rather than jumping to the original).
+ */
+function freshCopies(els) {
+  const map = new Map();
+  const copies = els.map((el) => {
+    const copy = clone(el);
+    const walk = (e) => {
+      const id = uid();
+      map.set(e.id, id);
+      e.id = id;
+      if (e.type === 'group') e.children.forEach(walk);
+    };
+    walk(copy);
+    return copy;
+  });
+  for (const c of copies) {
+    if (c.type !== 'connector') continue;
+    for (const k of ['start', 'end']) c[k] = { id: c[k]?.id ? map.get(c[k].id) ?? null : null };
+  }
+  return copies;
+}
+
+/**
+ * Make a group's box fit its children again (after their sizes changed),
+ * keeping them where they are on the page. Unrotated groups only.
+ */
+export function refitGroup(group) {
+  if (group.type !== 'group' || group.rotation || !group.children.length) return;
+  const b = unionBounds(group.children);
+  for (const c of group.children) {
+    c.x -= b.x;
+    c.y -= b.y;
+  }
+  group.x += b.x;
+  group.y += b.y;
+  group.w = b.w;
+  group.h = b.h;
 }
 
 /** Copies of elements with new ids, ready to paste. */
@@ -84,8 +116,7 @@ export function copyElements(doc, pageIndex, ids) {
 export function pasteElements(doc, pageIndex, els, offset = 0) {
   const page = getPage(doc, pageIndex);
   const ids = [];
-  for (const el of els) {
-    const copy = freshIds(el);
+  for (const copy of freshCopies(els)) {
     copy.x += offset;
     copy.y += offset;
     copy.locked = false;
@@ -326,7 +357,7 @@ export function addPage(doc, afterIndex = doc.pages.length - 1, page) {
 export function duplicatePage(doc, index) {
   const copy = clone(getPage(doc, index));
   copy.id = uid('p');
-  copy.elements = copy.elements.map(freshIds);
+  copy.elements = freshCopies(copy.elements);
   doc.pages.splice(index + 1, 0, copy);
   touch(doc);
   return index + 1;

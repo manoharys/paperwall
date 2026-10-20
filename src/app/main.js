@@ -213,6 +213,7 @@ async function openEditor(id) {
 }
 
 window.addEventListener('hashchange', route);
+window.addEventListener('paperwall:storage-blocked', () => toast('Paperwall is updating its storage. Close any other Paperwall tabs to finish.', 'error'));
 window.addEventListener('beforeunload', () => current?.editor.flush());
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') current?.editor.flush();

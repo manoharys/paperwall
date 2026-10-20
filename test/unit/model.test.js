@@ -421,3 +421,37 @@ test('[EDIT-19] find and replace across pages, groups, tables and charts', async
   assert.deepEqual(findText(doc, ''), []);
   assert.deepEqual(findText(doc, 'a.b'), [], 'the query is plain text, not a pattern');
 });
+
+test('[ELM-10] copied connectors join the copies, or come loose', async () => {
+  const { createDesign, createShape } = await import('../../src/model/doc.js');
+  const { duplicatePage, pasteElements, copyElements, refitGroup } = await import('../../src/model/commands.js');
+  const { createConnector } = await import('../../src/model/connectors.js');
+  const doc = createDesign({ width: 1000, height: 1000 });
+  const a = createShape('rect', { x: 0, y: 0, w: 100, h: 100 });
+  const b = createShape('rect', { x: 500, y: 0, w: 100, h: 100 });
+  const c = createConnector({ from: [100, 50], to: [500, 50], start: a.id, end: b.id });
+  doc.pages[0].elements.push(a, b, c);
+  duplicatePage(doc, 0);
+  const [a2, b2, c2] = doc.pages[1].elements;
+  assert.notEqual(a2.id, a.id);
+  assert.deepEqual([c2.start.id, c2.end.id], [a2.id, b2.id], 'the copy joins the copied boxes');
+  // Copy just the connector and one box: the other end comes loose.
+  const ids = pasteElements(doc, 0, copyElements(doc, 0, [a.id, c.id]), 20);
+  const pasted = doc.pages[0].elements.filter((e) => ids.includes(e.id));
+  const pc = pasted.find((e) => e.type === 'connector');
+  assert.equal(pc.start.id, pasted.find((e) => e.type === 'shape').id);
+  assert.equal(pc.end.id, null);
+  // A group's box follows its children after they change size.
+  const g = { id: 'g', type: 'group', x: 100, y: 100, w: 50, h: 50, rotation: 0, children: [{ id: 'k', type: 'shape', x: -10, y: 0, w: 80, h: 70 }] };
+  refitGroup(g);
+  assert.deepEqual([g.x, g.y, g.w, g.h, g.children[0].x], [90, 100, 80, 70, 0]);
+});
+
+test('[CLR-05] gradient stops are drawn in order', async () => {
+  const { createDesign, createShape } = await import('../../src/model/doc.js');
+  const { renderPage } = await import('../../src/model/render.js');
+  const doc = createDesign({ width: 100, height: 100 });
+  doc.pages[0].elements.push(createShape('rect', { fill: { type: 'linear', angle: 0, stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff' }, { offset: 0.2, color: '#ff0000' }] } }));
+  const offsets = [...renderPage(doc, 0).matchAll(/<stop offset="([\d.]+)"/g)].map((m) => +m[1]);
+  assert.deepEqual(offsets, [0, 0.2, 1]);
+});

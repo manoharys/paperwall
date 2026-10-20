@@ -5,10 +5,10 @@
     "verified": 154,
     "failing": 0,
     "todo": 1,
-    "e2eTests": 122,
-    "e2ePassing": 122,
-    "unitTests": 65,
-    "unitPassing": 65
+    "e2eTests": 124,
+    "e2ePassing": 124,
+    "unitTests": 67,
+    "unitPassing": 67
   },
   "areas": [
     {

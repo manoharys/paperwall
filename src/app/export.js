@@ -138,8 +138,10 @@ export async function readProjectFile(file) {
 
 export function exportDialog(editor) {
   const doc = editor.doc;
-  // Hidden pages start unticked; tick one to download it anyway.
-  const state = { format: 'png', scale: 1, transparent: false, quality: 92, pages: new Set(doc.pages.map((p, i) => (p.hidden ? -1 : i)).filter((i) => i >= 0)) };
+  // Hidden pages start unticked; tick one to download it anyway. If every
+  // page is hidden (or there's just one), start with all of them.
+  const visible = doc.pages.map((p, i) => (p.hidden ? -1 : i)).filter((i) => i >= 0);
+  const state = { format: 'png', scale: 1, transparent: false, quality: 92, pages: new Set(visible.length && doc.pages.length > 1 ? visible : doc.pages.map((_, i) => i)) };
   const body = h('div', { class: 'export' });
   const draw = () => {
     body.replaceChildren(...[
