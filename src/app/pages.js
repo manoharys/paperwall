@@ -209,7 +209,9 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     }
     // Keep drawing while anything moves. When playing a page that's now still,
     // just wait for its time to be up.
-    const moving = local < Math.max(info.end, from !== null ? tr.duration : 0) || (info.keeps && !live);
+    // (A page whose videos have all played once, to the end, is still now.)
+    const ended = info.keeps && !info.loops && videos.allEnded(info.videos);
+    const moving = local < Math.max(info.end, from !== null ? tr.duration : 0) || (info.keeps && !live && !ended);
     if (moving) frame = requestAnimationFrame(draw);
     else if (autoplay) {
       wait = setTimeout(() => {
@@ -231,9 +233,9 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     drawn = 0;
     live = false;
     const page = doc.pages[shown[at]];
-    info = { end: animationsEnd(page), keeps: keepsMoving(page, doc.assets), loops: hasLoop(page) };
+    info = { end: animationsEnd(page), keeps: keepsMoving(page, doc.assets), loops: hasLoop(page), videos: videosOn(doc, [shown[at]]) };
     videos.pauseAll();
-    videos.start(videosOn(doc, [shown[at]]), started);
+    videos.start(info.videos, started);
     // Back before the page Play started on: the sound starts over from there
     // (as if Play had started there), so later pages meet it where they did.
     if (tl.parts[at].start < soundFrom) soundFrom = tl.parts[at].start;

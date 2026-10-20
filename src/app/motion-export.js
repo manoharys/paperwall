@@ -253,6 +253,10 @@ async function encodeAudio(buffer, seconds, container, volume = 1, signal = null
       const data = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: n, numberOfChannels: channels, timestamp: Math.round((at / sampleRate) * 1e6), data: planar });
       encoder.encode(data);
       data.close();
+      // As with video: no more than a few blocks waiting at a time.
+      while (encoder.encodeQueueSize > 8) {
+        await new Promise((r) => ('ondequeue' in encoder ? encoder.addEventListener('dequeue', r, { once: true }) : setTimeout(r, 5)));
+      }
     }
     await encoder.flush();
   } finally {

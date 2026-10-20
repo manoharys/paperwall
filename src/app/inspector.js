@@ -280,7 +280,7 @@ export class Inspector {
     const tr = page.transition || { type: 'none' };
     const set = (patch, key) => ed.setPageMotion(at, patch, key);
     return section('Motion',
-      selectField({ label: 'Animate the page', value: pa.type, testid: 'page-anim', options: Object.entries(PAGE_ANIMATIONS).map(([value, { name }]) => ({ value, label: name })), onChange: (type) => set({ anim: type === 'none' ? undefined : { type, stagger: pa.stagger ?? DEFAULT_STAGGER } }) }),
+      selectField({ label: 'Animate the page', value: pa.type, testid: 'page-anim', options: Object.entries(PAGE_ANIMATIONS).map(([value, { name }]) => ({ value, label: name })), onChange: (type) => set({ anim: type === 'none' ? undefined : { ...pa, type, stagger: pa.stagger ?? DEFAULT_STAGGER } }) }),
       slider({ label: 'Show for', value: pageDuration(page), min: LIMITS.page[0], max: LIMITS.page[1], step: 0.5, unit: 's', testid: 'page-duration', onChange: (v, l) => set({ duration: v }, l ? `duration:${at}` : null) }),
       selectField({ label: 'Transition into this page', value: tr.type, testid: 'page-transition', options: Object.entries(TRANSITIONS).map(([value, { name }]) => ({ value, label: name })), onChange: (type) => set({ transition: type === 'none' ? undefined : { type, duration: tr.duration ?? DEFAULT_TRANSITION_DURATION } }) }),
       at === 0 && tr.type !== 'none' ? h('p', { class: 'hint' }, 'Shows when this page follows another, as when pages are moved.') : null,

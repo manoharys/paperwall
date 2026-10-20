@@ -209,6 +209,11 @@ export class VideoFrames {
     }
   }
 
+  /** Whether every one of `els` has played to its end and stays there (none loops). */
+  allEnded(els) {
+    return els.length > 0 && els.every((el) => el.loop === false && this.players.get(el.id)?.video.ended);
+  }
+
   /** How long `el`'s video is: the player's word, else what was found when it was added. */
   lengthOf(el, v) {
     return Number.isFinite(v.duration) ? v.duration : this.doc.assets[el.assetId]?.duration || 0;
