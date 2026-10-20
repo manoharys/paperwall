@@ -50,6 +50,10 @@ export function anchorOn(box, toward) {
   return { point: [cx, dy >= 0 ? b.y + b.h : b.y], side: dy >= 0 ? 'b' : 't' };
 }
 
+function hasConnector(els) {
+  return els.some((e) => e.type === 'connector' || (e.type === 'group' && hasConnector(e.children)));
+}
+
 /** Where the ends are drawn, taking a rotation or flip (from the panel, or ungrouping) into account. */
 function visualEnds(el) {
   const cx = el.x + el.w / 2;
@@ -73,6 +77,7 @@ const center = (box) => {
  * Ends whose target is gone become free. Returns whether anything moved.
  */
 export function updateConnectors(page) {
+  if (!page || !hasConnector(page.elements)) return false;
   let changed = false;
   // Every element's box on the page. Inside unrotated groups that's the
   // element's own box moved by the group; inside a rotated or flipped group
@@ -147,14 +152,17 @@ export function connectorGeometry(el, trim = { start: 0, end: 0 }) {
 }
 
 function routeBetween(el, a, b) {
+  const path = (pts) => `M${f(pts[0][0])} ${f(pts[0][1])} ` + pts.slice(1).map(([x, y]) => `L${f(x)} ${f(y)}`).join(' ');
   const horizontalStart = el.start?.side ? 'lr'.includes(el.start.side) : Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]);
   if (el.route === 'elbow') {
     if (horizontalStart) {
       const mx = (a[0] + b[0]) / 2;
-      return { d: `M${f(a[0])} ${f(a[1])} H${f(mx)} V${f(b[1])} H${f(b[0])}`, startDir: [mx - a[0], 0], endDir: [b[0] - mx, 0] };
+      const pts = [a, [mx, a[1]], [mx, b[1]], b];
+      return { d: path(pts), pts, startDir: [mx - a[0], 0], endDir: [b[0] - mx, 0] };
     }
     const my = (a[1] + b[1]) / 2;
-    return { d: `M${f(a[0])} ${f(a[1])} V${f(my)} H${f(b[0])} V${f(b[1])}`, startDir: [0, my - a[1]], endDir: [0, b[1] - my] };
+    const pts = [a, [a[0], my], [b[0], my], b];
+    return { d: path(pts), pts, startDir: [0, my - a[1]], endDir: [0, b[1] - my] };
   }
   if (el.route === 'curved') {
     const dist = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -170,33 +178,20 @@ function routeBetween(el, a, b) {
     const de = dirFor(el.end?.side, b, a);
     const c1 = [a[0] + ds[0] * k, a[1] + ds[1] * k];
     const c2 = [b[0] + de[0] * k, b[1] + de[1] * k];
-    return { d: `M${f(a[0])} ${f(a[1])} C${f(c1[0])} ${f(c1[1])} ${f(c2[0])} ${f(c2[1])} ${f(b[0])} ${f(b[1])}`, startDir: [c1[0] - a[0], c1[1] - a[1]], endDir: [b[0] - c2[0], b[1] - c2[1]] };
+    // Sampled along the curve, for hit testing.
+    const pts = Array.from({ length: 21 }, (_, i) => {
+      const t = i / 20;
+      const u = 1 - t;
+      return [0, 1].map((n) => u * u * u * a[n] + 3 * u * u * t * c1[n] + 3 * u * t * t * c2[n] + t * t * t * b[n]);
+    });
+    return { d: `M${f(a[0])} ${f(a[1])} C${f(c1[0])} ${f(c1[1])} ${f(c2[0])} ${f(c2[1])} ${f(b[0])} ${f(b[1])}`, pts, startDir: [c1[0] - a[0], c1[1] - a[1]], endDir: [b[0] - c2[0], b[1] - c2[1]] };
   }
-  return { d: `M${f(a[0])} ${f(a[1])} L${f(b[0])} ${f(b[1])}`, startDir: [b[0] - a[0], b[1] - a[1]], endDir: [b[0] - a[0], b[1] - a[1]] };
+  return { d: path([a, b]), pts: [a, b], startDir: [b[0] - a[0], b[1] - a[1]], endDir: [b[0] - a[0], b[1] - a[1]] };
 }
 
 /** Points along the drawn line, in page pixels (curves are sampled). */
 export function connectorPolyline(el) {
-  const [a, b] = el.points.map(([fx, fy]) => [fx * el.w, fy * el.h]);
-  const { d } = connectorGeometry(el);
-  let pts;
-  if (el.route === 'curved') {
-    const nums = d.match(/-?[\d.]+/g).map(Number);
-    const [c1, c2] = [[nums[2], nums[3]], [nums[4], nums[5]]];
-    pts = Array.from({ length: 21 }, (_, i) => {
-      const t = i / 20;
-      const u = 1 - t;
-      return [0, 1].map((k) => u * u * u * a[k] + 3 * u * u * t * c1[k] + 3 * u * t * t * c2[k] + t * t * t * b[k]);
-    });
-  } else if (el.route === 'elbow') {
-    pts = [a];
-    let cur = a;
-    for (const [, cmd, v] of d.matchAll(/([HV])(-?[\d.]+)/g)) {
-      cur = cmd === 'H' ? [+v, cur[1]] : [cur[0], +v];
-      pts.push(cur);
-    }
-  } else pts = [a, b];
-  return pts.map(([x, y]) => [el.x + x, el.y + y]);
+  return connectorGeometry(el).pts.map(([x, y]) => [el.x + x, el.y + y]);
 }
 
 /** Whether point p is within `tol` px of the connector's line. */

@@ -1,7 +1,7 @@
 // Form controls used by the panels: color picker, sliders, number fields.
 
 import { h, icon, iconButton } from './ui.js';
-import { hexToRgb } from '../model/lint.js';
+import { mixHex } from '../model/lint.js';
 
 export const PALETTES = [
   { name: 'Ink', colors: ['#16161d', '#3d3d4e', '#8a8a9e', '#d9d9e3', '#ffffff'] },
@@ -279,23 +279,25 @@ function cssGradient(g, angle = 90) {
   return `linear-gradient(${angle}deg, ${stops})`;
 }
 
-function mixHex(a, b, t) {
-  const [x, y] = [hexToRgb(a), hexToRgb(b)];
-  if (!x || !y) return x ? a : b;
-  return `#${x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('')}`;
-}
-
 /**
  * Edit a gradient with any number of colors: each stop has a color and a
  * position; add and remove stops, switch linear/radial, set the angle, or
  * start from a preset. onChange(gradient, isLive).
  */
-export function gradientEditor({ label, value, onChange, getContext, testid }) {
+export function gradientEditor({ label, value, onChange, getContext, testid, current }) {
   const g = value;
   const stops = [...g.stops].sort((a, b) => a.offset - b.offset);
-  const emit = (patch, live = false) => onChange({ ...g, ...patch }, live);
+  // Each change starts from the gradient as it is now (`current()`), not as it
+  // was when the panel was drawn: the panel isn't redrawn while a slider is in use.
+  const now = () => current?.() || g;
+  const nowStops = () => [...now().stops].sort((a, b) => a.offset - b.offset);
+  const emit = (patch, live = false) => onChange({ ...now(), ...patch }, live);
   // Stops are kept in order, so the page draws the same gradient as the bar above.
-  const setStop = (i, patch, live) => emit({ stops: stops.map((s, k) => (k === i ? { ...s, ...patch } : s)).sort((a, b) => a.offset - b.offset) }, live);
+  const setStop = (i, patch, live) => {
+    const list = nowStops();
+    const target = list[i] && stops[i] && list[i].color === stops[i].color ? i : list.findIndex((s) => s.color === stops[i]?.color);
+    emit({ stops: list.map((s, k) => (k === target ? { ...s, ...patch } : s)).sort((a, b) => a.offset - b.offset) }, live);
+  };
   const addStop = () => {
     // Put the new color in the middle of the widest gap.
     let at = 0;
@@ -308,7 +310,7 @@ export function gradientEditor({ label, value, onChange, getContext, testid }) {
     stops.map((s, i) => h('div', { class: 'grad-stop', 'data-testid': 'grad-stop' },
       colorButton({ label: `${label} color ${i + 1}`, value: s.color, getContext, testid: `grad-color-${i}`, onChange: (c, l) => setStop(i, { color: c }, l) }),
       h('input', { type: 'range', min: 0, max: 100, value: Math.round(s.offset * 100), 'aria-label': `${label} color ${i + 1} position`, 'data-testid': `grad-pos-${i}`, onInput: (e) => setStop(i, { offset: +e.target.value / 100 }, true), onChange: (e) => setStop(i, { offset: +e.target.value / 100 }) }),
-      stops.length > 2 ? iconButton('close', `Remove color ${i + 1}`, () => emit({ stops: stops.filter((_, k) => k !== i) }), { 'data-testid': `grad-remove-${i}` }) : h('span', { class: 'grad-spacer' }))),
+      stops.length > 2 ? iconButton('close', `Remove color ${i + 1}`, () => emit({ stops: nowStops().filter((_, k) => k !== i) }), { 'data-testid': `grad-remove-${i}` }) : h('span', { class: 'grad-spacer' }))),
     stops.length < 8 ? h('button', { type: 'button', class: 'link-btn', 'data-testid': 'grad-add', onClick: addStop }, '+ Add a color') : null,
     segmented({ label: 'Gradient style', value: g.type, onChange: (type) => emit({ type }), options: [{ value: 'linear', label: 'Linear', text: 'Linear' }, { value: 'radial', label: 'Radial', text: 'Radial' }] }),
     g.type === 'linear' ? slider({ label: 'Angle', value: g.angle ?? 180, min: 0, max: 360, unit: '°', testid: 'grad-angle', onChange: (v, l) => emit({ angle: v }, l) }) : null,

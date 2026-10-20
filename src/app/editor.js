@@ -152,6 +152,7 @@ export class Editor {
     this.change(() => {
       // Keep today's images too: undo snapshots share the design's assets.
       Object.assign(this.doc, { name: v.name, width: v.width, height: v.height, unit: v.unit, pages: v.pages, assets: { ...this.doc.assets, ...v.assets } });
+      this.page = 0; // the version may have fewer pages than the one in view
     });
     this.selection = [];
     this.page = -1;

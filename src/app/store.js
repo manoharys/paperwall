@@ -36,37 +36,12 @@ function open() {
       };
       return db;
     };
-    let settled = false;
-    req.onsuccess = () => {
-      const db = watch(req.result);
-      if (settled) {
-        // The upgrade finished after we went on with the old database: use the new one from now on.
-        dbPromise = Promise.resolve(db);
-        return;
-      }
-      settled = true;
-      resolve(db);
-    };
+    req.onsuccess = () => resolve(watch(req.result));
     req.onblocked = () => {
-      // An older Paperwall tab still has the database open. Carry on with the
-      // database as it is (designs and uploads work; version history waits)
-      // and finish upgrading once that tab closes.
+      // An older Paperwall tab still has the database open and doesn't know to
+      // let go (newer tabs do). The browser holds every request here until it
+      // closes, so say what to do; everything continues once it's closed.
       globalThis.dispatchEvent?.(new CustomEvent('paperwall:storage-blocked'));
-      const old = indexedDB.open(DB_NAME);
-      old.onsuccess = () => {
-        if (settled) return old.result.close();
-        settled = true;
-        const db = old.result;
-        db.onversionchange = () => db.close(); // let our own upgrade through
-        resolve(db);
-      };
-      old.onerror = () => {
-        if (!settled) {
-          settled = true;
-          persistent = false;
-          resolve(null);
-        }
-      };
     };
     req.onerror = () => {
       persistent = false;
@@ -138,12 +113,15 @@ export async function deleteDesign(id) {
 }
 
 // ---------- version history (per design, on this device) ----------
-// Keys: "<designId>|v|<time>" for a version (the design without its images)
+// Keys: "<designId>|v|<time>" for a version's details (small: shown in the
+// list), "<designId>|d|<time>" for the design itself without its images,
 // and "<designId>|a|<assetId>" for each image, stored once and shared by
 // every version that uses it.
 
 export const MAX_VERSIONS = 30;
-const vKey = (designId, at) => `${designId}|v|${String(at).padStart(15, '0')}`;
+const stamp = (at) => String(at).padStart(15, '0');
+const vKey = (designId, at) => `${designId}|v|${stamp(at)}`;
+const dKey = (designId, at) => `${designId}|d|${stamp(at)}`;
 const aKey = (designId, assetId) => `${designId}|a|${assetId}`;
 const range = (prefix) => [prefix, `${prefix}\uffff`];
 
@@ -161,11 +139,11 @@ async function valuesIn(prefix) {
   return tx(db, 'versions', 'readonly', (s) => s.getAll(IDBKeyRange.bound(lo, hi)));
 }
 
-/** Keep a copy of the design as it is now. The oldest beyond MAX_VERSIONS are dropped. */
 // Versions are saved one at a time, so one save's clean-up can't remove
 // images another save has written but not yet pointed to.
 let versionQueue = Promise.resolve();
 
+/** Keep a copy of the design as it is now. The oldest beyond MAX_VERSIONS are dropped. */
 export function saveVersion(doc, opts) {
   const run = versionQueue.then(() => writeVersion(doc, opts));
   versionQueue = run.catch(() => null);
@@ -174,23 +152,26 @@ export function saveVersion(doc, opts) {
 
 async function writeVersion(doc, { label = '' } = {}) {
   const at = Date.now();
-  const key = vKey(doc.id, at);
   const { assets, ...meta } = doc;
   const rest = JSON.parse(JSON.stringify(meta)); // the images are stored separately, once
   const have = new Set(await keysIn(`${doc.id}|a|`));
   for (const [id, a] of Object.entries(assets || {})) {
     if (!have.has(aKey(doc.id, id))) await put('versions', aKey(doc.id, id), a);
   }
-  await put('versions', key, { key, designId: doc.id, at, label, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, assetIds: Object.keys(assets || {}), doc: rest });
+  await put('versions', dKey(doc.id, at), rest);
+  await put('versions', vKey(doc.id, at), { key: vKey(doc.id, at), designId: doc.id, at, label, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, assetIds: Object.keys(assets || {}) });
   const keys = await keysIn(`${doc.id}|v|`);
   const drop = keys.slice(0, Math.max(0, keys.length - MAX_VERSIONS));
   if (drop.length) {
-    for (const old of drop) await del('versions', old);
+    for (const old of drop) {
+      await del('versions', old);
+      await del('versions', old.replace('|v|', '|d|'));
+    }
     // Images no longer used by any kept version go too.
     const used = new Set((await valuesIn(`${doc.id}|v|`)).flatMap((v) => v.assetIds || []));
     for (const k of await keysIn(`${doc.id}|a|`)) if (!used.has(k.slice(`${doc.id}|a|`.length))) await del('versions', k);
   }
-  return key;
+  return vKey(doc.id, at);
 }
 
 /** Whether a design has any versions yet (reads keys only). */
@@ -198,19 +179,21 @@ export async function hasVersions(designId) {
   return (await keysIn(`${designId}|v|`)).length > 0;
 }
 
-/** A design's saved versions (without their images), newest first. */
+/** A design's saved versions (just their details), newest first. */
 export async function listVersions(designId) {
   return (await valuesIn(`${designId}|v|`)).sort((a, b) => b.at - a.at);
 }
 
 /** A version as a whole design again, images included. */
 export async function versionDoc(version) {
+  const doc = await get('versions', dKey(version.designId, version.at));
+  if (!doc) throw new Error('This version is missing');
   const assets = {};
   for (const id of version.assetIds || []) {
     const a = await get('versions', aKey(version.designId, id));
     if (a) assets[id] = a;
   }
-  return { ...version.doc, assets };
+  return { ...doc, assets };
 }
 
 async function deleteVersions(designId) {

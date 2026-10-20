@@ -20,6 +20,13 @@ function luminance([r, g, b]) {
   return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 }
 
+/** Mix two #rrggbb colors: t = 0 gives a, 1 gives b. Unreadable colors are returned as they are. */
+export function mixHex(a, b, t) {
+  const [x, y] = [hexToRgb(a), hexToRgb(b)];
+  if (!x || !y) return x ? a : b;
+  return `#${x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('')}`;
+}
+
 /** WCAG contrast ratio between two colors (1–21). */
 export function contrast(a, b) {
   const la = luminance(a);

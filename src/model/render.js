@@ -3,7 +3,7 @@
 
 import { shapePath, dashArray, maskPath, drawPath } from './shapes.js';
 import { connectorGeometry, arrowHead } from './connectors.js';
-import { hexToRgb } from './lint.js';
+import { hexToRgb, mixHex } from './lint.js';
 import { layoutText, displayText, approxMeasure } from './text-layout.js';
 import { iconById, stickerById } from './graphics.js';
 import { qrMatrix, qrPath } from './qr.js';
@@ -249,10 +249,7 @@ export const TEXT_EFFECTS = ['none', 'lift', 'hollow', 'splice', 'echo', 'glitch
 
 /** Mix a #rrggbb color toward white by t (0..1). */
 function lighten(hex, t) {
-  const rgb = hexToRgb(hex);
-  if (!rgb) return hex;
-  const c = rgb.map((v) => Math.round(v + (255 - v) * t));
-  return `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+  return mixHex(hex, '#ffffff', t);
 }
 
 /**

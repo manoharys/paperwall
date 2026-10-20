@@ -354,7 +354,9 @@ test('[ELM-10] connectors attach to elements and follow them', async () => {
   let [s, e] = endsOf(c);
   assert.deepEqual(s.map(Math.round), [300, 150], 'leaves a from its right side');
   assert.deepEqual(e.map(Math.round), [600, 450], 'enters b from its left side');
-  assert.match(connectorGeometry(c).d, /^M[\d.]+ [\d.]+ H[\d.]+ V[\d.]+ H[\d.]+$/, 'elbow goes across, down, across');
+  const { pts } = connectorGeometry(c);
+  assert.equal(pts.length, 4);
+  assert.ok(pts[0][1] === pts[1][1] && pts[1][0] === pts[2][0] && pts[2][1] === pts[3][1], 'elbow goes across, down, across');
   // Move b below a: the ends switch to the facing sides.
   Object.assign(b, { x: 100, y: 700 });
   updateConnectors(doc.pages[0]);

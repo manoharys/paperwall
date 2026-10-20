@@ -239,6 +239,7 @@ test('[DOC-12] version history on your device', async () => {
   assert.match(labels[0], /Saved by you/);
   assert.match(labels.at(-1), /Original/);
   await page.click('[data-testid="version-restore"] >> nth=0');
+  await page.waitForSelector('[data-testid="history-dialog"]', { state: 'detached' });
   assert.equal(await state(page, (ed) => ed.pageData.elements[0].text), 'First draft');
   await page.keyboard.press(`${mod}+z`);
   assert.equal(await state(page, (ed) => ed.pageData.elements[0].text), 'Second draft', 'restoring can be undone');

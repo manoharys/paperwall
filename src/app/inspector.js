@@ -301,7 +301,8 @@ export class Inspector {
   /** Effect styles shown as little "Ag" previews, plus the effect's own settings. */
   textEffects(el) {
     const fx = el.effect || { type: 'none' };
-    const set = (patch, live) => this.up({ effect: { ...fx, ...patch } }, live ? 'effect' : null);
+    // Start from the effect as it is now: the panel isn't redrawn while a slider is in use.
+    const set = (patch, live) => this.up({ effect: { ...(this.ed.single?.effect || fx), ...patch } }, live ? 'effect' : null);
     const preview = (type) => cached(`${el.font}|${type}`, () => renderElementOnly(this.ed.doc, createText({
       text: 'Ag', w: 64, h: 44, size: 32, weight: 800, font: el.font, color: type === 'neon' ? '#ff2d95' : '#1a1a2e', align: 'center', lineHeight: 1.2,
       effect: { type, color: type === 'splice' ? '#ffb703' : type === 'glow' ? '#ffb703' : undefined },
@@ -334,7 +335,7 @@ export class Inspector {
           if (t === 'solid' && isGradient) this.up({ fill: solid });
         }, options: [{ value: 'solid', label: 'Solid', text: 'Solid' }, { value: 'gradient', label: 'Gradient', text: 'Gradient' }] }),
         isGradient
-          ? h('div', { class: 'sub' }, gradientEditor({ label: 'Fill gradient', value: fill, getContext: this.colorContext, testid: 'fill-gradient', onChange: (g, l) => this.up({ fill: g }, l ? 'grad' : null) }))
+          ? h('div', { class: 'sub' }, gradientEditor({ label: 'Fill gradient', value: fill, getContext: this.colorContext, testid: 'fill-gradient', current: () => this.ed.single?.fill?.stops && this.ed.single.fill, onChange: (g, l) => this.up({ fill: g }, l ? 'grad' : null) }))
           : h('div', { class: 'field inline' }, h('span', null, 'Fill'), colorButton({ label: 'Fill color', testid: 'fill-color', value: el.fill, getContext: this.colorContext, onChange: (c, l) => this.up({ fill: c }, l ? 'fill' : null) })),
         el.shape === 'rect' ? slider({ label: 'Corner rounding', value: el.radius || 0, min: 0, max: Math.round(Math.min(el.w, el.h) / 2), testid: 'corner-radius', onChange: this.live('radius') }) : null,
         el.shape === 'polygon' || el.shape === 'star' ? slider({ label: el.shape === 'star' ? 'Points' : 'Sides', value: el.sides, min: 3, max: el.shape === 'star' ? 24 : 12, testid: 'sides', onChange: this.live('sides') }) : null,
@@ -544,7 +545,7 @@ export class Inspector {
           if (t === 'image') toast('Select an image on the page and choose "Use as page background", or add one from Uploads.');
         }, options: [{ value: 'color', label: 'Color', text: 'Color' }, { value: 'gradient', label: 'Gradient', text: 'Gradient' }, { value: 'image', label: 'Image', text: 'Image' }] }),
         bg.type === 'color' ? h('div', { class: 'field inline' }, h('span', null, 'Color'), colorButton({ label: 'Background color', testid: 'bg-color', value: bg.color, getContext: this.colorContext, onChange: (c, l) => ed.setBackground({ type: 'color', color: c }, l ? 'color' : null) })) : null,
-        grad ? h('div', { class: 'sub' }, gradientEditor({ label: 'Background gradient', value: grad, getContext: this.colorContext, testid: 'bg-gradient', onChange: (g, l) => ed.setBackground({ type: 'gradient', gradient: g }, l ? 'grad' : null) })) : null,
+        grad ? h('div', { class: 'sub' }, gradientEditor({ label: 'Background gradient', value: grad, getContext: this.colorContext, testid: 'bg-gradient', current: () => ed.pageData.background?.gradient, onChange: (g, l) => ed.setBackground({ type: 'gradient', gradient: g }, l ? 'grad' : null) })) : null,
         bg.type === 'image' ? h('button', { type: 'button', class: 'btn small wide', onClick: () => ed.setBackground({ type: 'color', color: '#ffffff' }) }, 'Remove background image') : null),
       section('Design',
         h('p', { class: 'meta', 'data-testid': 'design-size' }, size),

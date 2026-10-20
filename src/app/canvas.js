@@ -40,7 +40,7 @@ export class Canvas {
     this.el.addEventListener('pointerdown', (e) => this.onDown(e));
     this.el.addEventListener('pointermove', (e) => this.onMove(e));
     this.el.addEventListener('pointerup', (e) => this.onUp(e));
-    this.el.addEventListener('pointercancel', (e) => this.onUp(e));
+    this.el.addEventListener('pointercancel', (e) => this.onCancel(e));
     this.el.addEventListener('dblclick', (e) => this.onDouble(e));
     this.el.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     this.el.addEventListener('dragover', (e) => {
@@ -259,7 +259,7 @@ export class Canvas {
       e.preventDefault();
       const index = +guide.getAttribute('data-guide');
       ed.history.record(ed.doc);
-      this.drag = { mode: 'guide', index, axis: ed.pageData.guides[index].axis, moved: false };
+      this.drag = { mode: 'guide', index, axis: ed.pageData.guides[index].axis, moved: false, orig: ed.pageData.guides[index].pos };
       this.el.setPointerCapture(e.pointerId);
       return;
     }
@@ -445,6 +445,27 @@ export class Canvas {
     }
     this.schedule();
     ed.emit('live');
+  }
+
+  /** The browser took the pointer away (palm rejection, a system gesture): throw away strokes and guide drags. */
+  onCancel(e) {
+    const d = this.drag;
+    if (d?.mode === 'draw') {
+      this.drag = null;
+      this.stroke?.remove();
+      this.stroke = null;
+      return;
+    }
+    if (d?.mode === 'guide') {
+      this.drag = null;
+      const ed = this.ed;
+      if (d.isNew) ed.pageData.guides.splice(d.index, 1);
+      else if (d.orig !== undefined) ed.pageData.guides[d.index].pos = d.orig;
+      ed.history.discard();
+      ed.emit('aids');
+      return;
+    }
+    this.onUp(e);
   }
 
   onUp() {

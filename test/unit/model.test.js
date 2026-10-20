@@ -455,3 +455,13 @@ test('[CLR-05] gradient stops are drawn in order', async () => {
   const offsets = [...renderPage(doc, 0).matchAll(/<stop offset="([\d.]+)"/g)].map((m) => +m[1]);
   assert.deepEqual(offsets, [0, 0.2, 1]);
 });
+
+test('[EDIT-19] find and replace leaves locked and hidden things alone', async () => {
+  const { findText, replaceText } = await import('../../src/model/find.js');
+  const { createDesign, createText } = await import('../../src/model/doc.js');
+  const doc = createDesign({ width: 500, height: 500 });
+  doc.pages[0].elements.push(createText({ text: 'Acme' }), createText({ text: 'Acme 2026', locked: true }), createText({ text: 'Acme hidden', hidden: true }));
+  assert.equal(findText(doc, 'acme').length, 1);
+  assert.equal(replaceText(doc, 'Acme', 'Beta').count, 1);
+  assert.deepEqual(doc.pages[0].elements.map((e) => e.text), ['Beta', 'Acme 2026', 'Acme hidden']);
+});
