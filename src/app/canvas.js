@@ -7,7 +7,7 @@ import {
   pointInBox, rectFromPoints, rectsIntersect, HANDLES,
 } from '../model/geometry.js';
 import { resizeElement, coverCrop, topmost, findElement } from '../model/commands.js';
-import { clone, DRAW_TOOLS, pxPerUnit } from '../model/doc.js';
+import { clone, DRAW_TOOLS, pxPerUnit, isEmptyFrame } from '../model/doc.js';
 import { gridLines, marginSize, bleedSize } from '../model/view.js';
 import { endsOf, setEnds, isLine, lineHit } from '../model/connectors.js';
 import { measure } from './fonts.js';
@@ -82,6 +82,13 @@ export class Canvas {
         if (pulled) {
           editor.pageData.guides = [...(editor.pageData.guides || []), pulled];
           d.index = editor.pageData.guides.length - 1;
+        }
+        // The guide being dragged went with that change (Clear guides): the drag is over.
+        if (d.mode === 'guide' && !editor.pageData.guides?.[d.index]) {
+          editor.history.discard();
+          this.drag = null;
+          settle();
+          return;
         }
         restart(d);
       };
@@ -663,12 +670,12 @@ export class Canvas {
     const hit = this.hitTest(p);
     if (!hit || hit.locked) return;
     if (hit.type === 'text') this.startTextEdit(hit);
-    else if (hit.type === 'image' && !this.ed.doc.assets[hit.assetId]) this.pickPhotoFor(hit);
+    else if (isEmptyFrame(this.ed.doc, hit)) this.pickPhotoFor(hit);
     else if (hit.type === 'image') this.startCrop(hit);
     else if (hit.type === 'group') {
       // An empty frame inside a group (a grouped photo grid) still asks for a photo.
       const frame = this.ed.frameAt(p);
-      if (frame && !this.ed.doc.assets[frame.assetId]) this.pickPhotoFor(frame);
+      if (isEmptyFrame(this.ed.doc, frame)) this.pickPhotoFor(frame);
     }
   }
 
@@ -872,7 +879,7 @@ export class Canvas {
     const holds = (el) => el.id === other || (el.type === 'group' && el.children.some(holds));
     // A little past the edge counts, since the handle sits on it.
     const reach = 8 / this.ed.zoom;
-    return topmost(this.ed.pageData, (el) => !el.hidden && el.type !== 'connector' && el !== connector && !holds(el) && pointInBox(p.x, p.y, el, reach));
+    return topmost(this.ed.pageData, (el) => !el.hidden && el.type !== 'connector' && !holds(el) && pointInBox(p.x, p.y, el, reach));
   }
 
 

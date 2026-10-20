@@ -4,7 +4,7 @@
 import { h, icon, iconButton, clear, toast, pickFile, readFileAsDataUrl, dialog, mod } from './ui.js';
 import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover, popoverOpen, PALETTES, fontPicker, gradientEditor } from './widgets.js';
 import { FONTS, FONT_KINDS } from '../model/fonts.js';
-import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, parseChartData, chartDataText, parseTable, tableText } from '../model/doc.js';
+import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, isEmptyFrame, parseChartData, chartDataText, parseTable, tableText } from '../model/doc.js';
 import { collectColors, cropZoom } from '../model/commands.js';
 import { renderElementOnly, TEXT_EFFECTS } from '../model/render.js';
 import { measure, addCustomFont, customFontNames, ensureFont, fontLoaded } from './fonts.js';
@@ -329,8 +329,10 @@ export class Inspector {
     return h('div', null,
       h('div', { class: 'fx-grid', role: 'group', 'aria-label': 'Text effect', 'data-testid': 'text-effects' }, TEXT_EFFECTS.map((type) => h('button', {
         type: 'button', class: `fx${fx.type === type ? ' on' : ''}`, 'aria-pressed': String(fx.type === type), title: EFFECT_NAMES[type], 'data-testid': `effect-${type}`,
-        // Starting from no effect, the colors are the ones the preview shows.
-        onClick: () => this.up({ effect: type === 'none' ? null : { type, color: fx.color ?? ({ splice: '#ffb703', glow: '#ffb703', neon: '#ff2d95' })[type], offset: fx.offset, thickness: fx.thickness } }),
+        // A new effect starts with the colors its preview shows (not the last
+        // effect's); the sizes carry over. Updates merge into the effect, so
+        // Glitch's second color is cleared explicitly.
+        onClick: () => this.up({ effect: type === 'none' ? null : { type, color: ({ splice: '#ffb703', glow: '#ffb703', neon: '#ff2d95' })[type], color2: undefined, offset: fx.offset, thickness: fx.thickness } }),
       }, h('span', { class: 'fx-img', html: preview(type) }), h('small', null, EFFECT_NAMES[type])))),
       fx.type !== 'none' ? h('div', { class: 'sub' },
         uses.color ? h('div', { class: 'field inline' },
@@ -398,7 +400,7 @@ export class Inspector {
       !el.mask || el.mask === 'none'
         ? slider({ label: 'Corner rounding', value: el.radius || 0, min: 0, max: Math.round(Math.min(el.w, el.h) / 2), testid: 'image-radius', onChange: this.live('radius') })
         : null);
-    if (!el.assetId) {
+    if (isEmptyFrame(ed.doc, el)) {
       return [
         section('Frame',
           h('p', { class: 'hint' }, 'Drop a photo onto the frame, drag one from Uploads, or pick one here.'),

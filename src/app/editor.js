@@ -5,7 +5,7 @@ import { History } from '../model/history.js';
 import * as cmd from '../model/commands.js';
 import {
   createText, createShape, createLine, createImage, createFrame, createDrawing, thinPoints, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
-  TEXT_STYLES, clone, versionSnapshot,
+  TEXT_STYLES, clone, versionSnapshot, isEmptyFrame,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
 import { curveGeometry } from '../model/render.js';
@@ -411,7 +411,7 @@ export class Editor {
    */
   async addImage(upload, { at } = {}) {
     const frame = this.single;
-    if (!at && frame?.type === 'image' && !this.doc.assets[frame.assetId] && !frame.locked) return this.fillFrame(frame.id, upload);
+    if (!at && isEmptyFrame(this.doc, frame) && !frame.locked) return this.fillFrame(frame.id, upload);
     const assetId = addAsset(this.doc, upload);
     const maxW = this.doc.width * 0.6;
     const maxH = this.doc.height * 0.6;
@@ -476,7 +476,7 @@ export class Editor {
           if (hit !== null) return hit;
           continue; // a gap between the group's parts
         }
-        const frame = el.type === 'image' && (!el.assetId || (el.mask && el.mask !== 'none'));
+        const frame = isEmptyFrame(this.doc, el) || (el.type === 'image' && el.mask && el.mask !== 'none');
         if (!frame) return BLOCKED;
         if (!inMask(el, q)) continue;
         return el.locked ? BLOCKED : el;

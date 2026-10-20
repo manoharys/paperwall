@@ -62,6 +62,8 @@ export function historyDialog(editor) {
   const d = dialog('Version history', h('div', { class: 'stack' },
     h('p', { class: 'hint' }, `The last ${store.MAX_VERSIONS} versions are kept in this browser, on this device.`),
     h('button', { type: 'button', class: 'btn small', 'data-testid': 'version-save', onClick: async () => {
+      // After the first check for versions, so the Original comes first.
+      await editor.versionsChecked;
       // Saving the design mustn't start a timed version of its own as well.
       editor.versionAt = Date.now();
       await editor.flush();

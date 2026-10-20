@@ -336,7 +336,8 @@ export function addAsset(doc, { mime, dataUrl, width, height, name = '' }) {
 }
 
 /** Remove images that no element or background uses any more. */
-export function pruneAssets(doc) {
+/** The ids of the images a design actually shows (on elements, in groups, as backgrounds). */
+export function usedAssetIds(doc) {
   const used = new Set();
   const visit = (els) => {
     for (const el of els) {
@@ -348,8 +349,18 @@ export function pruneAssets(doc) {
     visit(p.elements);
     if (p.background?.type === 'image') used.add(p.background.assetId);
   }
+  return used;
+}
+
+export function pruneAssets(doc) {
+  const used = usedAssetIds(doc);
   for (const id of Object.keys(doc.assets)) if (!used.has(id)) delete doc.assets[id];
   return doc;
+}
+
+/** Whether an image element is an empty frame: no picture yet, or its picture is missing. */
+export function isEmptyFrame(doc, el) {
+  return el?.type === 'image' && !doc.assets[el.assetId];
 }
 
 /** Check that a parsed file looks like a Paperwall design. Throws a readable error if not. */
@@ -394,5 +405,8 @@ export function clone(value) {
 
 /** A copy of a design for its version history. Images never change once added, so they're shared, not copied. */
 export function versionSnapshot(doc) {
-  return { ...clone({ ...doc, assets: undefined }), assets: { ...doc.assets } };
+  // Only the images it shows: ones replaced long ago needn't be kept by every version.
+  const used = usedAssetIds(doc);
+  const assets = Object.fromEntries(Object.entries(doc.assets || {}).filter(([id]) => used.has(id)));
+  return { ...clone({ ...doc, assets: undefined }), assets };
 }

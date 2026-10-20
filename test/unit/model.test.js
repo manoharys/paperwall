@@ -583,3 +583,11 @@ test('[EDIT-19] find copes with tables and charts that lack rows or data', async
   assert.equal(findText(doc, 'sale').reduce((s, h) => s + h.count, 0), 2);
   assert.equal(replaceText(doc, 'sale', 'deal').count, 2);
 });
+
+test('[DOC-12] a version keeps only the images the design shows', async () => {
+  const { createDesign, createImage, versionSnapshot } = await import('../../src/model/doc.js');
+  const doc = createDesign({ width: 100, height: 100 });
+  doc.assets = { old: { dataUrl: 'data:,1' }, now: { dataUrl: 'data:,2' } };
+  doc.pages[0].elements.push(createImage('now'));
+  assert.deepEqual(Object.keys(versionSnapshot(doc).assets), ['now']);
+});
