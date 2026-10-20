@@ -36,9 +36,15 @@ function vint(n, len = 0) {
   return out;
 }
 
+/**
+ * An element: its header and its contents as a list of parts, so the big
+ * media bytes inside are pointed to, never copied, until the file is made.
+ */
 const el = (id, ...payload) => {
-  const body = concat(payload);
-  return concat([idBytes(id), vint(body.length), body]);
+  const parts = payload.flatMap((p) => (p instanceof Uint8Array ? [p] : p.parts));
+  const size = parts.reduce((s, p) => s + p.length, 0);
+  const head = concat([idBytes(id), vint(size)]);
+  return { parts: [head, ...parts], length: head.length + size };
 };
 const uint = (id, n, len = 0) => {
   const bytes = [];
@@ -71,7 +77,12 @@ const ID = {
  * audio (optional): { sampleRate, channels, codecPrivate (OpusHead bytes), chunks: [...] }
  * duration: seconds. Returns the file's bytes.
  */
-export function buildWebm({ video, audio = null, duration }) {
+export function buildWebm(spec) {
+  return concat(buildWebmParts(spec));
+}
+
+/** The file as a list of parts (for a Blob: the media is never copied). */
+export function buildWebmParts({ video, audio = null, duration }) {
   const tracks = [el(ID.TrackEntry,
     uint(ID.TrackNumber, 1), uint(ID.TrackUID, 1), uint(ID.TrackType, 1), str(ID.CodecID, video.codec === 'vp8' ? 'V_VP8' : 'V_VP9'),
     el(ID.Video, uint(ID.PixelWidth, video.width), uint(ID.PixelHeight, video.height)))];
@@ -124,7 +135,7 @@ export function buildWebm({ video, audio = null, duration }) {
   const segment = el(ID.Segment, seekHead, info, tracksEl, ...clusterEls, cues);
   const header = el(ID.EBML,
     uint(0x4286, 1), uint(0x42f7, 1), uint(0x42f2, 4), uint(0x42f3, 8), str(0x4282, 'webm'), uint(0x4287, 4), uint(0x4285, 2));
-  return concat([header, segment]);
+  return [...header.parts, ...segment.parts];
 }
 
 /** Opus's header block, for when the encoder doesn't hand one over. */

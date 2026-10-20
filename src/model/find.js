@@ -16,6 +16,12 @@ const LOOKBEHIND = (() => {
 
 const WORD_CHAR = /[\p{L}\p{N}]/u;
 
+/** The whole character before position i (a letter outside the basic plane is two code units). */
+function charBefore(text, i) {
+  const c = text.charCodeAt(i - 1);
+  return c >= 0xdc00 && c <= 0xdfff && i >= 2 ? text.slice(i - 2, i) : text[i - 1];
+}
+
 /**
  * Without look-behind: matches of `re` (which checks the character after)
  * whose character before isn't a letter or digit either, checked by hand so
@@ -31,7 +37,7 @@ function wordMatcher(re) {
         re.lastIndex++;
         continue;
       }
-      if (m.index === 0 || !WORD_CHAR.test(text[m.index - 1])) out.push(m);
+      if (m.index === 0 || !WORD_CHAR.test(charBefore(text, m.index))) out.push(m);
       re.lastIndex = m.index + 1;
     }
     // Overlapping matches (a query like "--" in "---") count once, left first:

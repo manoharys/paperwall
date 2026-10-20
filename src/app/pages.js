@@ -2,8 +2,8 @@
 
 import { h, icon, iconButton, clear, debounce, dialog, toast, lazily, forget, pressable } from './ui.js';
 import { renderPage, renderFrame } from '../model/render.js';
-import { animationsEnd, keepsMoving, pageDuration, transitionOf, timeline } from '../model/motion.js';
-import { VideoFrames, videosOn, blobUrl } from './media.js';
+import { animationsEnd, keepsMoving, pageDuration, pageFrame, transitionOf, timeline } from '../model/motion.js';
+import { VideoFrames, videosOn, blobUrlFor } from './media.js';
 import { measure } from './fonts.js';
 import { visiblePages, pageName, pageLabel } from '../model/doc.js';
 
@@ -144,16 +144,22 @@ export function present(editor, canvas, { autoplay = false } = {}) {
   let info = null; // the shown page's motion, worked out once when it comes up
   let started = 0;
   let from = null; // the page before, when moving forward (its transition plays)
+  let drawn = 0; // when the slide was last drawn
   const draw = (now) => {
     frame = 0;
     const i = shown[at];
     const page = doc.pages[i];
     const local = (now - started) / 1000;
     const tr = transitionOf(page);
-    if (from !== null && tr.type !== 'none' && local < tr.duration) {
-      const progress = Math.max(0, Math.min(1, local / tr.duration));
-      slide.innerHTML = renderFrame(doc, { index: i, local, from: { index: from, local: pageDuration(doc.pages[from]) }, transition: { type: tr.type, progress: 1 - (1 - progress) ** 3 } }, { ...opts, idPrefix: `pr${i}` });
-    } else slide.innerHTML = renderPage(doc, i, { ...opts, idPrefix: `pr${i}`, time: local });
+    // Once only videos or looping animations move, 30 frames a second is plenty.
+    const settled = local >= Math.max(info.end, from !== null ? tr.duration : 0);
+    if (settled && info.keeps && now - drawn < 33 && drawn) {
+      frame = requestAnimationFrame(draw);
+      return;
+    }
+    drawn = now;
+    // The same rule for transitions as downloads use.
+    slide.innerHTML = renderFrame(doc, pageFrame(doc, i, local, from), { ...opts, idPrefix: `pr${i}` });
     root.dataset.time = local.toFixed(2);
     if (autoplay && local >= pageDuration(page)) {
       if (at < shown.length - 1) return go(at + 1, true);
@@ -171,6 +177,7 @@ export function present(editor, canvas, { autoplay = false } = {}) {
     from = forward && to !== at ? shown[at] : null;
     at = to;
     started = performance.now();
+    drawn = 0;
     const page = doc.pages[shown[at]];
     info = { end: animationsEnd(page), keeps: keepsMoving(page) };
     videos.pauseAll();
@@ -218,26 +225,37 @@ export function present(editor, canvas, { autoplay = false } = {}) {
 function soundtrackPlayer(doc) {
   const asset = doc.audio && doc.assets[doc.audio.assetId];
   if (!asset) return null;
-  const url = blobUrl(asset.dataUrl);
-  const audio = new Audio(url);
+  const audio = new Audio();
   audio.volume = doc.audio.volume ?? 1;
+  let stopped = false;
+  let url = null;
+  const loaded = blobUrlFor(asset.dataUrl).then((u) => {
+    url = u;
+    if (stopped) return URL.revokeObjectURL(u);
+    audio.src = u;
+  });
+  let wanted = null; // the latest place asked for, played once the sound is ready
+  const play = () => {
+    if (stopped || wanted === null) return;
+    // Past the end of the sound: silence (as in a download), not its last moment.
+    if (audio.duration && wanted >= audio.duration) return audio.pause();
+    audio.currentTime = wanted;
+    audio.play().catch(() => null);
+  };
+  audio.addEventListener('loadedmetadata', play);
   return {
     seek(t) {
-      const go = () => {
-        // Past the end of the sound: silence (as in a download), not its last moment.
-        if (audio.duration && t >= audio.duration) return audio.pause();
-        audio.currentTime = t;
-        audio.play().catch(() => null);
-      };
-      if (audio.readyState >= 1) go();
-      else audio.addEventListener('loadedmetadata', go, { once: true });
+      wanted = t;
+      if (audio.readyState >= 1) play();
     },
     pause() {
       audio.pause();
     },
     stop() {
+      stopped = true;
       audio.pause();
-      URL.revokeObjectURL(url);
+      audio.removeEventListener('loadedmetadata', play);
+      loaded.then(() => url && URL.revokeObjectURL(url));
     },
   };
 }

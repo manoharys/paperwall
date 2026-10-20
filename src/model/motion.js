@@ -204,13 +204,20 @@ export function frameAt(doc, tl, t) {
   let i = tl.parts.findIndex((p) => clamped < p.start + p.duration);
   if (i < 0) i = tl.parts.length - 1;
   const part = tl.parts[i];
-  const local = clamped - part.start;
-  const tr = transitionOf(doc.pages[part.index]);
-  if (i > 0 && tr.type !== 'none' && local < tr.duration) {
-    const prev = tl.parts[i - 1];
-    return { index: part.index, local, from: { index: prev.index, local: prev.duration }, transition: { type: tr.type, progress: easeOut(clamp01(local / tr.duration)) } };
+  return pageFrame(doc, part.index, clamped - part.start, i > 0 ? tl.parts[i - 1].index : null);
+}
+
+/**
+ * What to show `local` seconds into page `index`, having come from page
+ * `from` (or from nowhere: null). The one rule for transitions, used by
+ * downloads (frameAt) and presenting alike.
+ */
+export function pageFrame(doc, index, local, from) {
+  const tr = transitionOf(doc.pages[index]);
+  if (from !== null && from !== undefined && tr.type !== 'none' && local < tr.duration) {
+    return { index, local, from: { index: from, local: pageDuration(doc.pages[from]) }, transition: { type: tr.type, progress: easeOut(clamp01(local / tr.duration)) } };
   }
-  return { index: part.index, local, from: null, transition: null };
+  return { index, local, from: null, transition: null };
 }
 
 /**

@@ -78,9 +78,18 @@ export async function audioInfo(file) {
   }
 }
 
-/** A blob: URL for a stored data: URL (much quicker for players than the long string). */
-export function blobUrl(dataUrl) {
-  return URL.createObjectURL(dataUrlToBlob(dataUrl));
+/**
+ * A blob: URL for a stored data: URL (much quicker for players than the long
+ * string). The browser decodes it (fetch), not a byte-by-byte loop here.
+ */
+export async function blobUrlFor(dataUrl) {
+  let blob;
+  try {
+    blob = await (await fetch(dataUrl)).blob();
+  } catch {
+    blob = dataUrlToBlob(dataUrl); // where data: can't be fetched
+  }
+  return URL.createObjectURL(blob);
 }
 
 /**
@@ -94,20 +103,33 @@ export class VideoFrames {
     // One player per element (two elements may show the same file from
     // different points): element id → { video, url, ready (resolves to whether it loaded) }.
     this.players = new Map();
+    this.urls = new Map(); // assetId → blob: URL (made once, shared by the players of that file)
     this.canvas = document.createElement('canvas');
+  }
+
+  urlFor(assetId) {
+    if (!this.urls.has(assetId)) {
+      const asset = this.doc.assets[assetId];
+      this.urls.set(assetId, asset ? blobUrlFor(asset.dataUrl) : Promise.resolve(''));
+    }
+    return this.urls.get(assetId);
   }
 
   player(el) {
     let p = this.players.get(el.id);
     if (p) return p;
-    const asset = this.doc.assets[el.assetId];
     const video = document.createElement('video');
     video.muted = true;
     video.playsInline = true;
     video.preload = 'auto';
-    const url = asset ? blobUrl(asset.dataUrl) : '';
-    video.src = url;
-    p = { video, url, ready: url ? once(video, 'loadeddata').then(() => true, () => false) : Promise.resolve(false) };
+    p = {
+      video,
+      ready: this.urlFor(el.assetId).then((url) => {
+        if (!url || this.disposed) return false;
+        video.src = url;
+        return once(video, 'loadeddata').then(() => true, () => false);
+      }),
+    };
     this.players.set(el.id, p);
     return p;
   }
@@ -170,13 +192,15 @@ export class VideoFrames {
   }
 
   dispose() {
-    for (const { video, url } of this.players.values()) {
+    this.disposed = true;
+    for (const { video } of this.players.values()) {
       video.pause();
       video.removeAttribute('src');
       video.load();
-      if (url) URL.revokeObjectURL(url);
     }
     this.players.clear();
+    for (const url of this.urls.values()) url.then((u) => u && URL.revokeObjectURL(u));
+    this.urls.clear();
   }
 }
 

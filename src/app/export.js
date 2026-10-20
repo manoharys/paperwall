@@ -4,7 +4,7 @@
 import { renderPage, textRuns } from '../model/render.js';
 import { buildPdf } from '../model/pdf.js';
 import { buildZip } from '../model/zip.js';
-import { validateDesign, clone, visiblePages, printDpi, pageLabel } from '../model/doc.js';
+import { validateDesign, clone, visiblePages, printDpi, pageLabel, versionSnapshot } from '../model/doc.js';
 import { measure, fontCssFor, registerDesignFonts } from './fonts.js';
 import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage } from './ui.js';
 import { section, segmented, slider, toggle } from './widgets.js';
@@ -232,11 +232,16 @@ export function exportDialog(editor) {
     btn.lastChild.textContent = 'Preparing…';
     try {
       if (MOVING.has(state.format)) {
-        // Frames take a while: say how far along it is.
+        // Frames take a while: say how far along it is. They're drawn from the
+        // design as it was when Download was pressed (later edits don't leak
+        // in), and closing the dialog stops it.
         const onProgress = (p) => (btn.lastChild.textContent = `Making ${state.format.toUpperCase()}… ${Math.round(p * 100)}%`);
+        const still = versionSnapshot(doc);
+        const signal = stopper.signal;
         const blob = state.format === 'gif'
-          ? await exportGif(doc, pages, { onProgress })
-          : await exportVideo(doc, pages, { container: state.format, audio: await soundtrackBuffer(doc).catch(() => null), volume: doc.audio?.volume ?? 1, onProgress });
+          ? await exportGif(still, pages, { onProgress, signal })
+          : await exportVideo(still, pages, { container: state.format, audio: await soundtrackBuffer(still).catch(() => null), volume: still.audio?.volume ?? 1, onProgress, signal });
+        if (signal.aborted) return;
         download(blob, `${name}.${state.format}`);
       } else if (state.format === 'pdf') {
         download(await exportPdf(doc, pages), `${name}.pdf`);
@@ -254,13 +259,15 @@ export function exportDialog(editor) {
       toast('Downloaded');
       d.close();
     } catch (e) {
+      if (stopper.signal.aborted) return; // closed while making it: nothing to say
       toast(e.message || 'Export failed', 'error');
       btn.disabled = false;
       btn.lastChild.textContent = 'Download';
     }
   };
   draw();
-  const d = dialog('Download', body, { testid: 'export-dialog' });
+  const stopper = new AbortController();
+  const d = dialog('Download', body, { testid: 'export-dialog', onClose: () => stopper.abort() });
   return d;
 }
 

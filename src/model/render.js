@@ -522,11 +522,15 @@ export function renderPage(doc, pageIndex, opts = {}) {
   const ctx = makeCtx(doc, opts);
   const w = num(doc.width, 1);
   const h = num(doc.height, 1);
-  const body = pageBody(ctx, page, w, h, opts);
+  return svgDocument(ctx, pageBody(ctx, page, w, h, opts), w, h, opts);
+}
+
+/** The outer SVG around a page's (or frame's) contents: size, fonts, definitions. */
+function svgDocument(ctx, body, w, h, opts, extra = '') {
   const style = opts.fontCss ? `<style>${opts.fontCss}</style>` : '';
   const scale = opts.scale || 1;
   const size = opts.noSize ? '' : ` width="${f(w * scale)}" height="${f(h * scale)}"`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"${size} viewBox="0 0 ${w} ${h}">` +
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"${size} viewBox="0 0 ${w} ${h}"${extra}>` +
     `<defs>${style}${ctx.defs.join('')}</defs>${body}</svg>`;
 }
 
@@ -593,11 +597,7 @@ export function renderFrame(doc, frame, opts = {}) {
     const tr = transitionAt(frame.transition.type, frame.transition.progress);
     body = layer(frame.from.index, frame.from.local, tr.from) + layer(frame.index, frame.local, tr.to);
   } else body = layer(frame.index, frame.local, null);
-  const style = opts.fontCss ? `<style>${opts.fontCss}</style>` : '';
-  const scale = opts.scale || 1;
-  const size = opts.noSize ? '' : ` width="${f(w * scale)}" height="${f(h * scale)}"`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"${size} viewBox="0 0 ${w} ${h}" overflow="hidden">` +
-    `<defs>${style}${ctx.defs.join('')}</defs>${body}</svg>`;
+  return svgDocument(ctx, body, w, h, opts, ' overflow="hidden"');
 }
 
 /** Render a single element on its own, for previews (layers list, thumbnails). */

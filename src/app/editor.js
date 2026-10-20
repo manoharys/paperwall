@@ -934,7 +934,6 @@ export class Editor {
     this.emit('strip');
   }
 
-  /** Hidden pages stay in the design but are skipped when presenting and downloading. */
   /** Change a page's motion (anim, duration, transition); undefined clears one. */
   setPageMotion(i, patch, key = null) {
     const page = this.doc.pages[i];
@@ -947,6 +946,7 @@ export class Editor {
     }, { key });
   }
 
+  /** Hidden pages stay in the design but are skipped when presenting and downloading. */
   setPageHidden(i, hidden) {
     this.change(() => (this.doc.pages[i].hidden = hidden || undefined));
     this.emit('page');

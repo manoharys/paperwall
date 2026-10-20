@@ -267,3 +267,17 @@ test('[MOT-08] a soundtrack: a sound from Uploads plays in downloaded videos', a
   assert.equal(await state(page, (ed) => !!ed.doc.audio), false);
   await context.close();
 });
+
+test('[MOT-05] closing the download dialog stops a GIF being made', async () => {
+  const { page, context } = await newDesign('square');
+  await shortMovie(page);
+  await page.click('[data-testid="download"]');
+  await page.click('[data-testid="export-format"] [data-value="gif"]');
+  let downloaded = false;
+  page.on('download', () => (downloaded = true));
+  await page.click('[data-testid="export-download"]');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(4000);
+  assert.equal(downloaded, false, 'nothing arrives after closing');
+  await context.close();
+});

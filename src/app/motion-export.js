@@ -6,8 +6,8 @@
 import { renderFrame } from '../model/render.js';
 import { timeline, frameAt } from '../model/motion.js';
 import { GifEncoder } from '../model/gif.js';
-import { buildWebm } from '../model/webm.js';
-import { buildMp4 } from '../model/mp4.js';
+import { buildWebmParts } from '../model/webm.js';
+import { buildMp4Parts } from '../model/mp4.js';
 import { measure, fontCssFor } from './fonts.js';
 import { loadImage } from './ui.js';
 import { VideoFrames, videosOn } from './media.js';
@@ -156,8 +156,8 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
   if (failure) throw failure;
   const sound = audio ? await encodeAudio(audio, total, container, volume) : null;
   const video = { codec: pick.codec, codecString: pick.codecString, width, height, description, chunks };
-  const bytes = container === 'mp4' ? buildMp4({ video, audio: sound, duration: total }) : buildWebm({ video, audio: sound, duration: total });
-  return new Blob([bytes], { type: container === 'mp4' ? 'video/mp4' : 'video/webm' });
+  const parts = container === 'mp4' ? buildMp4Parts({ video, audio: sound, duration: total }) : buildWebmParts({ video, audio: sound, duration: total });
+  return new Blob(parts, { type: container === 'mp4' ? 'video/mp4' : 'video/webm' });
 }
 
 /** A soundtrack, encoded for the container (Opus; AAC in MP4 where the browser has it). */
@@ -199,7 +199,7 @@ async function encodeAudio(buffer, seconds, container, volume = 1) {
     output: (chunk, meta) => {
       const data = new Uint8Array(chunk.byteLength);
       chunk.copyTo(data);
-      chunks.push({ data, timestamp: chunk.timestamp, duration: chunk.duration, key: true });
+      chunks.push({ data, timestamp: chunk.timestamp, duration: chunk.duration ?? null, key: true });
       if (meta?.decoderConfig?.description && !description) description = bytesOf(meta.decoderConfig.description);
     },
     error: (e) => (failure = e),
@@ -220,5 +220,11 @@ async function encodeAudio(buffer, seconds, container, volume = 1) {
     if (encoder.state !== 'closed') encoder.close();
   }
   if (failure) throw failure;
+  // Some encoders leave a packet's length out: it runs until the next one
+  // (the last as long as a usual packet: 20 ms of Opus, 1024 AAC samples).
+  const usual = pick.codec === 'opus' ? 20000 : (1024 * 1e6) / sampleRate;
+  chunks.forEach((c, i) => {
+    if (!(c.duration > 0)) c.duration = i + 1 < chunks.length ? chunks[i + 1].timestamp - c.timestamp : usual;
+  });
   return { codec: pick.codec, sampleRate, channels, description, codecPrivate: pick.codec === 'opus' ? description : null, chunks };
 }

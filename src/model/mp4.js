@@ -35,7 +35,12 @@ const MATRIX = concat([u32(0x00010000), u32(0), u32(0), u32(0), u32(0x00010000),
  * audio (optional): { codec: 'aac' | 'opus', sampleRate, channels, description, chunks: [...] }
  * duration: seconds. Returns the file's bytes.
  */
-export function buildMp4({ video, audio = null, duration }) {
+export function buildMp4(spec) {
+  return concat(buildMp4Parts(spec));
+}
+
+/** The file as a list of parts (for a Blob: the samples are never copied). */
+export function buildMp4Parts({ video, audio = null, duration }) {
   const ftyp = box('ftyp', fourcc('isom'), u32(0x200), fourcc('isom'), fourcc('iso2'), fourcc(video.codec === 'avc' ? 'avc1' : 'iso6'), fourcc('mp41'));
   const tracks = [{ kind: 'video', ...video, timescale: 90000 }];
   if (audio) tracks.push({ kind: 'audio', ...audio, timescale: audio.sampleRate });
@@ -55,8 +60,9 @@ export function buildMp4({ video, audio = null, duration }) {
   // The index's size doesn't depend on the offsets in it: measure, then write.
   const size = moovFor(0).length;
   const moov = moovFor(ftyp.length + size + 8);
-  const media = concat(tracks.flatMap((t) => t.chunks.map((c) => c.data)));
-  return concat([ftyp, moov, u32(media.length + 8), fourcc('mdat'), media]);
+  const samples = tracks.flatMap((t) => t.chunks.map((c) => c.data));
+  const mediaSize = samples.reduce((s, d) => s + d.length, 0);
+  return [ftyp, moov, u32(mediaSize + 8), fourcc('mdat'), ...samples];
 }
 
 function mvhd(duration, nextTrack) {

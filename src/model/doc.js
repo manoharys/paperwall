@@ -360,8 +360,7 @@ export function createGroup(children, props = {}) {
   return base('group', { children, ...props });
 }
 
-/** Add an image's bytes to the design. Returns the asset id. */
-/** Add a picture, video or sound to the design (once: the same file is shared). */
+/** Add a picture, video or sound to the design (once: the same file is shared). Returns the asset id. */
 export function addAsset(doc, { mime, dataUrl, width, height, name = '', kind = 'image', duration, poster }) {
   for (const [id, a] of Object.entries(doc.assets)) {
     if (a.dataUrl === dataUrl) return id;
@@ -400,7 +399,6 @@ export function isEmptyFrame(doc, el) {
   return el?.type === 'image' && !doc.assets[el.assetId];
 }
 
-/** Check that a parsed file looks like a Paperwall design. Throws a readable error if not. */
 /** An animation or transition from a file: a known type and numbers in range, else nothing. */
 function cleanMotion(m, kinds, ranges) {
   if (!m || typeof m !== 'object' || !Object.hasOwn(kinds, m.type) || m.type === 'none') return undefined;
@@ -409,6 +407,7 @@ function cleanMotion(m, kinds, ranges) {
   return out;
 }
 
+/** Check that a parsed file looks like a Paperwall design. Throws a readable error if not. */
 export function validateDesign(doc) {
   if (!doc || typeof doc !== 'object') throw new Error('This file is not a Paperwall design');
   doc.width = Number(doc.width);
