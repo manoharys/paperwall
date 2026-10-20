@@ -42,6 +42,12 @@ export async function ensureFont(name, weight = 400) {
   await Promise.all(list.map((f) => (f.status === 'loaded' ? null : f.load().catch(() => null))));
 }
 
+/** Whether a font is done loading, either way (loaded, or failed for good). */
+export function fontSettled(name, weight = 400) {
+  const list = faces.get(`${name}|${nearestWeight(name, weight)}`);
+  return !list || list.every((f) => f.status === 'loaded' || f.status === 'error');
+}
+
 /** Whether a font is downloaded and usable (false if it failed to load). */
 export function fontLoaded(name, weight = 400) {
   const list = faces.get(`${name}|${nearestWeight(name, weight)}`);

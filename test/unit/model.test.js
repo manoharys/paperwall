@@ -402,3 +402,213 @@ test('[IMG-13] plain backgrounds are removed; the subject and enclosed areas sta
   assert.equal(alpha(10, 10), 255, 'a white area inside the subject is not background');
   assert.equal(cleared, 20 * 20 - 10 * 10);
 });
+
+test('[EDIT-19] find and replace across pages, groups, tables and charts', async () => {
+  const { findText, replaceText } = await import('../../src/model/find.js');
+  const { createDesign, createText, createTable, createChart, createGroup, createPage } = await import('../../src/model/doc.js');
+  const doc = createDesign({ width: 500, height: 500 });
+  doc.pages.push(createPage());
+  doc.pages[0].elements.push(createText({ text: 'Summer sale: summer prices' }), createTable({ rows: [['Item', 'Summer'], ['Hat', '5']] }));
+  doc.pages[1].elements.push(createGroup([createText({ text: 'Last summer' }), createText({ text: 'Summertime' })]), createChart('bar', { data: [{ label: 'summer', value: 3 }] }));
+  const hits = findText(doc, 'summer');
+  assert.deepEqual(hits.map((h) => [h.page, h.count]), [[0, 2], [0, 1], [1, 2], [1, 1]]);
+  assert.equal(findText(doc, 'summer', { matchCase: true }).reduce((s, h) => s + h.count, 0), 3);
+  assert.equal(findText(doc, 'summer', { wholeWord: true }).reduce((s, h) => s + h.count, 0), 5, 'not "Summertime"');
+  const r = replaceText(doc, 'summer', 'Winter $5', { wholeWord: true });
+  assert.equal(r.count, 5);
+  assert.equal(doc.pages[0].elements[0].text, 'Winter $5 sale: Winter $5 prices');
+  assert.equal(doc.pages[1].elements[0].children[1].text, 'Summertime');
+  assert.deepEqual(findText(doc, ''), []);
+  assert.deepEqual(findText(doc, 'a.b'), [], 'the query is plain text, not a pattern');
+});
+
+test('[ELM-10] copied connectors join the copies, or come loose', async () => {
+  const { createDesign, createShape } = await import('../../src/model/doc.js');
+  const { duplicatePage, pasteElements, copyElements } = await import('../../src/model/commands.js');
+  const { refitGroup } = await import('../../src/model/geometry.js');
+  const { createConnector } = await import('../../src/model/connectors.js');
+  const doc = createDesign({ width: 1000, height: 1000 });
+  const a = createShape('rect', { x: 0, y: 0, w: 100, h: 100 });
+  const b = createShape('rect', { x: 500, y: 0, w: 100, h: 100 });
+  const c = createConnector({ from: [100, 50], to: [500, 50], start: a.id, end: b.id });
+  doc.pages[0].elements.push(a, b, c);
+  duplicatePage(doc, 0);
+  const [a2, b2, c2] = doc.pages[1].elements;
+  assert.notEqual(a2.id, a.id);
+  assert.deepEqual([c2.start.id, c2.end.id], [a2.id, b2.id], 'the copy joins the copied boxes');
+  // Copy just the connector and one box: the other end comes loose.
+  const ids = pasteElements(doc, 0, copyElements(doc, 0, [a.id, c.id]), 20);
+  const pasted = doc.pages[0].elements.filter((e) => ids.includes(e.id));
+  const pc = pasted.find((e) => e.type === 'connector');
+  assert.equal(pc.start.id, pasted.find((e) => e.type === 'shape').id);
+  assert.equal(pc.end.id, null);
+  // A group's box follows its children after they change size.
+  const g = { id: 'g', type: 'group', x: 100, y: 100, w: 50, h: 50, rotation: 0, children: [{ id: 'k', type: 'shape', x: -10, y: 0, w: 80, h: 70 }] };
+  refitGroup(g);
+  assert.deepEqual([g.x, g.y, g.w, g.h, g.children[0].x], [90, 100, 80, 70, 0]);
+});
+
+test('[CLR-05] gradient stops are drawn in order', async () => {
+  const { createDesign, createShape } = await import('../../src/model/doc.js');
+  const { renderPage } = await import('../../src/model/render.js');
+  const doc = createDesign({ width: 100, height: 100 });
+  doc.pages[0].elements.push(createShape('rect', { fill: { type: 'linear', angle: 0, stops: [{ offset: 0, color: '#000000' }, { offset: 1, color: '#ffffff' }, { offset: 0.2, color: '#ff0000' }] } }));
+  const offsets = [...renderPage(doc, 0).matchAll(/<stop offset="([\d.]+)"/g)].map((m) => +m[1]);
+  assert.deepEqual(offsets, [0, 0.2, 1]);
+});
+
+test('[EDIT-19] find and replace leaves locked and hidden things alone', async () => {
+  const { findText, replaceText } = await import('../../src/model/find.js');
+  const { createDesign, createText } = await import('../../src/model/doc.js');
+  const doc = createDesign({ width: 500, height: 500 });
+  doc.pages[0].elements.push(createText({ text: 'Acme' }), createText({ text: 'Acme 2026', locked: true }), createText({ text: 'Acme hidden', hidden: true }));
+  assert.equal(findText(doc, 'acme').length, 1);
+  assert.equal(replaceText(doc, 'Acme', 'Beta').count, 1);
+  assert.deepEqual(doc.pages[0].elements.map((e) => e.text), ['Beta', 'Acme 2026', 'Acme hidden']);
+});
+
+test('[EDIT-01] a discarded step keeps redo available', async () => {
+  const { History } = await import('../../src/model/history.js');
+  const h = new History();
+  let doc = { pages: [{ elements: [] }], assets: {}, n: 1 };
+  h.record(doc);
+  doc.n = 2;
+  doc = h.undo(doc);
+  assert.ok(h.canRedo);
+  h.record(doc); // a press that turns out to change nothing...
+  h.discard(); // ...is dropped again
+  assert.ok(h.canRedo, 'redo still works');
+});
+
+test('[EDIT-01] an undo in the middle of a drag keeps its history', async () => {
+  const { History } = await import('../../src/model/history.js');
+  const h = new History();
+  let doc = { pages: [], assets: {}, n: 1 };
+  h.record(doc);
+  doc.n = 2;
+  h.record(doc); // a drag starts
+  doc = h.undo(doc); // ...and Undo is pressed while dragging
+  h.discard(); // the drag ends without a change
+  assert.equal(h.past.length, 1, 'the earlier step is still there');
+  assert.ok(h.canRedo);
+});
+
+test('[BRD-03] a brand kit also recolors text effects and duotone photos', async () => {
+  const { createDesign, createText, createImage } = await import('../../src/model/doc.js');
+  const { applyBrand, collectColors } = await import('../../src/model/commands.js');
+  const doc = createDesign({ width: 100, height: 100 });
+  doc.pages[0].elements.push(createText({ color: '#111111', effect: { type: 'splice', color: '#ff0000' } }), createImage('a', { filters: { duotone: { dark: '#00ff00', light: '#0000ff' } } }));
+  assert.ok(['#ff0000', '#00ff00', '#0000ff'].every((c) => collectColors(doc).includes(c)));
+  applyBrand(doc, { colors: ['#123456', '#abcdef'] });
+  const [t, img] = doc.pages[0].elements;
+  assert.ok(['#123456', '#abcdef'].includes(t.effect.color));
+  assert.ok(['#123456', '#abcdef'].includes(img.filters.duotone.dark));
+});
+
+test('[DOC-10] resizing a design keeps guides in the same place on the page', async () => {
+  const { createDesign } = await import('../../src/model/doc.js');
+  const { resizeDesign } = await import('../../src/model/commands.js');
+  const doc = createDesign({ width: 1080, height: 1080 });
+  doc.pages[0].guides = [{ axis: 'x', pos: 540 }, { axis: 'y', pos: 270 }];
+  const out = resizeDesign(doc, 1920, 540);
+  assert.deepEqual(out.pages[0].guides, [{ axis: 'x', pos: 960 }, { axis: 'y', pos: 135 }]);
+});
+
+test('[EDIT-01] discarding at the history limit keeps the oldest step', async () => {
+  const { History } = await import('../../src/model/history.js');
+  const h = new History(2);
+  const doc = { pages: [], assets: {} };
+  h.record({ ...doc, n: 1 });
+  h.record({ ...doc, n: 2 });
+  h.record({ ...doc, n: 3 });
+  h.discard();
+  assert.equal(h.past.length, 2);
+  assert.equal(JSON.parse(h.past[0]).n, 1, 'the oldest step came back');
+});
+
+test('[TPL-04] adding the same template page twice gives every element its own id', async () => {
+  const { createDesign, createShape, createPage } = await import('../../src/model/doc.js');
+  const { freshPage } = await import('../../src/model/commands.js');
+  const { createConnector } = await import('../../src/model/connectors.js');
+  const a = createShape('rect');
+  const b = createShape('rect');
+  const page = { ...createPage(), elements: [a, b, createConnector({ from: [0, 0], to: [1, 1], start: a.id, end: b.id })] };
+  const one = freshPage(page);
+  const two = freshPage(page);
+  const ids = [...one.elements, ...two.elements].map((e) => e.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.notEqual(one.id, two.id);
+  assert.deepEqual([two.elements[2].start.id, two.elements[2].end.id], [two.elements[0].id, two.elements[1].id]);
+});
+
+test('[EDIT-07] a turned group is refitted without moving its contents on the page', async () => {
+  const { refitGroup, rotatePoint } = await import('../../src/model/geometry.js');
+  const g = { type: 'group', x: 100, y: 100, w: 200, h: 100, rotation: 90, children: [{ x: 0, y: 0, w: 300, h: 100 }] };
+  // Where the child's far corner is on the page before.
+  const before = rotatePoint(g.x + 300, g.y + 100, g.x + g.w / 2, g.y + g.h / 2, 90);
+  refitGroup(g);
+  assert.deepEqual([g.w, g.h], [300, 100]);
+  const after = rotatePoint(g.x + g.children[0].x + 300, g.y + g.children[0].y + 100, g.x + g.w / 2, g.y + g.h / 2, 90);
+  assert.ok(Math.abs(before.x - after.x) < 1e-6 && Math.abs(before.y - after.y) < 1e-6, 'the child stays put');
+});
+
+test('[EDIT-01] discarding after a merged step keeps the earlier undo step', () => {
+  const h = new History();
+  const doc = { pages: [{ n: 1 }] };
+  h.record(doc, 'k', 1000);
+  doc.pages[0].n = 2;
+  h.record(doc, 'k', 1100); // merged into the step above
+  h.discard();
+  assert.equal(h.past.length, 1, 'the step before the edits is still there');
+  assert.equal(JSON.parse(h.past[0]).pages[0].n, 1);
+});
+
+test('[EDIT-19] replace one match at a time, even inside one table', async () => {
+  const { findText, replaceText } = await import('../../src/model/find.js');
+  const { createDesign, createTable } = await import('../../src/model/doc.js');
+  const doc = createDesign({ width: 500, height: 500 });
+  const t = createTable({ rows: [['2024 a', '2024'], ['2024', 'x']] });
+  doc.pages[0].elements.push(t);
+  assert.equal(findText(doc, '2024')[0].count, 3);
+  const r = replaceText(doc, '2024', '2025', { onlyId: t.id, onlyPage: 0, nth: 1 });
+  assert.equal(r.count, 1);
+  assert.deepEqual(t.rows, [['2024 a', '2025'], ['2024', 'x']], 'only the second match');
+});
+
+test('[EDIT-19] find copes with tables and charts that lack rows or data', async () => {
+  const { findText, replaceText } = await import('../../src/model/find.js');
+  const { createDesign, createText } = await import('../../src/model/doc.js');
+  const doc = createDesign({ width: 500, height: 500 });
+  doc.pages[0].elements.push({ id: 't1', type: 'table' }, { id: 'c1', type: 'chart', data: [null, { label: 'sale', value: 1 }] }, createText({ text: 'sale' }));
+  assert.equal(findText(doc, 'sale').reduce((s, h) => s + h.count, 0), 2);
+  assert.equal(replaceText(doc, 'sale', 'deal').count, 2);
+});
+
+test('[DOC-12] a version keeps only the images the design shows', async () => {
+  const { createDesign, createImage, versionSnapshot } = await import('../../src/model/doc.js');
+  const doc = createDesign({ width: 100, height: 100 });
+  doc.assets = { old: { dataUrl: 'data:,1' }, now: { dataUrl: 'data:,2' } };
+  doc.pages[0].elements.push(createImage('now'));
+  assert.deepEqual(Object.keys(versionSnapshot(doc).assets), ['now']);
+});
+
+test('[BRD-03] applying a brand never flattens a duotone to one color', async () => {
+  const { createDesign, createImage } = await import('../../src/model/doc.js');
+  const { applyBrand } = await import('../../src/model/commands.js');
+  const doc = createDesign({ width: 100, height: 100 });
+  const img = createImage('a', { filters: { duotone: { dark: '#112233', light: '#ddeeff' } } });
+  doc.pages[0].elements.push(img);
+  applyBrand(doc, { colors: ['#ff0000'] });
+  assert.notEqual(img.filters.duotone.dark, img.filters.duotone.light);
+});
+
+test('[BRD-03] short #rgb colors are listed and rebranded too', async () => {
+  const { createDesign, createShape } = await import('../../src/model/doc.js');
+  const { collectColors, applyBrand } = await import('../../src/model/commands.js');
+  const doc = createDesign({ width: 100, height: 100 });
+  const s = createShape('rect', { fill: '#f00' });
+  doc.pages[0].elements.push(s);
+  assert.ok(collectColors(doc).includes('#ff0000'));
+  applyBrand(doc, { colors: ['#123456'] });
+  assert.equal(s.fill, '#123456');
+});

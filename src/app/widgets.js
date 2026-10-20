@@ -1,6 +1,7 @@
 // Form controls used by the panels: color picker, sliders, number fields.
 
 import { h, icon, iconButton } from './ui.js';
+import { mixHex, sortedStops, normalizeHex } from '../model/color.js';
 
 export const PALETTES = [
   { name: 'Ink', colors: ['#16161d', '#3d3d4e', '#8a8a9e', '#d9d9e3', '#ffffff'] },
@@ -12,16 +13,6 @@ export const PALETTES = [
   { name: 'Berry', colors: ['#590d22', '#a4133c', '#ff4d6d', '#ffb3c1', '#fff0f3'] },
   { name: 'Mono pop', colors: ['#000000', '#ffffff', '#ffe600', '#ff2e63', '#08d9d6'] },
 ];
-
-const HEX = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i;
-
-export function normalizeHex(v) {
-  const m = String(v).trim().match(HEX);
-  if (!m) return null;
-  let hex = m[1].toLowerCase();
-  if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
-  return `#${hex}`;
-}
 
 let openPopover = null;
 
@@ -61,7 +52,7 @@ export function popoverOpen() {
 
 document.addEventListener('pointerdown', (e) => {
   // A popover's own button toggles it on click, so leave those clicks to it.
-  if (openPopover && !openPopover.contains(e.target) && !e.target.closest?.('.swatch-btn, .font-btn')) closePopover();
+  if (openPopover && !openPopover.contains(e.target) && !e.target.closest?.('.swatch-btn, .font-btn, .menu-btn')) closePopover();
 });
 
 /**
@@ -255,4 +246,85 @@ export function fontPicker({ label = 'Font', value, fonts, kinds, onChange, test
     list.querySelector('.on')?.scrollIntoView({ block: 'center' });
   });
   return h('div', { class: 'field' }, h('span', null, label), btn);
+}
+
+/** Ready-made gradients, two to four colors each. */
+export const GRADIENT_PRESETS = [
+  ['Sunset', '#ff7a45', '#ff4d6d', '#8e44ad'],
+  ['Peach', '#ffecd2', '#fcb69f'],
+  ['Ocean', '#2193b0', '#6dd5ed'],
+  ['Lagoon', '#43cea2', '#185a9d'],
+  ['Citrus', '#f9d423', '#ff4e50'],
+  ['Berry', '#8e2de2', '#ff0080', '#ffb199'],
+  ['Mint', '#d4fc79', '#96e6a1'],
+  ['Night', '#0f2027', '#203a43', '#2c5364'],
+  ['Candy', '#a18cd1', '#fbc2eb'],
+  ['Fire', '#f12711', '#f5af19'],
+  ['Rainbow', '#ff5f6d', '#ffc371', '#47e891', '#3a86ff'],
+  ['Mono', '#ffffff', '#d9d9d9'],
+].map(([name, ...colors]) => ({ name, stops: colors.map((color, i) => ({ offset: i / (colors.length - 1), color })) }));
+
+function cssGradient(g, angle = 90) {
+  const stops = sortedStops(g).map((s) => `${s.color} ${Math.round(s.offset * 100)}%`).join(', ');
+  return `linear-gradient(${angle}deg, ${stops})`;
+}
+
+/**
+ * Edit a gradient with any number of colors: each stop has a color and a
+ * position; add and remove stops, switch linear/radial, set the angle, or
+ * start from a preset. onChange(gradient, isLive).
+ */
+export function gradientEditor({ label, value, onChange, getContext, testid, current }) {
+  const g = value;
+  const stops = sortedStops(g);
+  // Each change starts from the gradient as it is now (`current()`), not as it
+  // was when the panel was drawn: the panel isn't redrawn while a slider is in use.
+  const now = () => current?.() || g;
+  const nowStops = () => sortedStops(now());
+  const emit = (patch, live = false) => onChange({ ...now(), ...patch }, live);
+  // Where each row's stop is now: re-sorting moves stops around, and the
+  // panel isn't redrawn mid-drag, so rows follow their own stop.
+  let order = stops.map((_, i) => i);
+  // Stops are kept in order, so the page draws the same gradient as the bar above.
+  const setStop = (i, patch, live) => {
+    const tagged = nowStops().map((s, k) => ({ s: k === order[i] ? { ...s, ...patch } : s, k }));
+    tagged.sort((a, b) => a.s.offset - b.s.offset);
+    order = order.map((k) => tagged.findIndex((t) => t.k === k));
+    emit({ stops: tagged.map((t) => t.s) }, live);
+  };
+  const addStop = () => {
+    const stops = nowStops();
+    // Put the new color in the middle of the widest gap.
+    let at = 0;
+    for (let i = 1; i < stops.length - 1; i++) if (stops[i + 1].offset - stops[i].offset > stops[at + 1].offset - stops[at].offset) at = i;
+    const [a, b] = [stops[at], stops[at + 1]];
+    emit({ stops: [...stops.slice(0, at + 1), { offset: Math.round(((a.offset + b.offset) / 2) * 100) / 100, color: mixHex(a.color, b.color, 0.5) }, ...stops.slice(at + 1)] });
+  };
+  return h('div', { class: 'grad-editor', 'data-testid': testid },
+    h('div', { class: 'grad-bar', style: { background: cssGradient(g) } }),
+    stops.map((s, i) => h('div', { class: 'grad-stop', 'data-testid': 'grad-stop' },
+      colorButton({ label: `${label} color ${i + 1}`, value: s.color, getContext, testid: `grad-color-${i}`, onChange: (c, l) => setStop(i, { color: c }, l) }),
+      h('input', { type: 'range', min: 0, max: 100, value: Math.round(s.offset * 100), 'aria-label': `${label} color ${i + 1} position`, 'data-testid': `grad-pos-${i}`, onInput: (e) => setStop(i, { offset: +e.target.value / 100 }, true), onChange: (e) => setStop(i, { offset: +e.target.value / 100 }) }),
+      stops.length > 2 ? iconButton('close', `Remove color ${i + 1}`, () => emit({ stops: nowStops().filter((_, k) => k !== order[i]) }), { 'data-testid': `grad-remove-${i}` }) : h('span', { class: 'grad-spacer' }))),
+    stops.length < 8 ? h('button', { type: 'button', class: 'link-btn', 'data-testid': 'grad-add', onClick: addStop }, '+ Add a color') : null,
+    segmented({ label: 'Gradient style', value: g.type, onChange: (type) => emit({ type }), options: [{ value: 'linear', label: 'Linear', text: 'Linear' }, { value: 'radial', label: 'Radial', text: 'Radial' }] }),
+    g.type === 'linear' ? slider({ label: 'Angle', value: g.angle ?? 180, min: 0, max: 360, unit: '°', testid: 'grad-angle', onChange: (v, l) => emit({ angle: v }, l) }) : null,
+    h('div', { class: 'grad-presets', role: 'group', 'aria-label': 'Ready-made gradients' }, GRADIENT_PRESETS.map((p) => h('button', {
+      type: 'button', class: 'grad-preset', title: p.name, 'aria-label': p.name, 'data-testid': `grad-preset-${p.name}`, style: { background: cssGradient(p, 135) },
+      onClick: () => emit({ stops: p.stops.map((s) => ({ ...s })) }),
+    }))));
+}
+
+/**
+ * A small menu that opens under a button, built by `content()` each time it
+ * opens. Clicking the button again closes it.
+ */
+export function menuButton({ iconName, label, testid, content }) {
+  const btn = iconButton(iconName, label, () => {
+    if (openPopover?.dataset.for === label) return closePopover();
+    closePopover();
+    const pop = h('div', { class: 'popover menu-pop', 'data-for': label, 'data-testid': `${testid}-menu` }, content());
+    showPopover(pop, btn, { alignRight: true });
+  }, { 'data-testid': testid, class: 'icon-btn menu-btn' });
+  return btn;
 }

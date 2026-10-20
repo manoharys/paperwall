@@ -1,7 +1,9 @@
 // Turns a page into SVG markup. The editor and every export use this same
 // renderer, so what you see is exactly what you download.
 
-import { shapePath, dashArray } from './shapes.js';
+import { shapePath, dashArray, maskPath, drawPath } from './shapes.js';
+import { connectorGeometry, arrowHead } from './connectors.js';
+import { hexToRgb, mixHex, sortedStops } from './color.js';
 import { layoutText, displayText, approxMeasure } from './text-layout.js';
 import { iconById, stickerById } from './graphics.js';
 import { qrMatrix, qrPath } from './qr.js';
@@ -22,6 +24,8 @@ function makeCtx(doc, opts) {
     measure: opts.measure || approxMeasure,
     href: opts.assetHref || ((assetId) => doc.assets[assetId]?.dataUrl || ''),
     editor: !!opts.editor,
+    // Empty-frame placeholders: while editing and in page previews, never in downloads.
+    placeholders: !!(opts.editor || opts.placeholders),
     skip: opts.skip || null,
   };
 }
@@ -33,7 +37,7 @@ function paint(ctx, p) {
   if (typeof p === 'string') return esc(p);
   if (p.type === 'linear' || p.type === 'radial') {
     const id = ctx.id('grad');
-    const stops = (p.stops || [])
+    const stops = sortedStops(p)
       .map((s) => `<stop offset="${f(s.offset)}" stop-color="${esc(s.color)}"${s.opacity !== undefined ? ` stop-opacity="${f(s.opacity)}"` : ''}/>`)
       .join('');
     if (p.type === 'radial') {
@@ -83,6 +87,18 @@ function imageFilter(ctx, fl) {
     ];
     parts.push(`<feColorMatrix type="matrix" values="${m.map(f).join(' ')}"/>`);
   }
+  // Warmth shifts red against blue; tint shifts green against magenta (-100..100).
+  const warm = (fl.warmth ?? 0) / 100 * 0.12;
+  const tint = (fl.tint ?? 0) / 100 * 0.1;
+  if (warm || tint) parts.push(`<feColorMatrix type="matrix" values="1 0 0 0 ${f(warm)} 0 1 0 0 ${f(tint)} 0 0 1 0 ${f(-warm)} 0 0 0 1 0"/>`);
+  if (fl.hue) parts.push(`<feColorMatrix type="hueRotate" values="${f(fl.hue)}"/>`);
+  if (fl.duotone?.dark && fl.duotone?.light) {
+    // Shadows become one color, highlights another, by brightness.
+    const rgb = (hex) => (hexToRgb(hex) || [0, 0, 0]).map((v) => v / 255);
+    const [d, l] = [rgb(fl.duotone.dark), rgb(fl.duotone.light)];
+    parts.push('<feColorMatrix type="matrix" values="0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0 0 0 1 0"/>');
+    parts.push(`<feComponentTransfer>${['R', 'G', 'B'].map((c, i) => `<feFunc${c} type="table" tableValues="${f(d[i])} ${f(l[i])}"/>`).join('')}</feComponentTransfer>`);
+  }
   if ((fl.blur ?? 0) > 0) parts.push(`<feGaussianBlur stdDeviation="${f(fl.blur)}"/>`);
   if (!parts.length) return null;
   const id = ctx.id('fx');
@@ -125,18 +141,46 @@ function renderLine(ctx, el) {
 }
 
 function renderImage(ctx, el) {
-  const href = ctx.href(el.assetId);
-  if (!href) return `<rect width="${f(el.w)}" height="${f(el.h)}" fill="#e5e5ef"/>`;
+  const href = el.assetId ? ctx.href(el.assetId) : '';
+  const outline = maskPath(el);
+  // A picture whose image is missing (damaged file) keeps a grey box everywhere.
+  if (el.assetId && !href) return `<path d="${outline}" fill="#e5e5ef"/>`;
+  if (!href) {
+    // An empty frame shows a soft placeholder while editing; downloads leave it out.
+    if (!ctx.placeholders) return '';
+    const s = Math.min(el.w, el.h) * 0.22;
+    const ox = (el.w - s) / 2;
+    const oy = (el.h - s) / 2;
+    return `<path d="${outline}" fill="#dcdce6"/><g transform="translate(${f(ox)} ${f(oy)}) scale(${f(s / 24)})" fill="none" stroke="#9a9aab" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></g>`;
+  }
   const crop = el.crop || { x: 0, y: 0, w: 1, h: 1 };
   const iw = el.w / crop.w;
   const ih = el.h / crop.h;
   const clip = ctx.id('clip');
-  const shape = el.mask === 'circle'
-    ? `<ellipse cx="${f(el.w / 2)}" cy="${f(el.h / 2)}" rx="${f(el.w / 2)}" ry="${f(el.h / 2)}"/>`
-    : `<rect width="${f(el.w)}" height="${f(el.h)}" rx="${f(Math.min(el.radius || 0, el.w / 2, el.h / 2))}"/>`;
-  ctx.defs.push(`<clipPath id="${clip}">${shape}</clipPath>`);
+  ctx.defs.push(`<clipPath id="${clip}"><path d="${outline}"/></clipPath>`);
   const fx = imageFilter(ctx, el.filters);
-  return `<g clip-path="url(#${clip})"><image href="${esc(href)}" x="${f(-crop.x * iw)}" y="${f(-crop.y * ih)}" width="${f(iw)}" height="${f(ih)}" preserveAspectRatio="none"${fx ? ` filter="url(#${fx})"` : ''}/></g>`;
+  // A vignette darkens the edges with a soft radial shade on top.
+  const v = (el.filters?.vignette ?? 0) / 100;
+  let shade = '';
+  if (v > 0) {
+    const id = ctx.id('vig');
+    ctx.defs.push(`<radialGradient id="${id}" cx="50%" cy="50%" r="72%"><stop offset="${f(0.75 - v * 0.45)}" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="${f(0.25 + v * 0.6)}"/></radialGradient>`);
+    shade = `<rect width="${f(el.w)}" height="${f(el.h)}" fill="url(#${id})"/>`;
+  }
+  return `<g clip-path="url(#${clip})"><image href="${esc(href)}" x="${f(-crop.x * iw)}" y="${f(-crop.y * ih)}" width="${f(iw)}" height="${f(ih)}" preserveAspectRatio="none"${fx ? ` filter="url(#${fx})"` : ''}/>${shade}</g>`;
+}
+
+function renderConnector(ctx, el) {
+  const sw = el.strokeWidth || 4;
+  const head = sw * 3.2;
+  const { d, startDir, endDir } = connectorGeometry(el, { start: el.startCap === 'arrow' ? head * 0.8 : 0, end: el.endCap === 'arrow' ? head * 0.8 : 0 });
+  const dash = dashArray(el.dash, sw);
+  const color = esc(el.stroke || '#000000');
+  const [a, b] = el.points.map(([fx, fy]) => [fx * el.w, fy * el.h]);
+  let out = `<path d="${d}" fill="none" stroke="${color}" stroke-width="${f(sw)}" stroke-linejoin="round" stroke-linecap="${dash ? 'round' : 'butt'}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`;
+  if (el.endCap === 'arrow') out += `<path d="${arrowHead(b, endDir, head)}" fill="${color}"/>`;
+  if (el.startCap === 'arrow') out += `<path d="${arrowHead(a, [-startDir[0], -startDir[1]], head)}" fill="${color}"/>`;
+  return out;
 }
 
 function renderIcon(ctx, el) {
@@ -201,8 +245,60 @@ function renderCurvedText(ctx, el) {
     offset = '25%';
   }
   ctx.defs.push(`<path id="${id}" d="${d}" fill="none"/>`);
-  const stroke = el.outline ? ` stroke="${esc(el.outline.color)}" stroke-width="${f(el.outline.width * 2)}" stroke-linejoin="round" paint-order="stroke fill"` : '';
-  return `<text ${textAttrs(el)} fill="${esc(el.color)}"${stroke}><textPath href="#${id}" startOffset="${offset}" text-anchor="middle">${esc(text)}</textPath></text>`;
+  return textEffect(ctx, el, (paint) => `<text ${textAttrs(el)}${paint}><textPath href="#${id}" startOffset="${offset}" text-anchor="middle">${esc(text)}</textPath></text>`);
+}
+
+export const TEXT_EFFECTS = ['none', 'lift', 'hollow', 'splice', 'echo', 'glitch', 'glow', 'neon'];
+
+/** Mix a #rrggbb color toward white by t (0..1). */
+function lighten(hex, t) {
+  return mixHex(hex, '#ffffff', t);
+}
+
+/**
+ * Draw text with its effect. `draw(paint)` returns the <text> element with
+ * the given fill/stroke attributes; effects layer copies of it.
+ * el.effect = { type, color, offset (share of font size), thickness }.
+ */
+function textEffect(ctx, el, draw) {
+  const outline = el.outline ? ` stroke="${esc(el.outline.color)}" stroke-width="${f(el.outline.width * 2)}" stroke-linejoin="round" paint-order="stroke fill"` : '';
+  const plain = ` fill="${esc(el.color)}"${outline}`;
+  const fx = el.effect;
+  if (!fx || !fx.type || fx.type === 'none') return draw(plain);
+  const s = el.size;
+  const color = esc(fx.color || el.color);
+  const off = (fx.offset ?? 0.08) * s;
+  const thick = Math.max(1, (fx.thickness ?? 0.035) * s);
+  const hollow = ` fill="none" stroke="${esc(el.color)}" stroke-width="${f(thick)}" stroke-linejoin="round"`;
+  const at = (dx, dy, paint, extra = '') => `<g transform="translate(${f(dx)} ${f(dy)})"${extra}>${draw(paint)}</g>`;
+  const glowFilter = (blur, strength) => {
+    const id = ctx.id('glow');
+    const blurs = strength > 1 ? `<feGaussianBlur in="SourceAlpha" stdDeviation="${f(blur)}" result="b1"/><feGaussianBlur in="SourceAlpha" stdDeviation="${f(blur / 3)}" result="b2"/>` : `<feGaussianBlur in="SourceAlpha" stdDeviation="${f(blur)}" result="b1"/>`;
+    const merge = strength > 1 ? '<feMergeNode in="g1"/><feMergeNode in="g2"/>' : '<feMergeNode in="g1"/>';
+    ctx.defs.push(`<filter id="${id}" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">${blurs}` +
+      `<feFlood flood-color="${color}" flood-opacity="0.9"/><feComposite in2="b1" operator="in" result="g1"/>` +
+      (strength > 1 ? `<feFlood flood-color="${color}"/><feComposite in2="b2" operator="in" result="g2"/>` : '') +
+      `<feMerge>${merge}<feMergeNode in="SourceGraphic"/></feMerge></filter>`);
+    return id;
+  };
+  switch (fx.type) {
+    case 'lift':
+      return `<g filter="url(#${shadowFilter(ctx, { x: 0, y: s * 0.06, blur: s * 0.25, color: '#000000', opacity: 0.3 })})">${draw(plain)}</g>`;
+    case 'hollow':
+      return draw(hollow);
+    case 'splice':
+      return at(off, off, ` fill="${color}"`) + draw(hollow);
+    case 'echo':
+      return at(off * 2, off * 2, plain, ' opacity="0.25"') + at(off, off, plain, ' opacity="0.5"') + draw(plain);
+    case 'glitch':
+      return at(-off / 2, 0, ` fill="${esc(fx.color || '#00e5ff')}"`) + at(off / 2, 0, ` fill="${esc(fx.color2 || '#ff2d95')}"`) + draw(plain);
+    case 'glow':
+      return `<g filter="url(#${glowFilter(s * 0.12, 1)})">${draw(plain)}</g>`;
+    case 'neon':
+      return `<g filter="url(#${glowFilter(s * 0.2, 2)})">${draw(` fill="${esc(lighten(fx.color || el.color, 0.65))}"${outline}`)}</g>`;
+    default:
+      return draw(plain);
+  }
 }
 
 function renderText(ctx, el) {
@@ -228,13 +324,12 @@ function renderText(ctx, el) {
     if (line.prefix) tspans.push(`<tspan x="${f(x - line.indent)}" y="${f(baseline)}">${esc(line.prefix.trim())}</tspan>`);
     if (line.text) tspans.push(`<tspan x="${f(x)}" y="${f(baseline)}">${esc(line.text)}</tspan>`);
     const thick = Math.max(1, el.size * 0.06);
-    if (el.underline && line.width) deco.push(`<rect x="${f(x)}" y="${f(baseline + el.size * 0.1)}" width="${f(line.width)}" height="${f(thick)}" fill="${esc(el.color)}"/>`);
-    if (el.strike && line.width) deco.push(`<rect x="${f(x)}" y="${f(baseline - el.size * 0.3)}" width="${f(line.width)}" height="${f(thick)}" fill="${esc(el.color)}"/>`);
+    if (el.underline && line.width) deco.push(`<rect x="${f(x)}" y="${f(baseline + el.size * 0.1)}" width="${f(line.width)}" height="${f(thick)}"`);
+    if (el.strike && line.width) deco.push(`<rect x="${f(x)}" y="${f(baseline - el.size * 0.3)}" width="${f(line.width)}" height="${f(thick)}"`);
   });
   parts.push(...marks);
-  const stroke = el.outline ? ` stroke="${esc(el.outline.color)}" stroke-width="${f(el.outline.width * 2)}" stroke-linejoin="round" paint-order="stroke fill"` : '';
-  parts.push(`<text ${textAttrs(el)} fill="${esc(el.color)}"${stroke} xml:space="preserve">${tspans.join('')}</text>`);
-  parts.push(...deco);
+  // Underlines and strike lines are painted like the letters, so effects apply to them too.
+  parts.push(textEffect(ctx, el, (paint) => `<text ${textAttrs(el)}${paint} xml:space="preserve">${tspans.join('')}</text>${deco.map((r) => `${r}${paint}/>`).join('')}`));
   return parts.join('');
 }
 
@@ -355,6 +450,8 @@ const RENDERERS = {
   sticker: renderSticker,
   qr: renderQr,
   text: renderText,
+  connector: renderConnector,
+  draw: (ctx, el) => `<path d="${drawPath(el)}" fill="none" stroke="${esc(el.stroke)}" stroke-width="${f(el.strokeWidth)}" stroke-linecap="round" stroke-linejoin="round"/>`,
   group: (ctx, el) => el.children.map((c) => renderElement(ctx, c)).join(''),
 };
 

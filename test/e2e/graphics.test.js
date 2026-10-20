@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { newDesign, state, elements, addShape, clickElement, elementCenter, drag, teardown, makePng, uploadImages, mod, openTab } from './helpers.js';
+import { newDesign, state, elements, addShape, clickElement, elementCenter, drag, teardown, makePng, uploadImages, mod, openTab, screenPoint, handle } from './helpers.js';
 
 after(teardown);
 
@@ -189,9 +189,9 @@ test('[IMG-08] rounded corners and circle crop', async () => {
   const { page, context, img } = await withImage();
   await setNumber(page, 'image-radius', 30);
   assert.equal((await last(page)).radius, 30);
-  await page.click('[data-testid="circle-mask"]');
+  await page.selectOption('[data-testid="image-mask"]', 'circle');
   assert.equal((await last(page)).mask, 'circle');
-  assert.equal(await page.locator('[data-testid="page"] clipPath ellipse').count(), 1);
+  assert.equal(await page.locator('[data-testid="page"] clipPath path').count(), 1);
   assert.ok(img);
   await context.close();
 });
@@ -288,6 +288,7 @@ test('[CLR-02] [CLR-04] colors already in the design and ready-made palettes', a
   await page.click('[data-testid="fill-color"]');
   const used = page.locator('.swatch-group', { hasText: 'In this design' }).locator('.swatch[title="#123456"]');
   assert.equal(await used.count(), 1);
+  assert.equal(await used.evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(18, 52, 86)', 'swatches show their color');
   await used.click();
   assert.equal((await last(page)).fill, '#123456');
   const palettes = await page.locator('.color-pop .swatch-group').count();
@@ -362,7 +363,8 @@ test('no panel ever shows stray "null" or "undefined" text', async () => {
   const { page, context } = await newDesign('square');
   const check = async (what) => {
     const text = await page.innerText('body');
-    assert.ok(!/\bnull\b|\bundefined\b|NaN/.test(text), `${what}: ${text.match(/.{20}(null|undefined|NaN).{20}/)?.[0]}`);
+    const at = text.search(/\bnull\b|\bundefined\b|NaN/);
+    assert.ok(at < 0, `${what}: ${JSON.stringify(text.slice(Math.max(0, at - 40), at + 30))}`);
   };
   await check('page panel');
   await addShape(page, 'Star');
@@ -394,7 +396,16 @@ test('no panel ever shows stray "null" or "undefined" text', async () => {
   await check('group');
   await page.click('[data-testid="tab-layers"]');
   await check('layers');
-  for (const tab of ['templates', 'text', 'uploads', 'brand']) {
+  await page.click('[data-testid="tab-edit"]').catch(() => {});
+  await openTab(page, 'shapes');
+  await page.click('[data-testid="frame-Circle frame"]');
+  await check('empty frame');
+  await page.click('[data-testid="connector-elbow"]');
+  await check('connector');
+  await page.click('[data-testid="view"]');
+  await check('view menu');
+  await page.keyboard.press('Escape');
+  for (const tab of ['templates', 'text', 'uploads', 'brand', 'draw']) {
     await openTab(page, tab);
     await check(tab);
   }
@@ -468,5 +479,257 @@ test('[IMG-13] remove a plain background on your device', async () => {
   assert.deepEqual(png, { corner: 0, center: 255 });
   await page.keyboard.press(`${mod}+z`);
   assert.equal((await last(page)).assetId, img.assetId, 'one undo brings the original back');
+  await context.close();
+});
+
+// ---------- frames and grids ----------
+
+/** Drag an upload from the Uploads panel onto a point of an element on the page. */
+async function dragUploadOnto(page, id) {
+  await openTab(page, 'uploads');
+  const at = await elementCenter(page, id);
+  const box = await page.locator('[data-testid="page"]').boundingBox();
+  await page.dragAndDrop('[data-testid="upload-item"] >> nth=0', '[data-testid="page"]', { targetPosition: { x: at.x - box.x, y: at.y - box.y } });
+}
+
+test('[IMG-14] photo frames: drop a photo into a shape', async () => {
+  const { page, context } = await newDesign('square');
+  await openTab(page, 'shapes');
+  assert.ok((await page.locator('[data-testid="frame-grid"] .thumb').count()) >= 8);
+  assert.ok((await page.locator('[data-testid="frame-Heart frame"] svg path').count()) >= 1, 'tiles show their shape');
+  await page.click('[data-testid="frame-Heart frame"]');
+  let frame = await last(page);
+  assert.equal(frame.type, 'image');
+  assert.equal(frame.mask, 'heart');
+  assert.equal(frame.assetId, null, 'starts empty');
+  assert.ok(await page.locator('[data-testid="frame-add-photo"]').isVisible());
+  // Double-click an empty frame to pick a photo for it.
+  const chooser = page.waitForEvent('filechooser');
+  const p = await elementCenter(page, frame.id);
+  await page.mouse.dblclick(p.x, p.y);
+  await (await chooser).setFiles(await makePng(page, { w: 900, h: 300 }));
+  await page.waitForFunction((id) => window.paperwall.editor.pageData.elements.find((e) => e.id === id).assetId, frame.id);
+  frame = (await elements(page)).find((e) => e.id === frame.id);
+  assert.equal(frame.w, frame.h, 'the frame keeps its size');
+  assert.ok(frame.crop.w < 0.5 && frame.crop.h === 1, 'the wide photo is cropped to fill the frame');
+  assert.equal(await page.locator('[data-testid="page"] clipPath path').count(), 1);
+  // The shape can change after the photo is in.
+  await page.selectOption('[data-testid="image-mask"]', 'arch');
+  assert.equal((await last(page)).mask, 'arch');
+  // Dragging an upload onto another frame fills that frame.
+  await openTab(page, 'shapes');
+  await page.click('[data-testid="frame-Circle frame"]');
+  const circle = await last(page);
+  // A drop counts only inside the frame's shape: a circle's corners are outside it.
+  const hits = await page.evaluate((c) => {
+    const ed = window.paperwall.editor;
+    return [ed.frameAt({ x: c.x + c.w / 2, y: c.y + c.h / 2 })?.id, ed.frameAt({ x: c.x + 2, y: c.y + 2 })?.id ?? null];
+  }, circle);
+  assert.deepEqual(hits, [circle.id, null]);
+  // Something on top of a frame keeps drops for itself.
+  const covered = await page.evaluate((c) => {
+    const ed = window.paperwall.editor;
+    const t = ed.addShape('rect');
+    ed.change(() => Object.assign(ed.pageData.elements.find((e) => e.id === t.id), { x: c.x + c.w / 2 - 20, y: c.y + c.h / 2 - 20, w: 40, h: 40 }));
+    const hit = ed.frameAt({ x: c.x + c.w / 2, y: c.y + c.h / 2 })?.id ?? null;
+    ed.select([t.id]);
+    ed.deleteSelection();
+    return hit;
+  }, circle);
+  assert.equal(covered, null);
+  await dragUploadOnto(page, circle.id);
+  await page.waitForFunction((id) => window.paperwall.editor.pageData.elements.find((e) => e.id === id).assetId, circle.id);
+  assert.equal((await elements(page)).filter((e) => e.type === 'image').length, 2, 'filled, not added');
+  await context.close();
+});
+
+test('[IMG-15] photo grids for collages', async () => {
+  const { page, context } = await newDesign('square');
+  await openTab(page, 'shapes');
+  assert.ok((await page.locator('[data-testid="photo-grid-list"] .thumb').count()) >= 10);
+  await page.click('[data-testid="grid-four"]');
+  const frames = (await elements(page)).filter((e) => e.type === 'image');
+  assert.equal(frames.length, 4);
+  assert.equal(await state(page, (ed) => ed.selection.length), 4, 'the new frames are selected');
+  for (const a of frames) {
+    assert.ok(a.x >= 0 && a.y >= 0 && a.x + a.w <= 1080 && a.y + a.h <= 1080, 'inside the page');
+    for (const b of frames) if (a !== b) assert.ok(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y, 'no overlap');
+  }
+  await uploadImages(page, [await makePng(page, { w: 400, h: 400 })]);
+  await dragUploadOnto(page, frames[2].id);
+  await page.waitForFunction((id) => window.paperwall.editor.pageData.elements.find((e) => e.id === id).assetId, frames[2].id);
+  // Grouped, the grid still takes photos frame by frame.
+  const group = await page.evaluate((ids) => {
+    const ed = window.paperwall.editor;
+    ed.select(ids);
+    ed.group();
+    return ed.pageData.elements.find((e) => e.type === 'group');
+  }, frames.map((f) => f.id));
+  const before = (await elements(page)).length; // the upload itself was also added to the page
+  const inner = group.children.find((c) => c.id === frames[1].id);
+  const at = await screenPoint(page, group.x + inner.x + inner.w / 2, group.y + inner.y + inner.h / 2);
+  await openTab(page, 'uploads');
+  const box = await page.locator('[data-testid="page"]').boundingBox();
+  await page.dragAndDrop('[data-testid="upload-item"] >> nth=0', '[data-testid="page"]', { targetPosition: { x: at.x - box.x, y: at.y - box.y } });
+  await page.waitForFunction((id) => window.paperwall.editor.pageData.elements.find((e) => e.type === 'group').children.find((e) => e.id === id)?.assetId, frames[1].id);
+  assert.equal((await elements(page)).length, before, 'filled, not added on top');
+  await context.close();
+});
+
+// ---------- gradients, photo color, drawing ----------
+
+test('[CLR-05] gradients with any number of colors, and ready-made gradients', async () => {
+  const { page, context } = await newDesign('square');
+  const s = await addShape(page, 'Square');
+  await page.click('[data-testid="fill-type"] [data-value="gradient"]');
+  assert.equal(await page.locator('[data-testid="fill-gradient"] [data-testid="grad-stop"]').count(), 2);
+  await page.click('[data-testid="grad-add"]');
+  let fill = (await last(page)).fill;
+  assert.equal(fill.stops.length, 3);
+  assert.equal(fill.stops[1].offset, 0.5, 'a new color goes in the middle');
+  await page.locator('[data-testid="grad-pos-1"]').fill('30');
+  fill = (await last(page)).fill;
+  assert.equal(fill.stops[1].offset, 0.3);
+  await page.click('[data-testid="grad-preset-Rainbow"]');
+  fill = (await last(page)).fill;
+  assert.equal(fill.stops.length, 4);
+  assert.equal(await dom(page, s.id).locator('stop').count(), 0, 'stops live in defs');
+  assert.equal(await page.locator('[data-testid="page"] linearGradient stop').count(), 4);
+  await page.click('[data-testid="grad-remove-0"]');
+  assert.equal((await last(page)).fill.stops.length, 3);
+  await context.close();
+});
+
+test('[IMG-16] duotone, warmth, tint, hue and vignette', async () => {
+  const { page, context } = await withImage();
+  await page.click('[data-testid="duotone-Ocean"]');
+  const f = (await last(page)).filters;
+  assert.deepEqual(f.duotone, { dark: '#0b2a45', light: '#7fd1c7' });
+  assert.ok((await page.locator('[data-testid="page"] filter feFuncR[type="table"]').count()) >= 1);
+  await setNumber(page, 'warmth', 40);
+  await setNumber(page, 'vignette', 60);
+  const g = (await last(page)).filters;
+  assert.equal(g.warmth, 40);
+  assert.equal(g.vignette, 60);
+  assert.ok(g.duotone, 'other adjustments stay');
+  assert.equal(await page.locator('[data-testid="page"] radialGradient').count(), 1, 'vignette shade');
+  await page.click('[data-testid="duotone-none"]');
+  assert.equal((await last(page)).filters.duotone, null);
+  await context.close();
+});
+
+test('[ELM-09] freehand drawing with a pen, marker or highlighter', async () => {
+  const { page, context } = await newDesign('square');
+  await openTab(page, 'draw');
+  assert.equal(await state(page, (ed) => ed.drawTool?.tool), 'pen');
+  const a = await screenPoint(page, 200, 300);
+  const b = await screenPoint(page, 700, 500);
+  await drag(page, a, b, { steps: 20 });
+  let d = await last(page);
+  assert.equal(d.type, 'draw');
+  assert.ok(d.points.length >= 3, `${d.points.length} points`);
+  assert.ok(Math.abs(d.x - 197) < 6 && Math.abs(d.x + d.w - 703) < 6, 'the box wraps the stroke');
+  assert.equal(await page.locator(`[data-testid="page"] [data-id="${d.id}"] path`).count(), 1);
+  await page.click('[data-testid="draw-tool-highlighter"]');
+  await drag(page, await screenPoint(page, 200, 800), await screenPoint(page, 800, 800), { steps: 10 });
+  d = await last(page);
+  assert.equal(d.tool, 'highlighter');
+  assert.equal(d.opacity, 0.4);
+  assert.equal(d.strokeWidth, 36);
+  assert.equal((await elements(page)).filter((e) => e.type === 'draw').length, 2);
+  // Esc stops drawing; then a stroke can be selected and recolored like anything else.
+  await page.keyboard.press('Escape');
+  assert.equal(await state(page, (ed) => ed.drawTool), null);
+  const first = (await elements(page))[0];
+  await clickElement(page, first.id);
+  await pickColor(page, 'draw-color', '#ff006e');
+  assert.equal((await elements(page))[0].stroke, '#ff006e');
+  await context.close();
+});
+
+test('[ELM-10] connector lines that stay attached to elements', async () => {
+  const { page, context } = await newDesign('square');
+  const a = await addShape(page, 'Square');
+  await drag(page, await elementCenter(page, a.id), await screenPoint(page, 200, 200), { steps: 8 });
+  const b = await addShape(page, 'Circle');
+  await drag(page, await elementCenter(page, b.id), await screenPoint(page, 800, 800), { steps: 8 });
+  await clickElement(page, a.id);
+  await clickElement(page, b.id, ['Shift']);
+  await page.click('[data-testid="connect"]');
+  let c = (await elements(page)).find((e) => e.type === 'connector');
+  assert.ok(c, 'a connector was added');
+  assert.equal(c.start.id, a.id);
+  assert.equal(c.end.id, b.id);
+  assert.equal(c.route, 'elbow');
+  const before = c.points.map(([fx, fy]) => [c.x + fx * c.w, c.y + fy * c.h]);
+  // Move the circle: the connector follows.
+  await drag(page, await elementCenter(page, b.id), await screenPoint(page, 800, 500), { steps: 8 });
+  c = (await elements(page)).find((e) => e.type === 'connector');
+  const after2 = c.points.map(([fx, fy]) => [c.x + fx * c.w, c.y + fy * c.h]);
+  assert.notDeepEqual(after2[1], before[1], 'the end moved with the circle');
+  assert.deepEqual(after2[0].map(Math.round), before[0].map(Math.round), 'the other end stayed');
+  // Switch the route, then pull one end free and drop it on empty page.
+  await page.evaluate((id) => window.paperwall.editor.select([id]), c.id);
+  await page.click('[data-testid="connector-route"] [data-value="curved"]');
+  assert.equal((await elements(page)).find((e) => e.type === 'connector').route, 'curved');
+  const endHandle = await page.locator('[data-testid="connector-end-1"]').boundingBox();
+  await drag(page, { x: endHandle.x + 7, y: endHandle.y + 7 }, await screenPoint(page, 900, 100), { steps: 8 });
+  c = (await elements(page)).find((e) => e.type === 'connector');
+  assert.equal(c.end.id, null, 'freed');
+  // Adding one from the Shapes panel works too.
+  await openTab(page, 'shapes');
+  await page.click('[data-testid="connector-straight"]');
+  assert.equal((await elements(page)).filter((e) => e.type === 'connector').length, 2);
+  await context.close();
+});
+
+test('[ELM-10] dragging a connector with one end attached moves its loose end with the pointer', async () => {
+  const { page, context } = await newDesign('square');
+  const ends = await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    const place = (el, box) => ed.change(() => Object.assign(ed.pageData.elements.find((e) => e.id === el.id), box));
+    const a = ed.addShape('rect');
+    const b = ed.addShape('rect');
+    place(a, { x: 100, y: 400, w: 200, h: 200 });
+    place(b, { x: 700, y: 400, w: 200, h: 200 });
+    const c = ed.connect([a.id, b.id], 'straight');
+    ed.select([b.id]);
+    ed.deleteSelection(); // the end comes loose where it was
+    ed.select([c.id]);
+    const el = ed.pageData.elements.find((e) => e.id === c.id);
+    return el.points.map(([fx, fy]) => [el.x + fx * el.w, el.y + fy * el.h]);
+  });
+  const mid = [(ends[0][0] + ends[1][0]) / 2, (ends[0][1] + ends[1][1]) / 2];
+  // Alt: no snapping, so the move is exactly the pointer's.
+  await drag(page, await screenPoint(page, mid[0], mid[1]), await screenPoint(page, mid[0] + 60, mid[1] + 60), { steps: 10, modifiers: ['Alt'] });
+  const after = await page.evaluate(() => {
+    const el = window.paperwall.editor.pageData.elements.find((e) => e.type === 'connector');
+    return el.points.map(([fx, fy]) => [el.x + fx * el.w, el.y + fy * el.h]);
+  });
+  const loose = after[1];
+  assert.ok(Math.abs(loose[0] - (ends[1][0] + 60)) < 3 && Math.abs(loose[1] - (ends[1][1] + 60)) < 3, `the loose end followed: ${loose} from ${ends[1]}`);
+  await context.close();
+});
+
+test('[ELM-10] clicking a connector end without moving it leaves it attached', async () => {
+  const { page, context } = await newDesign('square');
+  const id = await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    const a = ed.addShape('rect');
+    const b = ed.addShape('rect');
+    ed.change(() => Object.assign(ed.pageData.elements.find((e) => e.id === a.id), { x: 100, y: 400, w: 200, h: 200 }));
+    ed.change(() => Object.assign(ed.pageData.elements.find((e) => e.id === b.id), { x: 700, y: 400, w: 200, h: 200 }));
+    const c = ed.connect([a.id, b.id], 'straight');
+    ed.select([c.id]);
+    return c.id;
+  });
+  const at = await handle(page, 'end1');
+  // A press with a pixel of jitter, as a real hand gives.
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.mouse.move(at.x + 1, at.y + 1);
+  await page.mouse.up();
+  const c = (await elements(page)).find((e) => e.id === id);
+  assert.ok(c.end.id, 'still attached');
   await context.close();
 });

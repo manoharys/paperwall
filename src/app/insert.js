@@ -1,14 +1,16 @@
 // The left-hand panel: everything you can add to a page.
 
-import { h, icon, iconButton, clear, toast, pickFile, mod } from './ui.js';
-import { colorButton, selectField, section } from './widgets.js';
+import { h, icon, iconButton, clear, toast, pickFile, mod, lazily, forget, pressable } from './ui.js';
+import { colorButton, selectField, section, slider } from './widgets.js';
 import { FONTS, FONT_PAIRS } from '../model/fonts.js';
 import { ALL_ICONS, ALL_STICKERS, searchGraphics } from '../model/graphics.js';
 import { renderPage, renderElementOnly } from '../model/render.js';
-import { createShape, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES } from '../model/doc.js';
-import { collectColors } from '../model/commands.js';
+import { DRAW_TOOLS, createShape, createFrame, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES } from '../model/doc.js';
+import { GRIDS, gridBoxes } from '../model/grids.js';
+import { collectColors, scaleElement } from '../model/commands.js';
 import { TEMPLATES, TEMPLATE_CATEGORIES, TEMPLATE_FORMATS, searchTemplates, templateFormatLabel } from '../templates/index.js';
 import { measure, ensureFont } from './fonts.js';
+import { TEXT_COMBOS, comboGroup, comboFonts } from '../model/text-combos.js';
 import { readyTemplate } from './templates.js';
 import * as store from './store.js';
 
@@ -19,6 +21,7 @@ const TABS = [
   { id: 'graphics', label: 'Graphics', icon: 'graphics' },
   { id: 'uploads', label: 'Uploads', icon: 'uploads' },
   { id: 'charts', label: 'Charts', icon: 'chart' },
+  { id: 'draw', label: 'Draw', icon: 'draw' },
   { id: 'qr', label: 'QR code', icon: 'qr' },
   { id: 'brand', label: 'Brand', icon: 'brand' },
 ];
@@ -36,6 +39,21 @@ const SHAPE_ITEMS = [
   { label: 'Heart', shape: 'heart', props: {} },
   { label: 'Arrow', shape: 'arrow', props: { h: 180 } },
   { label: 'Speech bubble', shape: 'bubble', props: {} },
+  { label: 'Arch', shape: 'arch', props: {} },
+  { label: 'Blob', shape: 'blob', props: {} },
+];
+
+const FRAME_ITEMS = [
+  { label: 'Square frame', mask: 'none', props: {} },
+  { label: 'Rounded frame', mask: 'none', props: { radius: 60 } },
+  { label: 'Circle frame', mask: 'circle', props: {} },
+  { label: 'Arch frame', mask: 'arch', props: { h: 640 } },
+  { label: 'Blob frame', mask: 'blob', props: {} },
+  { label: 'Heart frame', mask: 'heart', props: {} },
+  { label: 'Star frame', mask: 'star', props: {} },
+  { label: 'Hexagon frame', mask: 'polygon', props: {} },
+  { label: 'Portrait frame', mask: 'none', props: { h: 640 } },
+  { label: 'Landscape frame', mask: 'none', props: { w: 640, h: 420 } },
 ];
 
 const LINE_ITEMS = [
@@ -58,6 +76,14 @@ export class InsertPanel {
     this.rail = h('nav', { class: 'rail', 'aria-label': 'Add to your design' },
       TABS.map((t) => h('button', { type: 'button', 'data-tab': t.id, 'data-testid': `rail-${t.id}`, onClick: () => this.open(t.id) }, icon(t.icon, 22), h('span', null, t.label))));
     this.el = h('div', { class: 'insert' }, this.rail, h('div', { class: 'insert-panel', 'data-testid': 'insert-panel' }, this.body));
+    this.pen = { tool: 'pen', color: '#1a1a2e', size: DRAW_TOOLS.pen.strokeWidth };
+    editor.on((what) => {
+      // Back to Templates without reopening the panel (on phones it may have just been hidden).
+      if (what === 'stop-drawing') {
+        this.tab = 'templates';
+        this.render();
+      }
+    });
     this.render();
   }
 
@@ -82,6 +108,12 @@ export class InsertPanel {
 
   render() {
     for (const b of this.rail.children) b.setAttribute('aria-current', String(b.dataset.tab === this.tab));
+    // The Draw tab turns drawing on; leaving it (or closing the panel) turns it off.
+    const drawing = this.tab === 'draw' && !this.el.classList.contains('collapsed');
+    if (!!this.ed.drawTool !== drawing || (drawing && this.ed.drawTool !== this.pen)) {
+      this.ed.drawTool = drawing ? this.pen : null;
+      this.ed.emit('tool');
+    }
     forget(this.body);
     clear(this.body);
     const fn = {
@@ -93,6 +125,7 @@ export class InsertPanel {
       charts: () => this.charts(),
       qr: () => this.qr(),
       brand: () => this.brand(),
+      draw: () => this.draw(),
     }[this.tab];
     this.body.append(...[].concat(fn()));
   }
@@ -136,6 +169,30 @@ export class InsertPanel {
     toast(`Added "${t.name}"`);
   }
 
+  // ---------- drawing ----------
+
+  draw() {
+    const pen = this.pen;
+    const pick = (patch) => {
+      Object.assign(pen, patch);
+      this.render();
+    };
+    const COLORS = ['#1a1a2e', '#ffffff', '#f25c2a', '#ffd166', '#06d6a0', '#118ab2', '#5b5bd6', '#ff4d6d'];
+    return [
+      section('Draw',
+        h('p', { class: 'hint' }, 'Draw on the page with your mouse, pen or finger. Each stroke can be moved, resized and recolored. Press Esc to stop.'),
+        h('div', { class: 'tool-row', role: 'group', 'aria-label': 'Drawing tool', 'data-testid': 'draw-tools' }, Object.keys(DRAW_TOOLS).map((tool) => h('button', {
+          type: 'button', class: `tool${pen.tool === tool ? ' on' : ''}`, 'aria-pressed': String(pen.tool === tool), 'data-testid': `draw-tool-${tool}`,
+          onClick: () => pick({ tool, size: DRAW_TOOLS[tool].strokeWidth, color: tool === 'highlighter' && pen.color === '#1a1a2e' ? '#ffd166' : pen.color }),
+        }, h('span', { class: `tool-tip ${tool}`, style: { background: pen.color } }), tool[0].toUpperCase() + tool.slice(1)))),
+        h('div', { class: 'swatches draw-colors' }, COLORS.map((c) => h('button', { type: 'button', class: `swatch${pen.color === c ? ' on' : ''}`, style: { '--swatch': c }, title: c, 'aria-label': `Draw in ${c}`, 'data-testid': `draw-color-${c.slice(1)}`, onClick: () => pick({ color: c }) })),
+          // While the picker is dragged only the pen changes (the panel is redrawn once it's done).
+          colorButton({ label: 'Drawing color', value: pen.color, onChange: (c, live) => (live ? (pen.color = c) : pick({ color: c })) })),
+        slider({ label: 'Size', value: pen.size, min: 1, max: 120, testid: 'draw-size', onChange: (v) => (pen.size = v) }),
+        h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'draw-stop', onClick: () => this.open('templates') }, 'Done drawing')),
+    ];
+  }
+
   // ---------- text ----------
 
   text() {
@@ -143,11 +200,31 @@ export class InsertPanel {
     const add = (style) => h('button', { type: 'button', class: `text-add ${style}`, 'data-testid': `add-${style}`, onClick: () => ed.addText(style) }, TEXT_STYLES[style].text);
     return [
       section('Add text', add('heading'), add('subheading'), add('body'), h('p', { class: 'hint' }, `Shortcut: T. Double-click text on the page to edit it.`)),
+      section('Combinations', h('div', { class: 'combo-grid', 'data-testid': 'text-combos' }, TEXT_COMBOS.map((c) => {
+        const b = h('button', { type: 'button', class: 'combo', title: c.name, 'aria-label': c.name, 'data-testid': `combo-${c.id}`, onClick: () => this.addCombo(c) });
+        lazily(b, async () => {
+          await Promise.all(comboFonts(c).map(({ font, weight }) => ensureFont(font, weight)));
+          const g = comboGroup(c, measure);
+          b.innerHTML = renderElementOnly(PREVIEW_DOC, g, { measure, idPrefix: `cb-${c.id}` });
+        });
+        return b;
+      }))),
       section('Font pairs',
         h('div', { class: 'pair-grid', 'data-testid': 'font-pairs' }, FONT_PAIRS.map((p) => h('button', { type: 'button', class: 'pair', 'data-testid': `pair-${p.name}`, onClick: () => this.addPair(p) },
           h('b', { style: { fontFamily: `"${p.heading}"` } }, p.name),
           h('small', { style: { fontFamily: `"${p.body}"` } }, `${p.heading} + ${p.body}`))))),
     ];
+  }
+
+  /** Add a text combination, sized to suit the page, once its fonts have loaded. */
+  async addCombo(combo) {
+    const ed = this.ed;
+    await Promise.all(comboFonts(combo).map(({ font, weight }) => ensureFont(font, weight)));
+    if (ed.closed) return;
+    const g = comboGroup(combo, measure);
+    const s = Math.min((ed.doc.width * 0.7) / g.w, (ed.doc.height * 0.6) / g.h);
+    scaleElement(g, s, s);
+    ed.insert(g);
   }
 
   async addPair(pair) {
@@ -175,6 +252,23 @@ export class InsertPanel {
         const el = createShape(s.shape, { ...s.props, w: 100, h: s.props.h ? 100 * (s.props.h / 300) : 100, radius: s.props.radius ? 20 : 0, fill: '#5b5bd6' });
         return h('button', { type: 'button', class: 'thumb', title: s.label, 'aria-label': s.label, 'data-testid': `shape-${s.label}`, onClick: () => ed.addShape(s.shape, s.props), html: renderElementOnly(PREVIEW_DOC, el) });
       }))),
+      section('Frames', h('p', { class: 'hint' }, 'Drop a photo onto a frame, or double-click it to pick one.'),
+        h('div', { class: 'thumb-grid', 'data-testid': 'frame-grid' }, FRAME_ITEMS.map((fr) => {
+          const el = createFrame(fr.mask, { ...fr.props });
+          const k = 100 / Math.max(el.w, el.h);
+          Object.assign(el, { w: el.w * k, h: el.h * k, radius: (el.radius || 0) * k });
+          return h('button', { type: 'button', class: 'thumb', title: fr.label, 'aria-label': fr.label, 'data-testid': `frame-${fr.label}`, onClick: () => ed.addFrame(fr.mask, fr.props), html: renderElementOnly(PREVIEW_DOC, el, { placeholders: true }) });
+        }))),
+      section('Photo grids', h('div', { class: 'thumb-grid', 'data-testid': 'photo-grid-list' }, GRIDS.map((g) => h('button', {
+        type: 'button', class: 'thumb', title: g.name, 'aria-label': g.name, 'data-testid': `grid-${g.id}`, onClick: () => ed.addGrid(g),
+        html: `<svg viewBox="0 0 100 100">${gridBoxes(g, 100, 100, { margin: 6, gap: 4 }).map((b) => `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="2" fill="#dcdce6"/>`).join('')}</svg>`,
+      })))),
+      section('Connectors', h('p', { class: 'hint' }, 'Or select two elements and choose "Connect with a line".'),
+        h('div', { class: 'thumb-grid', 'data-testid': 'connector-grid' }, [
+          ['straight', 'Straight connector', '<path d="M10 70 L90 30" stroke="currentColor" stroke-width="4" fill="none"/><path d="M90 30 l-14 2 6 12z" fill="currentColor"/>'],
+          ['elbow', 'Elbow connector', '<path d="M10 70 H50 V30 H90" stroke="currentColor" stroke-width="4" fill="none"/><path d="M92 30 l-12 -7 v14z" fill="currentColor"/>'],
+          ['curved', 'Curved connector', '<path d="M10 70 C50 70 50 30 90 30" stroke="currentColor" stroke-width="4" fill="none"/><path d="M92 30 l-12 -7 v14z" fill="currentColor"/>'],
+        ].map(([route, label, svg]) => h('button', { type: 'button', class: 'thumb', title: label, 'aria-label': label, 'data-testid': `connector-${route}`, onClick: () => ed.addConnector(route), html: `<svg viewBox="0 0 100 100">${svg}</svg>` })))),
       section('Lines', h('div', { class: 'thumb-grid', 'data-testid': 'line-grid' }, LINE_ITEMS.map((l) => h('button', {
         type: 'button', class: 'thumb', title: l.label, 'aria-label': l.label, 'data-testid': `line-${l.label}`, onClick: () => ed.addLine(l.props),
         html: `<svg viewBox="0 0 100 40"><line x1="8" y1="20" x2="92" y2="20" stroke="currentColor" stroke-width="4" ${l.props.dash === 'dashed' ? 'stroke-dasharray="12 8"' : l.props.dash === 'dotted' ? 'stroke-dasharray="0 9" stroke-linecap="round"' : ''}/>${l.props.endCap ? '<path d="M94 20 82 12v16z" fill="currentColor"/>' : ''}${l.props.startCap ? '<path d="M6 20 18 12v16z" fill="currentColor"/>' : ''}</svg>`,
@@ -236,7 +330,11 @@ export class InsertPanel {
       if (!ups.length) grid.append(h('p', { class: 'empty-note' }, 'Images you add show up here, so you can use them again in any design.'));
       for (const u of ups) {
         grid.append(h('div', { class: 'upload' },
-          h('button', { type: 'button', class: 'upload-img', title: u.name, 'aria-label': `Add ${u.name}`, 'data-testid': 'upload-item', onClick: () => ed.addImage(u) }, h('img', { src: u.dataUrl, alt: '' })),
+          pressable({ class: 'upload-img', title: u.name, 'aria-label': `Add ${u.name}`, 'data-testid': 'upload-item', draggable: 'true', onDragstart: (e) => {
+            // Drag onto the page to add it, or onto a frame to fill the frame.
+            e.dataTransfer.setData('application/x-paperwall-upload', u.id);
+            e.dataTransfer.effectAllowed = 'copy';
+          } }, () => ed.addImage(u), h('img', { src: u.dataUrl, alt: '', draggable: 'false' })),
           iconButton('trash', 'Remove from uploads', async () => {
             await store.deleteUpload(u.id);
             load();
@@ -440,33 +538,4 @@ export function templateBrowser({ state, ids, onPick, pageSize = 48, gridClass =
     grid,
     more,
   ];
-}
-
-const pending = new WeakMap();
-const observer = typeof IntersectionObserver !== 'undefined'
-  ? new IntersectionObserver((entries) => {
-    for (const e of entries) {
-      if (!e.isIntersecting) continue;
-      observer.unobserve(e.target);
-      pending.get(e.target)?.();
-      pending.delete(e.target);
-    }
-  }, { rootMargin: '400px' })
-  : null;
-
-/** Run fn when el comes near the screen (right away where that can't be observed). */
-export function lazily(el, fn) {
-  if (!observer) return void fn();
-  pending.set(el, fn);
-  el.dataset.lazy = '';
-  observer.observe(el);
-}
-
-/** Stop waiting on everything inside root, before it is thrown away. */
-export function forget(root) {
-  if (!observer) return;
-  for (const el of root.querySelectorAll('[data-lazy]')) {
-    observer.unobserve(el);
-    pending.delete(el);
-  }
 }

@@ -23,16 +23,16 @@ on-device AI models. Not approved: a collaboration server.
 
 ## v0.3 Editor pro
 
-- [ ] Photo frames (shapes you drop a photo into) and grid collages
-- [ ] More text effects: glow, hollow, echo, splice, lift, neon
-- [ ] Ready-made text combinations
-- [ ] Multi-stop gradients; duotone and more photo adjustments
-- [ ] Freehand drawing (pen, marker, highlighter)
-- [ ] Rulers, guides, margins, bleed, grid snapping
-- [ ] Elbow and curved connector lines
-- [ ] Find and replace text; spell check while editing
-- [ ] Page grid view, hidden pages, page titles
-- [ ] Version history on your device
+- [x] Photo frames (shapes you drop a photo into) and grid collages (IMG-14, IMG-15)
+- [x] More text effects: glow, hollow, echo, splice, lift, neon, glitch (TXT-22)
+- [x] Ready-made text combinations (TXT-23)
+- [x] Multi-stop gradients; duotone and more photo adjustments (CLR-05, IMG-16)
+- [x] Freehand drawing (pen, marker, highlighter) (ELM-09)
+- [x] Rulers, guides, margins, bleed, grid snapping (VIEW-06, VIEW-07)
+- [x] Elbow and curved connector lines (ELM-10)
+- [x] Find and replace text; spell check while editing (EDIT-19, EDIT-20)
+- [x] Page grid view, hidden pages, page titles (PAGE-09 to PAGE-11)
+- [x] Version history on your device (DOC-12)
 
 ## v0.4 Motion
 
@@ -40,6 +40,7 @@ on-device AI models. Not approved: a collaboration server.
 - [ ] Page timing and transitions
 - [ ] Download as GIF and video (WebM/MP4)
 - [ ] Video and audio elements
+- [ ] Carried over from v0.3 review: a page-level connector whose two ends are both inside one turned group follows that group when it moves
 
 ## v0.5 Present, docs and whiteboards
 
@@ -49,10 +50,17 @@ on-device AI models. Not approved: a collaboration server.
 
 ## v0.6 Online extras (opt-in)
 
-- [ ] Stock photo search (Openverse, openly licensed, with attribution)
-- [ ] AI writing with your own Claude key: write, rewrite, shorten, translate
-- [ ] AI design: describe a design, get an editable one (your key)
+Give people every option they might want. Each online feature talks to a
+swappable provider, and keys stay on the device and go only to the provider
+picked. No ads, accounts or paid tiers.
+
+- [ ] Stock photo search: Openverse (no key), Unsplash and Pexels (your key),
+      with attribution
+- [ ] AI writing: write, rewrite, shorten, translate, with Claude, OpenAI or
+      Gemini (your key) or a local model through Ollama (no key)
+- [ ] AI design: describe a design, get an editable one (same providers)
 - [ ] Background removal for any photo, on-device model
+- [ ] Provider settings: pick a provider per feature, test a key, forget keys
 
 ## v0.7 Pro export
 

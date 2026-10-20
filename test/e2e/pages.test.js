@@ -18,7 +18,7 @@ test('[PAGE-01] [PAGE-08] add a blank page and move between pages', async () => 
   let s = await state(page, (ed) => ({ n: ed.doc.pages.length, page: ed.page, els: ed.pageData.elements.length }));
   assert.deepEqual(s, { n: 2, page: 1, els: 0 });
   assert.equal(await page.locator('[data-testid="page-thumb"]').count(), 2);
-  await page.locator('[data-testid="page-thumb"]').first().locator('button').click();
+  await page.locator('[data-testid="page-thumb"]').first().locator('.page-thumb').click();
   s = await state(page, (ed) => ({ page: ed.page, els: ed.pageData.elements.length }));
   assert.deepEqual(s, { page: 0, els: 1 });
   assert.equal(await page.locator('[data-testid="page"] [data-type="text"]').count(), 1);
@@ -127,7 +127,7 @@ test('[VIEW-05] present pages full screen, move with the arrow keys', async () =
   const { page, context } = await newDesign('slides');
   await addText(page);
   await page.click('[data-testid="strip-add-page"]');
-  await page.locator('[data-testid="page-thumb"]').first().locator('button').click();
+  await page.locator('[data-testid="page-thumb"]').first().locator('.page-thumb').click();
   await page.click('[data-testid="present"]');
   await page.waitForSelector('[data-testid="presenter"] svg');
   assert.equal(await page.textContent('.slide-count'), '1 / 2');
@@ -184,5 +184,72 @@ test('[APP-03] works on a phone: tap, drag and resize with touch', async () => {
   assert.ok(!(await page.locator('[data-testid="inspector"]').isVisible()));
   await page.locator('[data-testid="shape-Heart"]').tap();
   assert.equal((await elements(page)).at(-1).shape, 'heart');
+  await context.close();
+});
+
+// ---------- titles, hidden pages, grid view ----------
+
+async function threePages(page) {
+  await page.click('[data-testid="strip-add-page"]');
+  await page.click('[data-testid="strip-add-page"]');
+  await page.waitForFunction(() => window.paperwall.editor.doc.pages.length === 3);
+}
+
+test('[PAGE-09] page titles', async () => {
+  const { page, context } = await newDesign('square');
+  await page.fill('[data-testid="page-title"]', 'Cover');
+  await page.press('[data-testid="page-title"]', 'Enter');
+  await page.waitForFunction(() => window.paperwall.editor.doc.pages[0].title === 'Cover');
+  assert.equal(await page.textContent('[data-testid="page-title-label"]'), 'Cover');
+  assert.equal(await page.getAttribute('[data-testid="page-thumb"] .page-thumb', 'aria-label'), 'Page 1: Cover');
+  await page.keyboard.press(`${mod}+z`);
+  assert.equal(await state(page, (ed) => ed.doc.pages[0].title ?? null), null, 'undoable');
+  await context.close();
+});
+
+test('[PAGE-10] hide pages from presenting and downloads', async () => {
+  const { page, context } = await newDesign('square');
+  await threePages(page);
+  await page.click('[data-testid="page-thumb"] >> nth=1');
+  await page.click('[data-testid="page-hidden"]');
+  assert.equal(await state(page, (ed) => ed.doc.pages[1].hidden), true);
+  assert.equal(await page.locator('[data-testid="page-thumb"].hidden-page').count(), 1);
+  // Presenting skips it.
+  await page.click('[data-testid="page-thumb"] >> nth=0');
+  await page.click('[data-testid="present"]');
+  assert.equal(await page.textContent('.slide-count'), '1 / 2');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.textContent('.slide-count'), '2 / 2');
+  await page.keyboard.press('Escape');
+  // Downloading leaves it unticked.
+  await page.click('[data-testid="download"]');
+  assert.equal(await page.isChecked('[data-testid="export-page-1"]'), true);
+  assert.equal(await page.isChecked('[data-testid="export-page-2"]'), false);
+  assert.equal(await page.isChecked('[data-testid="export-page-3"]'), true);
+  await context.close();
+});
+
+test('[PAGE-11] see all pages in a grid and reorder them there', async () => {
+  const { page, context } = await newDesign('square');
+  await threePages(page);
+  const ids = await state(page, (ed) => ed.doc.pages.map((p) => p.id));
+  await page.click('[data-testid="page-grid-btn"]');
+  assert.equal(await page.locator('[data-testid="page-grid-card"]').count(), 3);
+  await page.dragAndDrop('[data-testid="page-grid-card"] >> nth=0', '[data-testid="page-grid-card"] >> nth=2');
+  const after2 = await state(page, (ed) => ed.doc.pages.map((p) => p.id));
+  assert.deepEqual(after2, [ids[1], ids[2], ids[0]]);
+  await page.click('[data-testid="page-grid-card"] >> nth=1 >> .pg-open');
+  assert.equal(await page.locator('[data-testid="page-grid-dialog"]').count(), 0, 'closes after picking');
+  assert.equal(await state(page, (ed) => ed.page), 1);
+  await context.close();
+});
+
+test('a hidden page in a one-page design can still be downloaded', async () => {
+  const { page, context } = await newDesign('square');
+  await page.click('[data-testid="page-hidden"]');
+  await page.click('[data-testid="download"]');
+  const dl = page.waitForEvent('download');
+  await page.click('[data-testid="export-download"]');
+  assert.match((await dl).suggestedFilename(), /\.png$/);
   await context.close();
 });

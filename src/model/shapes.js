@@ -1,5 +1,7 @@
 // SVG path data for shapes, drawn to fill a w × h box.
 
+import { nearPolyline, toLocal } from './geometry.js';
+
 const f = (n) => Math.round(n * 100) / 100;
 
 function poly(points) {
@@ -66,9 +68,66 @@ export function shapePath(el) {
         `H${f(r)}`, `Q0 ${f(bh)} 0 ${f(bh - r)}`, `V${f(r)}`, `Q0 0 ${f(r)} 0`, 'Z',
       ].join(' ');
     }
+    case 'arch': {
+      // A doorway: straight sides and a round top.
+      const r = Math.min(w / 2, h);
+      return `M0 ${f(h)} V${f(r)} A${f(w / 2)} ${f(r)} 0 0 1 ${f(w)} ${f(r)} V${f(h)} Z`;
+    }
+    case 'blob': {
+      // A soft, uneven round shape through eight points.
+      const k = [1, 0.86, 0.97, 0.84, 1, 0.9, 0.95, 0.83];
+      const pts = k.map((r, i) => {
+        const a = -Math.PI / 2 + (i * Math.PI) / 4;
+        return [w / 2 + (Math.cos(a) * w * r) / 2, h / 2 + (Math.sin(a) * h * r) / 2];
+      });
+      const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      const start = mid(pts[7], pts[0]);
+      let d = `M${f(start[0])} ${f(start[1])}`;
+      pts.forEach((p, i) => {
+        const m = mid(p, pts[(i + 1) % pts.length]);
+        d += ` Q${f(p[0])} ${f(p[1])} ${f(m[0])} ${f(m[1])}`;
+      });
+      return `${d} Z`;
+    }
     default:
       return roundedRect(w, h, 0);
   }
+}
+
+/** A smooth path through a drawing's points (stored as shares of its box). */
+export function drawPath(el) {
+  const pts = (el.points || []).map(([x, y]) => [x * el.w, y * el.h]);
+  if (!pts.length) return '';
+  if (pts.length === 1) return `M${f(pts[0][0])} ${f(pts[0][1])} l0.01 0`;
+  let d = `M${f(pts[0][0])} ${f(pts[0][1])}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const mx = (pts[i][0] + pts[i + 1][0]) / 2;
+    const my = (pts[i][1] + pts[i + 1][1]) / 2;
+    d += ` Q${f(pts[i][0])} ${f(pts[i][1])} ${f(mx)} ${f(my)}`;
+  }
+  const z = pts[pts.length - 1];
+  return `${d} L${f(z[0])} ${f(z[1])}`;
+}
+
+/** Whether point p (page px) is within `tol` px of a drawing's stroke. */
+const drawLines = new WeakMap(); // hover hit tests ask on every mouse move
+
+export function drawHit(el, p, tol) {
+  const q = toLocal(el, p); // a turned or mirrored drawing: the point as on the plain one
+  // The stroke in page px, worked out again only when the drawing changes.
+  const key = `${el.x},${el.y},${el.w},${el.h}`;
+  let line = drawLines.get(el);
+  if (line?.key !== key || line.points !== el.points) {
+    line = { key, points: el.points, pts: (el.points || []).map(([x, y]) => [el.x + x * el.w, el.y + y * el.h]) };
+    drawLines.set(el, line);
+  }
+  return nearPolyline(line.pts, q, tol);
+}
+
+/** The outline a photo is clipped to: its frame shape, or a (rounded) rectangle. */
+export function maskPath(el) {
+  const shape = !el.mask || el.mask === 'none' ? 'rect' : el.mask === 'circle' ? 'ellipse' : el.mask;
+  return shapePath({ w: el.w, h: el.h, shape, radius: shape === 'rect' ? el.radius : 0, sides: el.sides, innerRatio: el.innerRatio });
 }
 
 export function dashArray(dash, width) {

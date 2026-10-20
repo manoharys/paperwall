@@ -1,13 +1,22 @@
 // Edits to a design. Every function changes the design in place; the editor
 // records a history snapshot before calling one, which is what makes undo work.
 
-import { uid, createPage, clone } from './doc.js';
+import { uid, createPage, clone, restroke } from './doc.js';
 import { boundsOf, unionBounds, rotatePoint, boxCenter } from './geometry.js';
+import { updateConnectors } from './connectors.js';
+import { normalizeHex } from './color.js';
 
 export function getPage(doc, index) {
   const p = doc.pages[index];
   if (!p) throw new Error(`No page ${index + 1}`);
   return p;
+}
+
+/** The topmost element on a page that `accept` says yes to (front to back). */
+export function topmost(page, accept) {
+  const els = page.elements;
+  for (let i = els.length - 1; i >= 0; i--) if (accept(els[i])) return els[i];
+  return null;
 }
 
 export function findElement(page, id) {
@@ -66,15 +75,36 @@ export function deleteElements(doc, pageIndex, ids) {
   return before - page.elements.length;
 }
 
-function freshIds(el) {
-  const copy = clone(el);
-  const walk = (e) => {
-    e.id = uid();
-    if (e.type === 'group') e.children.forEach(walk);
+/**
+ * Copies of elements with new ids. Connectors copied along with what they
+ * join are re-attached to the copies; an end whose element wasn't copied
+ * comes loose (it stays where it was rather than jumping to the original).
+ */
+function freshCopies(els) {
+  const map = new Map();
+  const copies = els.map((el) => {
+    const copy = clone(el);
+    const walk = (e) => {
+      const id = uid();
+      map.set(e.id, id);
+      e.id = id;
+      if (e.type === 'group') e.children.forEach(walk);
+    };
+    walk(copy);
+    return copy;
+  });
+  const remap = (els) => {
+    for (const c of els) {
+      if (c.type === 'group') remap(c.children);
+      if (c.type !== 'connector') continue;
+      // Keep the side an end left from, so a loose end keeps the line's shape.
+      for (const k of ['start', 'end']) c[k] = { id: c[k]?.id ? map.get(c[k].id) ?? null : null, side: c[k]?.side };
+    }
   };
-  walk(copy);
-  return copy;
+  remap(copies);
+  return copies;
 }
+
 
 /** Copies of elements with new ids, ready to paste. */
 export function copyElements(doc, pageIndex, ids) {
@@ -84,8 +114,7 @@ export function copyElements(doc, pageIndex, ids) {
 export function pasteElements(doc, pageIndex, els, offset = 0) {
   const page = getPage(doc, pageIndex);
   const ids = [];
-  for (const el of els) {
-    const copy = freshIds(el);
+  for (const copy of freshCopies(els)) {
     copy.x += offset;
     copy.y += offset;
     copy.locked = false;
@@ -145,8 +174,9 @@ export function scaleElement(el, sx, sy) {
   el.h *= sy;
   if (el.type === 'text') {
     el.size = Math.max(1, round(el.size * s));
+    if (el.letterSpacing) el.letterSpacing = round(el.letterSpacing * s);
     if (el.outline) el.outline = { ...el.outline, width: el.outline.width * s };
-    if (el.highlight) el.highlight = { ...el.highlight, padding: (el.highlight.padding ?? 0) * s };
+    if (el.highlight) el.highlight = { ...el.highlight, padding: (el.highlight.padding ?? 0) * s, radius: (el.highlight.radius ?? 0) * s };
   }
   if (el.type === 'table') el.size = Math.max(1, round(el.size * s));
   if (el.strokeWidth) el.strokeWidth *= s;
@@ -287,11 +317,13 @@ export function flipElements(doc, pageIndex, ids, axis) {
 // ---------- style painter ----------
 
 const STYLE_KEYS = {
-  text: ['font', 'size', 'weight', 'italic', 'underline', 'strike', 'color', 'align', 'lineHeight', 'letterSpacing', 'caps', 'outline', 'highlight'],
+  text: ['font', 'size', 'weight', 'italic', 'underline', 'strike', 'color', 'align', 'lineHeight', 'letterSpacing', 'caps', 'outline', 'highlight', 'effect'],
   shape: ['fill', 'stroke', 'strokeWidth', 'dash', 'radius'],
   line: ['stroke', 'strokeWidth', 'dash', 'startCap', 'endCap'],
   image: ['filters', 'radius', 'mask'],
   icon: ['color'],
+  connector: ['stroke', 'strokeWidth', 'dash', 'startCap', 'endCap', 'route'],
+  draw: ['stroke', 'strokeWidth'],
 };
 const SHARED_STYLE = ['opacity', 'shadow'];
 
@@ -308,7 +340,14 @@ export function pasteStyle(doc, pageIndex, ids, style) {
     if (el.type === style.type) keys.push(...(STYLE_KEYS[el.type] || []));
     else if (el.type === 'shape' && style.type === 'text') el.fill = style.color;
     else if (el.type === 'text' && style.type === 'shape' && typeof style.fill === 'string') el.color = style.fill;
+    const width = el.strokeWidth;
     for (const k of keys) if (k in style) el[k] = clone(style[k]);
+    // A drawing's box leaves room for half its line: a thicker line needs more.
+    if (el.type === 'draw' && el.strokeWidth !== width) {
+      const pen = el.strokeWidth;
+      el.strokeWidth = width;
+      Object.assign(el, restroke(el, pen));
+    }
   }
   touch(doc);
 }
@@ -322,11 +361,17 @@ export function addPage(doc, afterIndex = doc.pages.length - 1, page) {
   return afterIndex + 1;
 }
 
-export function duplicatePage(doc, index) {
-  const copy = clone(getPage(doc, index));
+/** A page with new ids for itself and everything on it (connectors re-joined). */
+export function freshPage(page) {
+  // The elements are copied once, by freshCopies.
+  const copy = clone({ ...page, elements: [] });
   copy.id = uid('p');
-  copy.elements = copy.elements.map(freshIds);
-  doc.pages.splice(index + 1, 0, copy);
+  copy.elements = freshCopies(page.elements);
+  return copy;
+}
+
+export function duplicatePage(doc, index) {
+  doc.pages.splice(index + 1, 0, freshPage(getPage(doc, index)));
   touch(doc);
   return index + 1;
 }
@@ -376,6 +421,10 @@ export function resizeDesign(doc, width, height) {
       if (b.w <= width) el.x += Math.max(0, -b.x) - Math.max(0, b.x + b.w - width);
       if (b.h <= height) el.y += Math.max(0, -b.y) - Math.max(0, b.y + b.h - height);
     }
+    // Guides keep their place relative to the page (a centre guide stays centred).
+    if (page.guides) page.guides = page.guides.map((g) => ({ ...g, pos: Math.round(g.pos * (g.axis === 'x' ? sx : sy)) }));
+    // Elements were nudged back onto the page one by one; re-attach connectors to where they ended up.
+    updateConnectors(page);
   }
   out.width = Math.round(width);
   out.height = Math.round(height);
@@ -387,7 +436,8 @@ export function resizeDesign(doc, width, height) {
 export function collectColors(doc) {
   const counts = new Map();
   const add = (c) => {
-    if (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)) counts.set(c.toLowerCase(), (counts.get(c.toLowerCase()) || 0) + 1);
+    const key = typeof c === 'string' ? normalizeHex(c) : null;
+    if (key) counts.set(key, (counts.get(key) || 0) + 1);
     else if (c && typeof c === 'object' && Array.isArray(c.stops)) c.stops.forEach((s) => add(s.color));
   };
   const visit = (els) => {
@@ -397,6 +447,14 @@ export function collectColors(doc) {
       add(el.color);
       if (el.highlight) add(el.highlight.color);
       if (el.outline) add(el.outline.color);
+      if (el.effect) {
+        add(el.effect.color);
+        add(el.effect.color2);
+      }
+      if (el.filters?.duotone) {
+        add(el.filters.duotone.dark);
+        add(el.filters.duotone.light);
+      }
       if (el.type === 'group') visit(el.children);
     }
   };
@@ -420,7 +478,7 @@ export function applyBrand(doc, brand) {
     if (colors.length) map.set(c, colors[i % colors.length]);
   });
   const swap = (c) => {
-    if (typeof c === 'string') return map.get(c.toLowerCase()) || c;
+    if (typeof c === 'string') return map.get(normalizeHex(c)) || c;
     if (c && typeof c === 'object' && Array.isArray(c.stops)) return { ...c, stops: c.stops.map((s) => ({ ...s, color: swap(s.color) })) };
     return c;
   };
@@ -431,6 +489,14 @@ export function applyBrand(doc, brand) {
       if (el.stroke) el.stroke = swap(el.stroke);
       if (el.color) el.color = swap(el.color);
       if (el.highlight) el.highlight = { ...el.highlight, color: swap(el.highlight.color) };
+      if (el.outline) el.outline = { ...el.outline, color: swap(el.outline.color) };
+      if (el.effect) el.effect = { ...el.effect, color: swap(el.effect.color), color2: swap(el.effect.color2) };
+      if (el.filters?.duotone) {
+        const dark = swap(el.filters.duotone.dark);
+        const light = swap(el.filters.duotone.light);
+        // Both ends on one brand color would flatten the photo to a block: keep it as it was.
+        if (dark !== light) el.filters = { ...el.filters, duotone: { dark, light } };
+      }
       if (el.type === 'text') texts.push(el);
       if (el.type === 'group') visit(el.children);
     }

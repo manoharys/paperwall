@@ -1,8 +1,8 @@
 // The home screen: start a design, pick a template, see your designs.
 
-import { h, icon, iconButton, clear, toast, pickFile, dialog } from './ui.js';
+import { h, icon, iconButton, clear, toast, pickFile, dialog, forget } from './ui.js';
 import { PRESETS, createDesign, createDesignFromPreset, toPx, uid, clone } from '../model/doc.js';
-import { templateBrowser, forget } from './insert.js';
+import { templateBrowser } from './insert.js';
 import { readyTemplate } from './templates.js';
 import * as store from './store.js';
 import { readProjectFile } from './export.js';
@@ -67,8 +67,9 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, installPr
           if (!file) return;
           try {
             const doc = await readProjectFile(file);
-            const existing = await store.loadDesign(doc.id);
-            if (existing) doc.id = uid('d');
+            // A new id if the design is here already, or if history from a
+            // deleted copy is still kept under its id (it would attach to this one).
+            if ((await store.loadDesign(doc.id)) || (await store.hasVersions(doc.id))) doc.id = uid('d');
             newDesign(doc);
           } catch (e) {
             toast(e.message, 'error');

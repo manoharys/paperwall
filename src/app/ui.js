@@ -6,7 +6,13 @@ export function h(tag, attrs, ...children) {
     for (const [k, v] of Object.entries(attrs)) {
       if (v === undefined || v === null || v === false) continue;
       if (k === 'class') el.className = v;
-      else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+      else if (k === 'style' && typeof v === 'object') {
+        // Custom properties (--name) only work through setProperty.
+        for (const [p, val] of Object.entries(v)) {
+          if (p.startsWith('--')) el.style.setProperty(p, val);
+          else el.style[p] = val;
+        }
+      }
       else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
       else if (k === 'html') el.innerHTML = v;
       else if (v === true) el.setAttribute(k, '');
@@ -84,6 +90,12 @@ const UI_ICONS = {
   open: '<path d="M3.5 7.5V18.5h17v-9h-9l-2-2z"/>',
   save: '<path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/>',
   crop: '<path d="M7 3v14h14M3 7h14v14"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
+  ruler: '<path d="M3 8h18v8H3z"/><path d="M7 8v3M11 8v4M15 8v3M19 8v4"/>',
+  connect: '<rect x="3" y="4" width="6" height="6" rx="1"/><rect x="15" y="14" width="6" height="6" rx="1"/><path d="M9 7h4v10h2"/>',
+  grid: '<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>',
+  history: '<path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4"/><path d="M12 8v4l3 2"/>',
+  draw: '<path d="M4 20c2-1 3-4 5-4s2 3 4 3 3-5 7-8"/><path d="M15 4l5 5"/>',
   paint: '<rect x="4" y="3.5" width="14" height="6" rx="1"/><path d="M18 6.5h2v5h-8v3M11 14.5h2v6h-2z"/>',
   pasteStyle: '<rect x="3.5" y="3.5" width="11" height="5" rx="1"/><path d="M14.5 6h2v4h-6.5v2.5M9 12.5h2v5H9z"/><path d="M16 15.5h5M18.5 13v5"/>',
   dropper: '<path d="M14.5 5.5l4 4M17 3.5a2.1 2.1 0 0 1 3 3l-2 2-3-3zM15 7.5l-9 9-1.5 3.5L8 18.5l9-9"/>',
@@ -105,6 +117,21 @@ export function icon(name, size = 20) {
   return span;
 }
 
+/**
+ * Something to press that can also be dragged: a div acting as a button
+ * (Firefox never starts a drag from a <button>). Enter and Space press it.
+ */
+export function pressable(attrs, onPress, ...children) {
+  return h('div', {
+    role: 'button', tabindex: '0', ...attrs, onClick: onPress,
+    onKeydown: (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      onPress(e);
+    },
+  }, ...children);
+}
+
 export function iconButton(name, label, onClick, attrs = {}) {
   return h('button', { type: 'button', class: 'icon-btn', title: label, 'aria-label': label, onClick, ...attrs }, icon(name));
 }
@@ -113,11 +140,20 @@ export function debounce(fn, ms) {
   let t = null;
   const wrapped = (...args) => {
     clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
+    t = setTimeout(() => {
+      t = null;
+      fn(...args);
+    }, ms);
   };
   wrapped.flush = () => {
     clearTimeout(t);
+    t = null;
     return fn();
+  };
+  /** Run now only if a call is waiting. */
+  wrapped.flushPending = () => {
+    if (t === null) return Promise.resolve();
+    return wrapped.flush();
   };
   return wrapped;
 }
@@ -245,3 +281,34 @@ export function pickFile(accept, multiple = false) {
 
 export const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const mod = isMac ? '⌘' : 'Ctrl';
+
+// ---------- lazy loading ----------
+
+const pending = new WeakMap();
+const observer = typeof IntersectionObserver !== 'undefined'
+  ? new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      observer.unobserve(e.target);
+      pending.get(e.target)?.();
+      pending.delete(e.target);
+    }
+  }, { rootMargin: '400px' })
+  : null;
+
+/** Run fn when el comes near the screen (right away where that can't be observed). */
+export function lazily(el, fn) {
+  if (!observer) return void fn();
+  pending.set(el, fn);
+  el.dataset.lazy = '';
+  observer.observe(el);
+}
+
+/** Stop waiting on everything inside root, before it is thrown away. */
+export function forget(root) {
+  if (!observer) return;
+  for (const el of root.querySelectorAll('[data-lazy]')) {
+    observer.unobserve(el);
+    pending.delete(el);
+  }
+}

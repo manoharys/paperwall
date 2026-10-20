@@ -4,7 +4,7 @@
 import { renderPage, textRuns } from '../model/render.js';
 import { buildPdf } from '../model/pdf.js';
 import { buildZip } from '../model/zip.js';
-import { validateDesign, clone } from '../model/doc.js';
+import { validateDesign, clone, visiblePages, printDpi, pageLabel } from '../model/doc.js';
 import { measure, fontCssFor, registerDesignFonts } from './fonts.js';
 import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage } from './ui.js';
 import { section, segmented, slider, toggle } from './widgets.js';
@@ -62,7 +62,7 @@ export async function exportSvg(doc, pageIndex, { transparent = false } = {}) {
 
 /** Print designs (mm/in sizes) are 300 DPI; screen designs are 96 DPI. */
 export function pagePoints(doc) {
-  const dpi = doc.unit === 'mm' || doc.unit === 'in' ? 300 : 96;
+  const dpi = printDpi(doc);
   return { ptWidth: (doc.width / dpi) * 72, ptHeight: (doc.height / dpi) * 72, renderScale: dpi === 300 ? 1 : 2 };
 }
 
@@ -138,7 +138,10 @@ export async function readProjectFile(file) {
 
 export function exportDialog(editor) {
   const doc = editor.doc;
-  const state = { format: 'png', scale: 1, transparent: false, quality: 92, pages: new Set(doc.pages.map((_, i) => i)) };
+  // Hidden pages start unticked; tick one to download it anyway. If every
+  // page is hidden (or there's just one), start with all of them.
+  const visible = visiblePages(doc);
+  const state = { format: 'png', scale: 1, transparent: false, quality: 92, pages: new Set(visible.length && doc.pages.length > 1 ? visible : doc.pages.map((_, i) => i)) };
   const body = h('div', { class: 'export' });
   const draw = () => {
     body.replaceChildren(...[
@@ -167,7 +170,8 @@ export function exportDialog(editor) {
         const cb = h('input', { type: 'checkbox', 'data-testid': `export-page-${i + 1}` });
         cb.checked = state.pages.has(i);
         cb.addEventListener('change', () => (cb.checked ? state.pages.add(i) : state.pages.delete(i)));
-        return h('label', { class: 'toggle' }, cb, h('span', null, `Page ${i + 1}`));
+        const p = doc.pages[i];
+        return h('label', { class: 'toggle' }, cb, h('span', null, pageLabel(p, i)));
       }))) : null,
       h('div', { class: 'export-actions' },
         h('button', { type: 'button', class: 'btn primary big', 'data-testid': 'export-download', onClick: () => run() }, icon('download'), 'Download'),

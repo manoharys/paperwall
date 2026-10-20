@@ -1,19 +1,22 @@
 // Paperwall: boot, routing between the home screen and the editor, and the
 // editor's top bar.
 
-import { h, icon, iconButton, clear, toast, mod } from './ui.js';
+import { h, icon, iconButton, clear, toast, mod, forget } from './ui.js';
 import { Editor } from './editor.js';
 import { Canvas } from './canvas.js';
 import { Inspector, resizeDialog } from './inspector.js';
-import { InsertPanel, forget } from './insert.js';
+import { InsertPanel } from './insert.js';
 import { PageStrip, present } from './pages.js';
 import { bindShortcuts, cheatSheet } from './shortcuts.js';
 import { exportDialog, saveProjectFile, thumbnail, api as exportApi } from './export.js';
 import { renderHome } from './home.js';
 import { loadFonts, registerDesignFonts, ensureDesignFonts, clearMeasureCache } from './fonts.js';
 import * as store from './store.js';
-import { validateDesign } from '../model/doc.js';
+import { validateDesign, versionSnapshot } from '../model/doc.js';
 import { fontsUsed } from '../model/fonts.js';
+import { menuButton, toggle, segmented } from './widgets.js';
+import { findDialog } from './find.js';
+import { historyDialog } from './history.js';
 
 const root = document.getElementById('app');
 let current = null; // { editor, unbind }
@@ -65,12 +68,18 @@ async function closeEditor() {
   if (!current) return;
   const { editor, unbind } = current;
   current = null;
+  // A drag still going (leaving by a key or the back button) ends as if let go.
+  editor.endDrag?.();
   editor.closed = true;
   unbind();
   window.paperwall = null;
+  // Save the design and its thumbnail first; then, if it changed, keep a
+  // version of it (reusing that thumbnail).
   await editor.flush();
-  // Make sure the home screen has a preview, even for a design opened and left unchanged.
   await editor.thumb.flush();
+  // After the first check for versions (it may still be saving the Original).
+  await editor.versionsChecked;
+  await editor.maybeSaveVersion(-1);
 }
 
 async function showHome() {
@@ -116,6 +125,14 @@ async function openEditor(id) {
     editor.refitAllText();
     pendingFit = false;
   }
+  // The first time a design is opened, keep its original as a version; after
+  // that, the next version comes after a few minutes of work. The original is
+  // copied now (text measured), before any edit can land while storage answers.
+  const original = versionSnapshot(doc);
+  // (Closing waits for this, so the Original always comes first.)
+  editor.versionsChecked = store.hasVersions(doc.id).then((has) => (has ? (editor.versionAt = Date.now()) : editor.saveVersion('Original', { snapshot: original }))).catch(() => {
+    editor.versionAt = Date.now(); // can't tell: carry on keeping versions every few minutes
+  });
   const meta = (await store.listDesigns()).find((d) => d.id === doc.id);
   if (!meta?.thumb) editor.thumb();
   const canvas = new Canvas(editor);
@@ -142,6 +159,9 @@ async function openEditor(id) {
     h('div', { class: 'top-group right' },
       iconButton('present', 'Present', () => present(editor, canvas), { 'data-testid': 'present' }),
       iconButton('save', 'Save to file', () => saveProjectFile(editor.doc), { 'data-testid': 'save-file' }),
+      iconButton('search', 'Find and replace (Ctrl+F)', () => findDialog(editor), { 'data-testid': 'find-btn' }),
+      iconButton('history', 'Version history', () => historyDialog(editor), { 'data-testid': 'history-btn' }),
+      menuButton({ iconName: 'ruler', label: 'View: rulers, guides, grid', testid: 'view', content: () => viewMenu(editor) }),
       iconButton('keyboard', 'Keyboard shortcuts (?)', () => cheatSheet(), { 'data-testid': 'shortcuts-btn' }),
       iconButton('moon', 'Dark mode', toggleTheme, { 'data-testid': 'theme-toggle' }),
       h('button', { type: 'button', class: 'btn primary', 'data-testid': 'download', onClick: () => exportDialog(editor) }, icon('download'), h('span', null, 'Download'))));
@@ -151,6 +171,8 @@ async function openEditor(id) {
   const setSheet = (name) => {
     if (workspace.dataset.sheet === name) return;
     workspace.dataset.sheet = name;
+    // Hiding the Draw panel ends drawing, as on bigger screens.
+    if (name !== 'insert' && editor.drawTool) editor.emit('stop-drawing');
     // The canvas just changed size on phones; fit the page into it again.
     if (window.matchMedia('(max-width: 900px)').matches) requestAnimationFrame(() => canvas.zoomToFit());
   };
@@ -165,7 +187,7 @@ async function openEditor(id) {
   forget(root);
   clear(root);
   root.append(h('div', { class: 'editor' }, top, workspace, strip.el));
-  const unbindKeys = bindShortcuts(editor, canvas, { exportDialog: () => exportDialog(editor) });
+  const unbindKeys = bindShortcuts(editor, canvas, { exportDialog: () => exportDialog(editor), findDialog: () => findDialog(editor) });
   const offTop = editor.on(syncTop);
   const onResize = () => canvas.layout();
   window.addEventListener('resize', onResize);
@@ -183,8 +205,12 @@ async function openEditor(id) {
     clearMeasureCache();
     const families = new Set([...loaded].map((k) => k.split('|')[0]));
     // A correction to measurements, not an edit: saved, but not an undo step.
-    if (editor.refitAllText((el) => families.has(el.font))) editor.afterChange(true);
-    canvas.render();
+    // Not mid-drag: that would cut the drag short (or be undone with it).
+    editor.whenIdle(() => {
+      if (editor.closed) return;
+      if (editor.refitAllText((el) => families.has(el.font))) editor.afterChange(true, { edit: false });
+      canvas.render();
+    });
   };
   document.fonts.addEventListener('loadingdone', onFontsLoaded);
   current = {
@@ -201,9 +227,18 @@ async function openEditor(id) {
 }
 
 window.addEventListener('hashchange', route);
+window.addEventListener('paperwall:storage-outdated', () => toast('Paperwall was updated in another tab. Reload this tab to keep saving your work.', 'error'));
+window.addEventListener('paperwall:storage-blocked', () => toast('Paperwall is updating its storage. Close any other Paperwall tabs to finish.', 'error'));
 window.addEventListener('beforeunload', () => current?.editor.flush());
+// Hidden comes before a tab is closed or reloaded (beforeunload may not
+// come at all), so that's when work since the last version is kept too.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') current?.editor.flush();
+  if (document.visibilityState !== 'hidden' || !current) return;
+  const { editor } = current;
+  editor.flush();
+  // Not on every quick switch to another tab (at most once a minute), not
+  // mid-drag, and not before the first check for versions is done.
+  editor.maybeSaveVersion(60_000, { quick: true });
 });
 
 async function boot() {
@@ -217,3 +252,26 @@ async function boot() {
 }
 
 boot();
+
+/** Rulers, guides, grid, margins and bleed: how the page is shown, not part of the design. */
+function viewMenu(editor) {
+  const v = editor.view;
+  const set = (patch) => {
+    editor.setView(patch);
+    // Rebuild the menu so dependent settings appear and disappear.
+    const pop = document.querySelector('[data-testid="view-menu"]');
+    pop?.replaceChildren(viewMenu(editor));
+  };
+  return h('div', { class: 'stack' },
+    toggle({ label: 'Rulers (Shift+R)', checked: v.rulers, testid: 'view-rulers', onChange: (rulers) => set({ rulers }) }),
+    h('p', { class: 'hint' }, 'Drag from a ruler to add a guide. Drag a guide off the page to remove it.'),
+    h('button', { type: 'button', class: 'btn small', 'data-testid': 'view-clear-guides', onClick: () => editor.clearGuides() }, 'Clear guides on this page'),
+    toggle({ label: 'Grid', checked: v.grid, testid: 'view-grid', onChange: (grid) => set({ grid }) }),
+    v.grid ? segmented({ label: 'Grid size', value: v.gridSize, testid: 'view-grid-size', onChange: (gridSize) => set({ gridSize }), options: [
+      { value: 'small', label: 'Small grid', text: 'Small' }, { value: 'medium', label: 'Medium grid', text: 'Medium' }, { value: 'large', label: 'Large grid', text: 'Large' },
+    ] }) : null,
+    v.grid ? toggle({ label: 'Snap to grid', checked: v.snapGrid, testid: 'view-snap-grid', onChange: (snapGrid) => set({ snapGrid }) }) : null,
+    toggle({ label: 'Safe margins', checked: v.margins, testid: 'view-margins', onChange: (margins) => set({ margins }) }),
+    toggle({ label: 'Print bleed (3 mm)', checked: v.bleed, testid: 'view-bleed', onChange: (bleed) => set({ bleed }) }),
+    v.bleed ? h('p', { class: 'hint' }, 'Anything past the dashed red line may be trimmed when printed; let backgrounds run to the edge.') : null);
+}

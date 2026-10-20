@@ -1,6 +1,23 @@
 # Changelog
 
-## 0.2.0 (unreleased): Library
+## 0.3.0 (unreleased): Editor pro
+
+- Photo frames in nine shapes and twelve photo grids: drop, drag or pick a
+  photo and it's cropped to fill.
+- Text effects (lift, hollow, splice, echo, glitch, glow, neon) and
+  fourteen ready-made text combinations.
+- Gradients with up to eight colors and twelve presets; duotone, warmth,
+  tint, hue and vignette for photos.
+- Freehand drawing with a pen, marker or highlighter.
+- Rulers and guides, a snapping grid, safe margins and print bleed.
+- Connector lines (straight, elbow, curved) that stay attached.
+- Find and replace across every page; spell check while typing.
+- Page titles, hidden pages and a page grid view.
+- Version history kept on your device, with restore.
+- Fixes: color swatches in color pickers were transparent; the build
+  could corrupt code containing "$&".
+
+## 0.2.0: Library
 
 - 397 templates in 44 categories, made from original copy by a layout engine:
   text shrinks to fit and blocks stack, so nothing overflows. Every template

@@ -4,28 +4,7 @@
 
 import { layoutText } from './text-layout.js';
 import { boundsOf, rectsIntersect } from './geometry.js';
-
-export function hexToRgb(hex) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
-  if (!m) return null;
-  const n = parseInt(m[1], 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-function luminance([r, g, b]) {
-  const c = [r, g, b].map((v) => {
-    const s = v / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-}
-
-/** WCAG contrast ratio between two colors (1–21). */
-export function contrast(a, b) {
-  const la = luminance(a);
-  const lb = luminance(b);
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-}
+import { hexToRgb, contrast } from './color.js';
 
 /** A representative color for a fill: the color itself, or the average of a gradient. */
 export function paintColor(p) {

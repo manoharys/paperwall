@@ -19,6 +19,9 @@ export const SHORTCUTS = [
   ['Edit selected text', 'Enter'],
   ['Add text, rectangle, circle, line', 'T, R, O, L'],
   ['Zoom in / out / fit', `${mod}+= / ${mod}+- / ${mod}+0`],
+  ['Find and replace', `${mod}+F`],
+  ['Rulers on / off', 'Shift+R'],
+  ['Stop drawing', 'Esc'],
   ['Zoom with the mouse', `${mod}+scroll`],
   ['Move around', 'Scroll, or hold Space and drag'],
   ['Keep proportions while resizing', 'Shift'],
@@ -46,6 +49,12 @@ export function bindShortcuts(editor, canvas, actions) {
 
   const onKey = (e) => {
     if (typing(e) || document.querySelector('.backdrop, .presenter')) return;
+    // While a drag is going it holds parts of the design: keys wait (and a
+    // cancelled drag then puts back exactly what it changed).
+    if (editor.isDragging?.()) {
+      if (/^[a-z]$|^(delete|backspace|arrow\w+)$/.test(e.key.toLowerCase())) e.preventDefault();
+      return;
+    }
     const m = e.metaKey || e.ctrlKey;
     const k = e.key.toLowerCase();
     const done = () => e.preventDefault();
@@ -71,6 +80,7 @@ export function bindShortcuts(editor, canvas, actions) {
     if (m && e.key === '-') return done(), canvas.zoomBy(1 / 1.25);
     if (m && e.key === '0') return done(), canvas.zoomToFit();
     if (m && k === 'e') return done(), actions.exportDialog();
+    if (m && k === 'f') return done(), actions.findDialog();
     if (m && k === 's') {
       done();
       editor.flush();
@@ -79,6 +89,7 @@ export function bindShortcuts(editor, canvas, actions) {
     if (m) return;
     if (e.key === 'Delete' || e.key === 'Backspace') return done(), editor.deleteSelection();
     if (e.key === 'Escape') {
+      if (editor.drawTool) return editor.emit('stop-drawing');
       if (editor.cropId) {
         editor.cropId = null;
         return editor.emit('selection');
@@ -102,6 +113,7 @@ export function bindShortcuts(editor, canvas, actions) {
     }
     if (e.key === '?') return done(), cheatSheet();
     if (k === 't') return done(), editor.addText('body');
+    if (k === 'r' && e.shiftKey) return done(), editor.setView({ rulers: !editor.view.rulers });
     if (k === 'r') return done(), editor.addShape('rect');
     if (k === 'o') return done(), editor.addShape('ellipse');
     if (k === 'l') return done(), editor.addLine();

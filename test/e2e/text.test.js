@@ -199,3 +199,35 @@ test('the font button opens and closes its list', async () => {
   assert.equal(await page.locator('[data-testid="font-popover"]').count(), 0);
   await context.close();
 });
+
+test('[TXT-22] text effects: lift, hollow, splice, echo, glitch, glow, neon', async () => {
+  const { page, context } = await newDesign('square');
+  await addText(page);
+  const id = (await elements(page)).at(-1).id;
+  assert.equal(await page.locator('[data-testid="text-effects"] .fx').count(), 8);
+  await page.click('[data-testid="effect-hollow"]');
+  assert.equal((await elements(page)).at(-1).effect.type, 'hollow');
+  assert.equal(await page.locator(`[data-testid="page"] [data-id="${id}"] text[fill="none"]`).count(), 1);
+  await page.click('[data-testid="effect-splice"]');
+  assert.equal(await page.locator(`[data-testid="page"] [data-id="${id}"] text`).count(), 2);
+  await page.locator('[data-testid="effect-offset"]').fill('20');
+  assert.equal((await elements(page)).at(-1).effect.offset, 0.2);
+  await page.click('[data-testid="effect-neon"]');
+  assert.ok(await page.locator(`[data-testid="page"] [data-id="${id}"] g[filter]`).count() >= 1);
+  await page.click('[data-testid="effect-none"]');
+  assert.equal((await elements(page)).at(-1).effect, null);
+  await context.close();
+});
+
+test('[TXT-23] ready-made text combinations', async () => {
+  const { page, context } = await newDesign('square');
+  await openTab(page, 'text');
+  assert.ok((await page.locator('[data-testid="text-combos"] .combo').count()) >= 12);
+  await page.click('[data-testid="combo-big-sale"]');
+  await page.waitForFunction(() => window.paperwall.editor.pageData.elements.some((e) => e.type === 'group'));
+  const g = (await elements(page)).find((e) => e.type === 'group');
+  assert.deepEqual(g.children.map((c) => c.text), ['LIMITED TIME', 'BIG SALE', 'Up to 50% off everything']);
+  assert.ok(g.x >= 0 && g.y >= 0 && g.x + g.w <= 1080 && g.y + g.h <= 1080, 'fits on the page');
+  assert.equal(await state(page, (ed) => ed.selection[0]), g.id);
+  await context.close();
+});

@@ -1,5 +1,7 @@
 // The design document: pages of elements, plus the images they use.
 
+import { boxAround } from './geometry.js';
+
 export const FORMAT_VERSION = 1;
 export const DPI = 300;
 
@@ -23,8 +25,33 @@ export const PRESETS = [
   { id: 'logo', name: 'Logo', group: 'Brand', w: 500, h: 500 },
 ];
 
+/** Indexes of the pages that aren't hidden (shown when presenting and downloading). */
+export function visiblePages(doc) {
+  return doc.pages.map((p, i) => (p.hidden ? -1 : i)).filter((i) => i >= 0);
+}
+
 export function presetById(id) {
   return PRESETS.find((p) => p.id === id) || null;
+}
+
+/** How a page is named in lists: its number, and its title if it has one. */
+export function pageName(page, i) {
+  return page.title ? `Page ${i + 1}: ${page.title}` : `Page ${i + 1}`;
+}
+
+/** Its name, saying so when it's hidden. */
+export function pageLabel(page, i) {
+  return page.hidden ? `${pageName(page, i)} (hidden)` : pageName(page, i);
+}
+
+/** Page px in one mm or inch (or 1 for px), unrounded. */
+export function pxPerUnit(unit, dpi = DPI) {
+  return unit === 'mm' ? dpi / 25.4 : unit === 'in' ? dpi : 1;
+}
+
+/** The resolution a design prints and exports at: print units at DPI, px designs as screens see them. */
+export function printDpi(doc) {
+  return doc.unit === 'mm' || doc.unit === 'in' ? DPI : 96;
 }
 
 /** Convert a print size to pixels at 300 DPI. */
@@ -117,7 +144,10 @@ export function createText(props = {}) {
   });
 }
 
-export const SHAPES = ['rect', 'ellipse', 'triangle', 'star', 'polygon', 'heart', 'arrow', 'bubble', 'diamond'];
+export const SHAPES = ['rect', 'ellipse', 'triangle', 'star', 'polygon', 'heart', 'arrow', 'bubble', 'diamond', 'arch', 'blob'];
+
+/** Shapes a photo can be framed in. 'none' is a plain (optionally rounded) rectangle. */
+export const FRAME_MASKS = ['none', 'circle', 'arch', 'blob', 'heart', 'star', 'polygon', 'triangle', 'diamond'];
 
 export function createShape(shape = 'rect', props = {}) {
   if (!SHAPES.includes(shape)) throw new Error(`Unknown shape: ${shape}`);
@@ -149,7 +179,7 @@ export function createLine(props = {}) {
   });
 }
 
-export const DEFAULT_FILTERS = { brightness: 100, contrast: 100, saturation: 100, grayscale: 0, sepia: 0, blur: 0 };
+export const DEFAULT_FILTERS = { brightness: 100, contrast: 100, saturation: 100, grayscale: 0, sepia: 0, blur: 0, warmth: 0, tint: 0, hue: 0, vignette: 0, duotone: null };
 
 export function createImage(assetId, props = {}) {
   return base('image', {
@@ -162,6 +192,55 @@ export function createImage(assetId, props = {}) {
     mask: 'none',
     ...props,
   });
+}
+
+export const DRAW_TOOLS = {
+  pen: { strokeWidth: 6, opacity: 1 },
+  marker: { strokeWidth: 18, opacity: 1 },
+  highlighter: { strokeWidth: 36, opacity: 0.4 },
+};
+
+/**
+ * A freehand stroke from points in page pixels. The points are stored as
+ * shares of the stroke's box, so the drawing stretches when it's resized.
+ */
+export function createDrawing(points, { tool = 'pen', stroke = '#1a1a2e', strokeWidth, ...props } = {}) {
+  const width = strokeWidth ?? DRAW_TOOLS[tool]?.strokeWidth ?? 6;
+  const { x, y, w, h, shares } = boxAround(points, width / 2);
+  return base('draw', {
+    x, y, w, h, tool, stroke, strokeWidth: width,
+    opacity: DRAW_TOOLS[tool]?.opacity ?? 1,
+    points: shares,
+    ...props,
+  });
+}
+
+/**
+ * The same drawing with a different line width: the box is padded again so
+ * the thicker (or thinner) line still fits inside it, with the line in place.
+ */
+export function restroke(el, width) {
+  if (!el.points?.length) return { strokeWidth: width }; // nothing drawn: no box to fit
+  const abs = el.points.map(([x, y]) => [el.x + x * el.w, el.y + y * el.h]);
+  const { x, y, w, h, shares } = boxAround(abs, width / 2);
+  return { x, y, w, h, points: shares, strokeWidth: width };
+}
+
+/** Drop points closer than `min` px to the last kept one (they add size, not shape). */
+export function thinPoints(points, min = 2) {
+  const out = [];
+  for (const p of points) {
+    const q = out[out.length - 1];
+    if (!q || Math.hypot(p[0] - q[0], p[1] - q[1]) >= min) out.push(p);
+  }
+  const last = points[points.length - 1];
+  if (last && out[out.length - 1] !== last) out.push(last);
+  return out;
+}
+
+/** A photo frame: an image in a shape, empty until a photo is dropped in. */
+export function createFrame(mask = 'none', props = {}) {
+  return createImage(null, { w: 500, h: 500, mask, ...props });
 }
 
 export function createIcon(iconId, props = {}) {
@@ -261,8 +340,8 @@ export function addAsset(doc, { mime, dataUrl, width, height, name = '' }) {
   return id;
 }
 
-/** Remove images that no element or background uses any more. */
-export function pruneAssets(doc) {
+/** The ids of the images a design actually shows (on elements, in groups, as backgrounds). */
+export function usedAssetIds(doc) {
   const used = new Set();
   const visit = (els) => {
     for (const el of els) {
@@ -274,8 +353,19 @@ export function pruneAssets(doc) {
     visit(p.elements);
     if (p.background?.type === 'image') used.add(p.background.assetId);
   }
+  return used;
+}
+
+/** Remove images that no element or background uses any more. */
+export function pruneAssets(doc) {
+  const used = usedAssetIds(doc);
   for (const id of Object.keys(doc.assets)) if (!used.has(id)) delete doc.assets[id];
   return doc;
+}
+
+/** Whether an image element is an empty frame: no picture yet, or its picture is missing. */
+export function isEmptyFrame(doc, el) {
+  return el?.type === 'image' && !doc.assets[el.assetId];
 }
 
 /** Check that a parsed file looks like a Paperwall design. Throws a readable error if not. */
@@ -293,11 +383,19 @@ export function validateDesign(doc) {
   const clean = (els) => els.filter((el) => el && typeof el === 'object' && typeof el.type === 'string' && typeof el.id === 'string').map((el) => {
     for (const k of NUMERIC) if (k in el && el[k] !== null) el[k] = Number.isFinite(+el[k]) ? +el[k] : 0;
     if (el.type === 'group') el.children = Array.isArray(el.children) ? clean(el.children) : [];
+    if (el.type === 'draw' || el.type === 'connector') el.points = (Array.isArray(el.points) ? el.points : []).filter((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite));
+    if (el.type === 'connector') {
+      if (el.points.length !== 2) el.points = [[0, 0], [1, 1]];
+      for (const k of ['start', 'end']) el[k] = { id: typeof el[k]?.id === 'string' ? el[k].id : null, side: ['l', 'r', 't', 'b'].includes(el[k]?.side) ? el[k].side : undefined };
+    }
     return el;
   });
   for (const p of doc.pages) {
     if (!p || !Array.isArray(p.elements)) throw new Error('A page in this design is damaged');
     p.elements = clean(p.elements);
+    if (p.title !== undefined) p.title = typeof p.title === 'string' ? p.title.slice(0, 120) : undefined;
+    if (p.hidden !== undefined) p.hidden = p.hidden === true || undefined;
+    if (p.guides !== undefined) p.guides = (Array.isArray(p.guides) ? p.guides : []).filter((g) => g && (g.axis === 'x' || g.axis === 'y') && Number.isFinite(+g.pos)).map((g) => ({ axis: g.axis, pos: +g.pos }));
   }
   for (const [id, a] of Object.entries(doc.assets)) {
     if (!a || typeof a.dataUrl !== 'string' || !/^data:(image|font)\//.test(a.dataUrl)) delete doc.assets[id];
@@ -308,4 +406,13 @@ export function validateDesign(doc) {
 
 export function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+/** A copy of a design for its version history. Images never change once added, so they're shared, not copied. */
+export function versionSnapshot(doc) {
+  // Only the images it shows (ones replaced long ago needn't be kept by every
+  // version), and every font it carries.
+  const used = usedAssetIds(doc);
+  const assets = Object.fromEntries(Object.entries(doc.assets || {}).filter(([id, a]) => used.has(id) || a?.type === 'font'));
+  return { ...clone({ ...doc, assets: undefined }), assets };
 }

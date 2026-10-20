@@ -57,6 +57,25 @@ export function unionBounds(boxes) {
   return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
 }
 
+/**
+ * A page point as it falls on an element drawn plain: its turn undone, then
+ * its mirroring (the renderer mirrors first, then turns).
+ */
+export function toLocal(el, p) {
+  const cx = el.x + el.w / 2;
+  const cy = el.y + el.h / 2;
+  const r = el.rotation ? rotatePoint(p.x, p.y, cx, cy, -el.rotation) : p;
+  return { x: el.flipX ? 2 * cx - r.x : r.x, y: el.flipY ? 2 * cy - r.y : r.y };
+}
+
+/** The other way: where a point on the plain element is drawn on the page (mirrored, then turned). */
+export function fromLocal(el, p) {
+  const cx = el.x + el.w / 2;
+  const cy = el.y + el.h / 2;
+  const m = { x: el.flipX ? 2 * cx - p.x : p.x, y: el.flipY ? 2 * cy - p.y : p.y };
+  return el.rotation ? rotatePoint(m.x, m.y, cx, cy, el.rotation) : m;
+}
+
 /** Is the point inside the rotated box (with an optional margin in px)? */
 export function pointInBox(px, py, b, margin = 0) {
   const c = boxCenter(b);
@@ -146,15 +165,16 @@ export function snapAngle(deg, step = 15) {
 }
 
 /**
- * Snap a moving box to the page and to other boxes.
- * Returns the correction (dx, dy) and the guide lines to draw.
+ * Snap a moving box to the page edges and center, other elements, and any
+ * `extra` lines ({ x: [], y: [] }: your guides, grid lines). Returns the
+ * correction (dx, dy) and the guide lines to draw.
  */
-export function snapMove(moving, others, page, threshold = 6) {
+export function snapMove(moving, others, page, threshold = 6, extra = {}) {
   const m = boundsOf(moving);
   const xs = [m.x, m.x + m.w / 2, m.x + m.w];
   const ys = [m.y, m.y + m.h / 2, m.y + m.h];
-  const targetsX = [0, page.w / 2, page.w];
-  const targetsY = [0, page.h / 2, page.h];
+  const targetsX = [0, page.w / 2, page.w, ...(extra.x || [])];
+  const targetsY = [0, page.h / 2, page.h, ...(extra.y || [])];
   for (const o of others) {
     const b = boundsOf(o);
     targetsX.push(b.x, b.x + b.w / 2, b.x + b.w);
@@ -178,6 +198,60 @@ export function snapMove(moving, others, page, threshold = 6) {
   return { dx: bx ? bx.d : 0, dy: by ? by.d : 0, guides };
 }
 
+/** Round to 4 decimals (positions stored as shares of a box). */
+export function round4(n) {
+  return Math.round(n * 10000) / 10000;
+}
+
 export function round2(n) {
   return Math.round(n * 100) / 100;
+}
+
+/** Whether point p is within `tol` of a polyline through pts ([[x, y], ...]). */
+export function nearPolyline(pts, p, tol) {
+  if (pts.length === 1) return Math.hypot(p.x - pts[0][0], p.y - pts[0][1]) <= tol;
+  for (let i = 1; i < pts.length; i++) {
+    const [ax, ay] = pts[i - 1];
+    const [bx, by] = pts[i];
+    const len2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
+    const t = Math.max(0, Math.min(1, ((p.x - ax) * (bx - ax) + (p.y - ay) * (by - ay)) / len2));
+    if (Math.hypot(p.x - (ax + t * (bx - ax)), p.y - (ay + t * (by - ay))) <= tol) return true;
+  }
+  return false;
+}
+
+/**
+ * Make a group's box fit its children again (after their sizes changed),
+ * keeping everything where it is on the page, turned or mirrored groups too.
+ */
+export function refitGroup(group) {
+  if (group.type !== 'group' || !group.children.length) return;
+  const b = unionBounds(group.children); // in the group's own (unturned) space
+  for (const c of group.children) {
+    c.x -= b.x;
+    c.y -= b.y;
+  }
+  // How far the centre moves, in the group's space, then turned onto the page.
+  let dx = b.x + b.w / 2 - group.w / 2;
+  let dy = b.y + b.h / 2 - group.h / 2;
+  if (group.flipX) dx = -dx;
+  if (group.flipY) dy = -dy;
+  const r = ((group.rotation || 0) * Math.PI) / 180;
+  const cx = group.x + group.w / 2 + dx * Math.cos(r) - dy * Math.sin(r);
+  const cy = group.y + group.h / 2 + dx * Math.sin(r) + dy * Math.cos(r);
+  Object.assign(group, { x: cx - b.w / 2, y: cy - b.h / 2, w: b.w, h: b.h });
+}
+
+/**
+ * A box around points (padded by `pad`), with each point stored as a share
+ * of the box (0..1), so the shape stretches when the box is resized.
+ */
+export function boxAround(points, pad = 0) {
+  const xs = points.map((p) => p[0]);
+  const ys = points.map((p) => p[1]);
+  const x = Math.min(...xs) - pad;
+  const y = Math.min(...ys) - pad;
+  const w = Math.max(1, Math.max(...xs) + pad - x);
+  const h = Math.max(1, Math.max(...ys) + pad - y);
+  return { x, y, w, h, shares: points.map(([px, py]) => [round4((px - x) / w), round4((py - y) / h)]) };
 }

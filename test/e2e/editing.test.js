@@ -359,3 +359,273 @@ test('[EDIT-18] keyboard shortcuts cheat sheet', async () => {
   assert.deepEqual((await elements(page)).map((e) => e.type), ['text', 'shape', 'shape', 'line']);
   await context.close();
 });
+
+// ---------- rulers, guides, grid ----------
+
+test('[VIEW-06] rulers and guides you drag out, which elements snap to', async () => {
+  const { page, context } = await newDesign('square');
+  await page.keyboard.press('Shift+R');
+  assert.ok(await page.locator('[data-testid="ruler-x"]').isVisible());
+  // Pull a vertical guide out of the left ruler to x = 300.
+  const ruler = await page.locator('[data-testid="ruler-y"]').boundingBox();
+  const to = await screenPoint(page, 300, 500);
+  await drag(page, { x: ruler.x + 10, y: to.y }, to, { steps: 10 });
+  let guides = await state(page, (ed) => ed.pageData.guides || []);
+  assert.equal(guides.length, 1);
+  assert.equal(guides[0].axis, 'x');
+  assert.ok(Math.abs(guides[0].pos - 300) <= 2, `guide at ${guides[0].pos}`);
+  assert.equal(await page.locator('[data-testid="guide"]').count(), 1);
+  // A shape dragged near the guide snaps its left edge to it.
+  const s = await addShape(page, 'Square');
+  const c = await elementCenter(page, s.id);
+  const target = await screenPoint(page, 300 + s.w / 2 + 3, 400);
+  await drag(page, c, target, { steps: 12 });
+  const moved = (await elements(page)).find((e) => e.id === s.id);
+  assert.equal(Math.round(moved.x), Math.round(guides[0].pos), 'snapped to the guide');
+  // Guides are part of the design: undo removes them; dragging one off the page deletes it.
+  for (let i = 0; i < 3; i++) await page.keyboard.press(`${mod}+z`); // move, add shape, add guide
+  assert.equal((await state(page, (ed) => ed.pageData.guides || [])).length, 0);
+  await page.keyboard.press(`${mod}+Shift+z`);
+  guides = await state(page, (ed) => ed.pageData.guides || []);
+  assert.equal(guides.length, 1);
+  const g = await screenPoint(page, guides[0].pos, 900);
+  await page.mouse.click(10, 10);
+  await drag(page, g, { x: g.x - 2000, y: g.y }, { steps: 6 });
+  assert.equal((await state(page, (ed) => ed.pageData.guides || [])).length, 0);
+  await context.close();
+});
+
+test('[VIEW-07] grid with snapping, safe margins and print bleed', async () => {
+  const { page, context } = await newDesign('square');
+  await page.click('[data-testid="view"]');
+  await page.click('[data-testid="view-grid"]');
+  await page.click('[data-testid="view-margins"]');
+  await page.click('[data-testid="view-bleed"]');
+  // The overlay is drawn on the next animation frame: wait for it.
+  const shown = async (sel) => {
+    await page.locator(sel).first().waitFor({ state: 'attached', timeout: 5000 });
+    return page.locator(sel).count();
+  };
+  assert.equal(await shown('[data-testid="grid-lines"]'), 1);
+  assert.equal(await shown('[data-testid="margin-box"]'), 1);
+  assert.equal(await shown('[data-testid="bleed-zone"]'), 1);
+  await page.keyboard.press('Escape');
+  // Settings are remembered after a reload; none of it shows in exports.
+  await page.reload();
+  await page.waitForFunction(() => window.paperwall?.editor);
+  assert.equal(await shown('[data-testid="grid-lines"]'), 1);
+  const svg = await page.evaluate(async () => (await window.paperwall.export.exportSvg(window.paperwall.editor.doc, 0)).text());
+  assert.ok(!/grid-lines|margin-box|bleed/.test(svg));
+  // Elements snap to grid lines (every 54 px on a 1080 px page).
+  const s = await addShape(page, 'Square');
+  const c = await elementCenter(page, s.id);
+  await drag(page, c, await screenPoint(page, 220 + s.w / 2, 300 + s.h / 2), { steps: 12 });
+  const moved = (await elements(page)).find((e) => e.id === s.id);
+  assert.equal(Math.round(moved.x) % 54, 0, `x ${moved.x} is on the grid`);
+  await context.close();
+});
+
+// ---------- find and replace, spelling ----------
+
+test('[EDIT-19] find and replace text across every page', async () => {
+  const { page, context } = await newDesign('square');
+  await addText(page);
+  await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    ed.change(() => (ed.pageData.elements[0].text = 'Summer sale'));
+  });
+  await page.click('[data-testid="strip-add-page"]');
+  await addText(page);
+  await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    ed.change(() => (ed.pageData.elements[0].text = 'See you this summer'));
+  });
+  await page.keyboard.press(`${mod}+f`);
+  await page.fill('[data-testid="find-input"]', 'summer');
+  assert.match(await page.textContent('[data-testid="find-status"]'), /^2 matches in 2 places/);
+  // Previous, before anything is shown, goes to the last match.
+  await page.click('[data-testid="find-prev"]');
+  assert.match(await page.textContent('[data-testid="find-status"]'), /showing 2 of 2/);
+  assert.equal(await state(page, (ed) => ed.page), 1);
+  await page.click('[data-testid="find-next"]');
+  assert.equal(await state(page, (ed) => ed.page), 0, 'jumps to the first page');
+  await page.click('[data-testid="find-next"]');
+  assert.equal(await state(page, (ed) => ed.page), 1);
+  await page.fill('[data-testid="replace-input"]', 'winter');
+  await page.click('[data-testid="replace-all"]');
+  const texts = await state(page, (ed) => ed.doc.pages.map((p) => p.elements[0].text));
+  assert.deepEqual(texts, ['winter sale', 'See you this winter']);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press(`${mod}+z`);
+  assert.deepEqual(await state(page, (ed) => ed.doc.pages.map((p) => p.elements[0].text)), ['Summer sale', 'See you this summer'], 'one undo puts it all back');
+  await context.close();
+});
+
+test('[EDIT-20] spell check while editing text', async () => {
+  const { page, context } = await newDesign('square');
+  const t = await addText(page);
+  const p = await elementCenter(page, t.id);
+  await page.mouse.dblclick(p.x, p.y);
+  assert.equal(await page.getAttribute('[data-testid="text-editor"]', 'spellcheck'), 'true');
+  await context.close();
+});
+
+test('clicking a ruler without dragging leaves no guide and no undo step', async () => {
+  const { page, context } = await newDesign('square');
+  await page.keyboard.press('Shift+R');
+  const r = await page.locator('[data-testid="ruler-x"]').boundingBox();
+  await page.mouse.click(r.x + 100, r.y + 10);
+  assert.equal((await state(page, (ed) => ed.pageData.guides || [])).length, 0);
+  assert.equal(await state(page, (ed) => ed.history.canUndo), false);
+  await context.close();
+});
+
+test('[EDIT-01] a drag the system calls off puts everything back, with no undo step', async () => {
+  const { page, context } = await newDesign('square');
+  const s = await addShape(page, 'Square');
+  const steps = await state(page, (ed) => ed.history.past.length);
+  const c = await elementCenter(page, s.id);
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 120, c.y + 80, { steps: 6 });
+  assert.notEqual((await elements(page)).find((e) => e.id === s.id).x, s.x, 'moving');
+  // A palm or a system gesture: the browser cancels the pointer.
+  await page.evaluate(() => document.querySelector('[data-testid="stage"]').dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: 1 })));
+  await page.mouse.up();
+  const back = (await elements(page)).find((e) => e.id === s.id);
+  assert.deepEqual([back.x, back.y], [s.x, s.y]);
+  assert.equal(await state(page, (ed) => ed.history.past.length), steps);
+  await context.close();
+});
+
+test('[VIEW-06] undo waits while a guide is being dragged', async () => {
+  const { page, context } = await newDesign('square');
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.keyboard.press('Shift+R');
+  const ruler = await page.locator('[data-testid="ruler-y"]').boundingBox();
+  const to = await screenPoint(page, 300, 500);
+  await page.mouse.move(ruler.x + 10, to.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 6 });
+  await page.keyboard.press(`${mod}+z`);
+  await page.mouse.up();
+  assert.deepEqual(errors, []);
+  assert.equal((await state(page, (ed) => ed.pageData.guides || [])).length, 1, 'the guide was placed');
+  await context.close();
+});
+
+test('[EDIT-01] a field that commits as you start a drag neither cuts the drag short nor is lost', async () => {
+  const { page, context } = await newDesign('square');
+  const s = await addShape(page, 'Square');
+  await page.fill('[data-testid="geo-w"]', '200'); // no Enter: commits when focus leaves
+  const c = await elementCenter(page, s.id);
+  await drag(page, c, { x: c.x + 120, y: c.y + 90 }, { steps: 10, modifiers: ['Alt'] });
+  const el = (await elements(page)).find((e) => e.id === s.id);
+  assert.equal(Math.round(el.w), 200, 'the width was kept');
+  assert.ok(el.x > s.x + 50, `and the drag moved it (${s.x} → ${el.x})`);
+  await context.close();
+});
+
+test('[EDIT-04] a command that lands mid-drag runs at once and gets its own undo step', async () => {
+  const { page, context } = await newDesign('square');
+  const s = await addShape(page, 'Square');
+  const c = await elementCenter(page, s.id);
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  // Before the drag moves: a duplicate (a button tapped with another finger, say).
+  const copies = await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    ed.duplicate();
+    return ed.selection.length;
+  });
+  assert.equal(copies, 1, 'it ran and selected its copy');
+  await page.mouse.move(c.x + 100, c.y + 100, { steps: 6 });
+  await page.mouse.up();
+  assert.equal((await elements(page)).length, 2);
+  // Undo takes back the move, then the duplicate.
+  const steps = await state(page, (ed) => ed.history.past.length);
+  assert.ok(steps >= 2);
+  await context.close();
+});
+
+test('[EDIT-04] a command that lands after a drag has moved finishes the drag first', async () => {
+  const { page, context } = await newDesign('square');
+  const s = await addShape(page, 'Square');
+  const c = await elementCenter(page, s.id);
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 100, c.y + 100, { steps: 6 });
+  const res = await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    ed.duplicate();
+    return { dragging: ed.isDragging(), selected: ed.selection.length, n: ed.pageData.elements.length };
+  });
+  await page.mouse.up();
+  assert.deepEqual(res, { dragging: false, selected: 1, n: 2 });
+  await page.keyboard.press(`${mod}+z`);
+  assert.equal((await elements(page)).length, 1, 'undo takes back the duplicate alone');
+  const back = (await elements(page))[0];
+  assert.notEqual(back.x, s.x, 'the finished move stays');
+  await context.close();
+});
+
+test('[PAGE-09] typing a page title key by key keeps the field and adds nothing', async () => {
+  const { page, context } = await newDesign('square');
+  await page.click('[data-testid="page-title"]');
+  await page.keyboard.type('Cover', { delay: 30 });
+  assert.equal(await page.evaluate(() => document.activeElement?.dataset.testid), 'page-title', 'still typing in the field');
+  assert.equal(await state(page, (ed) => ed.pageData.title), 'Cover');
+  assert.equal((await elements(page)).length, 0, 'no shortcuts fired');
+  await context.close();
+});
+
+test('[EDIT-01] a change that fails halfway is put back, with no undo step', async () => {
+  const { page, context } = await newDesign('square');
+  const s = await addShape(page, 'Square');
+  const r = await page.evaluate((id) => {
+    const ed = window.paperwall.editor;
+    const steps = ed.history.past.length;
+    try {
+      ed.change(() => {
+        ed.pageData.elements.find((e) => e.id === id).x = 999;
+        throw new Error('broken');
+      });
+    } catch {
+      /* expected */
+    }
+    return { x: ed.pageData.elements.find((e) => e.id === id).x, same: ed.history.past.length === steps };
+  }, s.id);
+  assert.deepEqual(r, { x: s.x, same: true });
+  await context.close();
+});
+
+test('[EDIT-01] leaving the design mid-drag finishes the drag and saves it', async () => {
+  const { page, context } = await newDesign('square');
+  const s = await addShape(page, 'Square');
+  const id = await state(page, (ed) => ed.doc.id);
+  const c = await elementCenter(page, s.id);
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 120, c.y + 80, { steps: 6 });
+  await page.evaluate(() => (location.hash = '#/')); // the back button, say
+  // The home screen shows once closing (saving, keeping a version) is done.
+  await page.waitForSelector('[data-testid="my-designs"]');
+  await page.mouse.up();
+  const saved = await page.evaluate(async (designId) => {
+    const req = indexedDB.open('paperwall');
+    const db = await new Promise((r) => (req.onsuccess = () => r(req.result)));
+    const row = await new Promise((r) => {
+      const g = db.transaction('designs').objectStore('designs').get(designId);
+      g.onsuccess = () => r(g.result);
+    });
+    const versions = await new Promise((r) => {
+      const g = db.transaction('versions').objectStore('versions').getAllKeys(IDBKeyRange.bound(`${designId}|v|`, `${designId}|v|\uffff`));
+      g.onsuccess = () => r(g.result.length);
+    });
+    return { x: row.doc.pages[0].elements[0].x, versions };
+  }, id);
+  assert.ok(saved.x > s.x + 50, `the move was kept (${s.x} → ${saved.x})`);
+  assert.equal(saved.versions, 2, 'the Original, and the work kept on leaving');
+  await context.close();
+});

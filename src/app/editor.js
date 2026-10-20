@@ -4,16 +4,77 @@
 import { History } from '../model/history.js';
 import * as cmd from '../model/commands.js';
 import {
-  createText, createShape, createLine, createImage, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
-  TEXT_STYLES, clone,
+  createText, createShape, createLine, createImage, createFrame, createDrawing, thinPoints, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
+  TEXT_STYLES, versionSnapshot, isEmptyFrame,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
 import { curveGeometry } from '../model/render.js';
-import { unionBounds } from '../model/geometry.js';
+import { unionBounds, pointInBox, toLocal, refitGroup } from '../model/geometry.js';
+import { gridBoxes } from '../model/grids.js';
+import { createConnector, updateConnectors, isLine, lineHit } from '../model/connectors.js';
+import { gridLines, marginSize } from '../model/view.js';
+import { maskPath } from '../model/shapes.js';
+
 import { measure, ensureFont } from './fonts.js';
 import { removePlainBackground } from '../model/bgremove.js';
 import { readFileAsDataUrl, loadImage, toast, debounce } from './ui.js';
 import * as store from './store.js';
+
+const VIEW_KEY = 'paperwall-view';
+const VERSION_EVERY = 5 * 60 * 1000;
+const DEFAULT_VIEW = { rulers: false, grid: false, gridSize: 'medium', snapGrid: true, margins: false, bleed: false };
+
+function loadView() {
+  try {
+    return { ...DEFAULT_VIEW, ...JSON.parse(localStorage.getItem(VIEW_KEY) || '{}') };
+  } catch {
+    return { ...DEFAULT_VIEW };
+  }
+}
+
+/**
+ * An element anywhere in the design, inside groups too, in one pass:
+ * { page, el, top } (top is the page-level element holding it). Its own
+ * page, if it's still there, else wherever it is now.
+ */
+function locate(doc, id, pageId) {
+  let other = null;
+  for (const page of doc.pages) {
+    for (const top of page.elements) {
+      const el = deepFind([top], id);
+      if (!el) continue;
+      if (page.id === pageId) return { page, el, top };
+      other ||= { page, el, top };
+    }
+  }
+  return other;
+}
+
+/** An element anywhere on a page, inside groups too. */
+function deepFind(els, id) {
+  for (const el of els) {
+    if (el.id === id) return el;
+    const inner = el.type === 'group' && deepFind(el.children, id);
+    if (inner) return inner;
+  }
+  return null;
+}
+
+let maskCtx = null;
+const maskPaths = new WeakMap();
+
+/** Whether page point p falls inside a frame's shape (a circle frame's corners don't count). */
+function inMask(el, p) {
+  if (!el.mask || el.mask === 'none' || el.mask === 'rect') return true;
+  maskCtx ||= document.createElement('canvas').getContext('2d');
+  if (!maskCtx || typeof Path2D === 'undefined') return true;
+  // Into the frame's own box. Its outline is kept until the frame changes shape.
+  const q = toLocal(el, p);
+  const key = `${el.w},${el.h},${el.mask},${el.sides},${el.innerRatio},${el.radius}`;
+  let shape = maskPaths.get(el);
+  if (shape?.key !== key) maskPaths.set(el, (shape = { key, path: new Path2D(maskPath(el)) }));
+  return maskCtx.isPointInPath(shape.path, q.x - el.x, q.y - el.y);
+}
 
 let clipboard = null; // shared between designs, like a real clipboard
 let styleClipboard = null;
@@ -28,10 +89,15 @@ export class Editor {
     this.history = new History();
     this.editingTextId = null;
     this.cropId = null;
+    this.drawTool = null; // { tool, color, size } while drawing
+    this.view = loadView();
     this.guides = [];
     this.listeners = new Set();
     this.onOpenDesign = onOpenDesign;
     this.saving = false;
+    // A design from elsewhere (a file, an older version) may have connector
+    // ends out of place: put them on their elements before anything is drawn.
+    this.syncAllConnectors();
     this.save = debounce(() => this.persist(), 400);
     this.thumb = debounce(() => this.persistThumb(), 1500);
   }
@@ -62,16 +128,54 @@ export class Editor {
 
   // ---------- changes ----------
 
-  /** Run a change as one undo step. `key` merges rapid repeats (typing, nudging). */
-  change(fn, { key = null, quiet = false } = {}) {
+  /**
+   * Make a change as one undo step. `key` merges rapid repeats (typing,
+   * nudging). `unchanged(result)` says when fn turned out to change nothing:
+   * then no step is left and nothing is saved.
+   */
+  change(fn, { key = null, quiet = false, unchanged = null } = {}) {
+    // A change that comes in mid-drag (a field committing as focus leaves it,
+    // a button, a timer) gets its own undo step, never the drag's: the canvas
+    // either lets a drag that hasn't moved carry on afterwards, or finishes one
+    // that has, first. Either way the change happens now.
+    const resume = this.isDragging?.() ? this.pauseDrag?.() : null;
     this.history.record(this.doc, key);
-    const result = fn();
-    this.afterChange(quiet);
-    return result;
+    this.changing = (this.changing || 0) + 1;
+    try {
+      let result;
+      try {
+        result = fn();
+      } catch (e) {
+        // Put back whatever fn changed before it failed, and leave no step.
+        // (Merged into the step before, there's only that step to go back to.)
+        const back = this.history.revert(this.doc) || (key ? this.history.rewind(this.doc) : null);
+        if (back) {
+          this.doc = back;
+          // A paused drag holds elements of the design just replaced: it can't go on.
+          if (resume) this.abandonDrag?.();
+        }
+        this.emit('doc');
+        throw e;
+      }
+      if (unchanged?.(result)) this.history.discard();
+      else this.afterChange(quiet);
+      return result;
+    } finally {
+      this.changing -= 1;
+      resume?.();
+    }
   }
 
-  afterChange(quiet = false) {
+  /** After any change: save, refresh, keep connectors attached. `edit: false` for corrections (re-measuring), which don't call for a new version. */
+  afterChange(quiet = false, { edit = true } = {}) {
+    // Mid-drag, outside change() (text refitted as a font loads): after the
+    // drag, which it mustn't cut short.
+    if (this.isDragging?.() && !this.changing) return void this.whenIdle(() => this.afterChange(quiet, { edit }));
+    // Connectors on every page follow what they're attached to (pages
+    // without connectors return at once).
+    this.syncAllConnectors();
     this.doc.updatedAt = Date.now();
+    if (edit) this.changedSinceVersion = true;
     this.selection = this.selection.filter((id) => cmd.findElement(this.pageData, id));
     if (!quiet) this.emit('doc');
     this.save();
@@ -81,6 +185,11 @@ export class Editor {
   async persist() {
     try {
       await store.saveDesign(this.doc);
+      // Every few minutes of work, keep a version to go back to.
+      // Not awaited: saving the design itself shouldn't wait on history.
+      // (versionAt is set once we know whether the design has versions yet.)
+      // (Not mid-drag: the design is half-moved then; the next save tries again.)
+      this.maybeSaveVersion(VERSION_EVERY);
     } catch (e) {
       toast(`Couldn't save on this device: ${e.message}`, 'error');
     }
@@ -88,8 +197,14 @@ export class Editor {
 
   async persistThumb() {
     if (!this.makeThumb) return;
+    if (this.isDragging?.() && !this.closed) return void this.thumb(); // not a half-moved picture: after the drag
     try {
-      await store.saveDesign(this.doc, await this.makeThumb(this.doc));
+      const at = this.doc.updatedAt;
+      const url = await this.makeThumb(this.doc);
+      // Reused by a version saved soon after, if it's known to show that state
+      // (nothing changed while it was drawn).
+      if (this.doc.updatedAt === at) this.lastThumb = { url, at };
+      await store.saveDesign(this.doc, url);
     } catch {
       /* thumbnails are optional */
     }
@@ -100,16 +215,98 @@ export class Editor {
     return this.save.flush();
   }
 
+  /**
+   * Keep a version if there's work since the last one, at least `gap` ms
+   * after it, the first check for versions is done and no drag is going.
+   * The one rule for timed, tab-hidden and closing versions.
+   */
+  maybeSaveVersion(gap, opts) {
+    if (!this.changedSinceVersion || !this.versionAt || this.isDragging?.() || Date.now() - this.versionAt <= gap) return null;
+    return this.saveVersion('', opts);
+  }
+
+  /**
+   * Keep a copy of the design as it is now (or `snapshot`, taken earlier) in
+   * its version history. `quick` skips drawing a new thumbnail (the tab is
+   * closing); the history list draws one from the version instead.
+   * Resolves to whether it was saved.
+   */
+  async saveVersion(label = '', { snapshot = null, quick = false } = {}) {
+    this.versionAt = Date.now();
+    // Edits made after an earlier snapshot was taken still need a version of their own.
+    const covers = !snapshot || snapshot.updatedAt >= this.doc.updatedAt;
+    if (covers) this.changedSinceVersion = false;
+    // The design as it is right now, before anything below waits.
+    snapshot ||= versionSnapshot(this.doc);
+    try {
+      // A small picture of the first page, so the history list needn't load
+      // whole designs: the home-screen one if it's up to date, else a new one.
+      const fresh = () => (this.lastThumb?.at === snapshot.updatedAt ? this.lastThumb.url : null);
+      // A home-screen thumbnail is usually on its way: draw it now and use it for both.
+      if (!fresh() && !quick) await this.thumb.flushPending();
+      const thumb = fresh() || (quick || !this.makeThumb ? null : await this.makeThumb(snapshot).catch(() => null));
+      await store.saveVersion(snapshot, { label, thumb });
+      return true;
+    } catch {
+      // History is a convenience; saving the design itself matters more. The
+      // work still needs a version, so the next chance (closing, say) tries again.
+      if (covers) this.changedSinceVersion = true;
+      return false;
+    }
+  }
+
+  /** Put the design back the way a version had it, as one undo step. */
+  restoreVersion(versionDoc) {
+    // Copied: without IndexedDB, versions live in memory and would share
+    // their pages with the design. (Images aren't copied: they never change.)
+    const v = versionSnapshot(versionDoc);
+    this.change(() => {
+      // Keep today's images too: undo snapshots share the design's assets.
+      Object.assign(this.doc, { name: v.name, width: v.width, height: v.height, unit: v.unit, pages: v.pages, assets: { ...this.doc.assets, ...v.assets } });
+      this.page = 0; // the version may have fewer pages than the one in view
+    });
+    this.selection = [];
+    this.page = -1;
+    this.setPage(0);
+    this.emit('name');
+  }
+
   undo() {
-    if (!this.history.canUndo) return;
+    if (!this.history.canUndo || this.isDragging?.()) return;
     this.doc = this.history.undo(this.doc);
     this.page = Math.min(this.page, this.doc.pages.length - 1);
     this.editingTextId = null;
     this.afterChange();
   }
 
+  /** Run fn now, or once the drag that's going is over. */
+  whenIdle(fn) {
+    if (!this.isDragging?.()) return void fn();
+    (this.idle ||= []).push(fn);
+  }
+
+  /** The drag is over: run what waited for it. */
+  dragEnded() {
+    const waiting = this.idle || [];
+    this.idle = [];
+    for (const fn of waiting) fn();
+  }
+
+  /** Call off a change halfway: the design goes back to its last recorded step, which is forgotten. */
+  revertPending() {
+    const back = this.history.revert(this.doc);
+    if (!back) return;
+    this.doc = back;
+    this.selection = this.selection.filter((id) => cmd.findElement(this.pageData, id));
+    this.emit('doc');
+    this.emit('aids');
+    // A save may have run mid-drag: store the design as it is again.
+    this.save();
+    this.thumb();
+  }
+
   redo() {
-    if (!this.history.canRedo) return;
+    if (!this.history.canRedo || this.isDragging?.()) return;
     this.doc = this.history.redo(this.doc);
     this.page = Math.min(this.page, this.doc.pages.length - 1);
     this.afterChange();
@@ -145,6 +342,7 @@ export class Editor {
 
   setPage(i) {
     if (i < 0 || i >= this.doc.pages.length || i === this.page) return;
+    if (this.isDragging?.()) this.endDrag?.(); // a drag belongs to the page it began on
     this.page = i;
     this.selection = [];
     this.editingTextId = null;
@@ -211,8 +409,13 @@ export class Editor {
     return this.insert(el);
   }
 
-  /** Add an image (from a file, the clipboard or the uploads library). */
+  /**
+   * Add an image (from a file, the clipboard or the uploads library). If an
+   * empty frame is selected, the image goes into it instead.
+   */
   async addImage(upload, { at } = {}) {
+    const frame = this.single;
+    if (!at && isEmptyFrame(this.doc, frame) && !frame.locked) return this.fillFrame(frame.id, upload);
     const assetId = addAsset(this.doc, upload);
     const maxW = this.doc.width * 0.6;
     const maxH = this.doc.height * 0.6;
@@ -235,16 +438,171 @@ export class Editor {
     return upload;
   }
 
-  async replaceImage(upload) {
-    const el = this.single;
-    if (!el || el.type !== 'image') return;
+  /** Put a picture in an image or frame, keeping its place and shape: it's cropped to fill. */
+  fillFrame(id, upload, pageId = this.pageData.id, { evenLocked = false } = {}) {
+    // The frame's own page (it may not be in view any more: the page can change
+    // while a photo is being picked), else wherever it is now.
+    // Frames inside groups count too (a grouped photo grid).
+    const found = locate(this.doc, id, pageId);
+    const { page, el, top } = found || {};
+    if (!el || el.type !== 'image' || (el.locked && !evenLocked)) return null;
     this.change(() => {
       el.assetId = addAsset(this.doc, upload);
-      // Keep the frame; fit the new picture inside it by cropping.
-      const frame = el.w / el.h;
-      const pic = upload.width / upload.height;
-      el.crop = pic > frame ? { x: (1 - frame / pic) / 2, y: 0, w: frame / pic, h: 1 } : { x: 0, y: (1 - pic / frame) / 2, w: 1, h: pic / frame };
+      el.crop = null; // centred, cropped to fill the frame
+      cmd.coverCrop(el, upload.width, upload.height);
     });
+    // A frame in a group: the group is what's selected.
+    if (page === this.pageData) this.select([top.id]);
+    return el;
+  }
+
+  /**
+   * The frame at a point on the page, if any: an empty one, or a photo in a
+   * shape. Frames inside (unturned, unlocked) groups count too.
+   */
+  frameAt(p) {
+    // The topmost thing at the point decides: a frame under a text box or a
+    // plain photo isn't reached through it. (A frame's corners outside its
+    // shape let the point through.)
+    const BLOCKED = 0;
+    const find = (els, ox, oy) => {
+      for (let i = els.length - 1; i >= 0; i--) {
+        const el = els[i];
+        if (el.hidden) continue;
+        // The point in this element's own (group) coordinates, so the element
+        // itself is tested (and its cached outline reused).
+        const q = { x: p.x - ox, y: p.y - oy };
+        // Lines you draw or connect only cover what's near the line, as for clicks.
+        if (isLine(el) ? !lineHit(el, q, this.zoom) : !pointInBox(q.x, q.y, el)) continue;
+        if (el.type === 'group') {
+          if (el.locked || el.rotation || el.flipX || el.flipY) return BLOCKED;
+          const hit = find(el.children, ox + el.x, oy + el.y);
+          if (hit !== null) return hit;
+          continue; // a gap between the group's parts
+        }
+        // Any picture takes a dropped photo (a filled frame or photo is refilled).
+        const frame = el.type === 'image';
+        if (!frame) return BLOCKED;
+        if (!inMask(el, q)) continue;
+        return el.locked ? BLOCKED : el;
+      }
+      return null;
+    };
+    return find(this.pageData.elements, 0, 0) || null;
+  }
+
+  // ---------- view: rulers, guides, grid, margins, bleed ----------
+
+  /** Change how the page is shown (not part of the design). Remembered in this browser. */
+  setView(patch) {
+    this.view = { ...this.view, ...patch };
+    try {
+      localStorage.setItem(VIEW_KEY, JSON.stringify(this.view));
+    } catch {
+      /* private mode: fine for this session */
+    }
+    this.emit('aids');
+  }
+
+  /** Lines to snap to besides elements: your guides, and the grid when snapping to it. */
+  snapLines() {
+    const x = [];
+    const y = [];
+    for (const g of this.pageData.guides || []) (g.axis === 'x' ? x : y).push(g.pos);
+    const v = this.view;
+    if (v.grid && v.snapGrid) {
+      const g = gridLines(this.doc, v.gridSize);
+      x.push(...g.x);
+      y.push(...g.y);
+    }
+    if (v.margins) {
+      const m = marginSize(this.doc);
+      x.push(m, this.doc.width - m);
+      y.push(m, this.doc.height - m);
+    }
+    return { x, y };
+  }
+
+  /** Move a guide while it's dragged (the drag records one undo step for the whole move). */
+  moveGuide(i, pos) {
+    const g = this.pageData.guides?.[i];
+    if (!g) return;
+    g.pos = Math.round(pos);
+    this.emit('aids');
+  }
+
+  clearGuides() {
+    if (!this.pageData.guides?.length) return;
+    this.change(() => (this.pageData.guides = []));
+  }
+
+  // ---------- connectors ----------
+
+  /** A free connector across the middle of the page. */
+  addConnector(route = 'straight') {
+    const { width: W, height: H } = this.doc;
+    const s = Math.min(W, H);
+    const el = createConnector({ from: [W / 2 - s * 0.2, H / 2], to: [W / 2 + s * 0.2, H / 2], route, strokeWidth: Math.max(2, Math.round(s * 0.006)) });
+    this.change(() => cmd.addElement(this.doc, this.page, el));
+    this.select([el.id]);
+    return el;
+  }
+
+  /** Connect two selected elements with a line that follows them when they move. */
+  connect(ids = this.selection, route = 'elbow') {
+    const [a, b] = ids.map((id) => cmd.findElement(this.pageData, id)).filter((e) => e && e.type !== 'connector');
+    if (!a || !b) return null;
+    const s = Math.min(this.doc.width, this.doc.height);
+    const el = createConnector({ from: [a.x + a.w / 2, a.y + a.h / 2], to: [b.x + b.w / 2, b.y + b.h / 2], start: a.id, end: b.id, route, strokeWidth: Math.max(2, Math.round(s * 0.004)) });
+    this.change(() => {
+      // Just under the upper of the two: above the lower one (which may be a
+      // big card or backdrop that would hide it), tucked under the other.
+      const page = this.pageData;
+      const at = Math.max(page.elements.indexOf(a), page.elements.indexOf(b));
+      page.elements.splice(at, 0, el); // afterChange attaches its ends
+    });
+    this.select([el.id]);
+    return el;
+  }
+
+  /** Re-attach connectors on every page, after a change that touched several pages. */
+  syncAllConnectors() {
+    for (const p of this.doc.pages) updateConnectors(p);
+  }
+
+  /**
+   * Keep attached connector ends on their elements while drawing, including
+   * mid-drag. Group boxes are refitted only when a change is finished.
+   */
+  syncConnectors() {
+    return updateConnectors(this.pageData, { refit: false });
+  }
+
+  /**
+   * Turn a freehand stroke (page points) into a drawing. `tool` is the pen
+   * the stroke began with (drawing may have been turned off since).
+   */
+  addDrawing(points, tool = this.drawTool) {
+    if (!tool || !points.length) return null;
+    const el = createDrawing(thinPoints(points, 1.5 / this.zoom), { tool: tool.tool, stroke: tool.color, strokeWidth: tool.size });
+    this.change(() => cmd.addElement(this.doc, this.page, el));
+    return el;
+  }
+
+  addFrame(mask = 'none', props = {}) {
+    return this.insert(this.scaled(createFrame(mask, props), 0.45));
+  }
+
+  /** Fill the page with a grid of empty frames, ready for photos. */
+  addGrid(grid) {
+    const s = Math.min(this.doc.width, this.doc.height);
+    const boxes = gridBoxes(grid, this.doc.width, this.doc.height, { margin: Math.round(s * 0.04), gap: Math.round(s * 0.02) });
+    const frames = boxes.map((b) => createFrame('none', b));
+    this.change(() => {
+      for (const el of frames) cmd.addElement(this.doc, this.page, el, { center: false });
+    });
+    this.select(frames.map((el) => el.id));
+    return frames;
   }
 
   /** Make a plain background see-through. Returns how much of the picture was cleared (0..1). */
@@ -252,6 +610,7 @@ export class Editor {
     const el = this.single;
     if (!el || el.type !== 'image') return 0;
     const asset = this.doc.assets[el.assetId];
+    if (!asset) return 0;
     const img = await loadImage(asset.dataUrl);
     const canvas = document.createElement('canvas');
     canvas.width = img.naturalWidth;
@@ -263,15 +622,18 @@ export class Editor {
     if (!cleared) return 0;
     g.putImageData(pixels, 0, 0);
     const dataUrl = canvas.toDataURL('image/png');
+    // Found again by id: the design may have changed (undo, a restore) while the photo was worked on.
+    const now = locate(this.doc, el.id)?.el;
+    if (!now || now.assetId !== el.assetId || this.closed) return 0;
     this.change(() => {
-      el.assetId = addAsset(this.doc, { mime: 'image/png', dataUrl, width: canvas.width, height: canvas.height, name: `${asset.name || 'image'} (no background)` });
+      now.assetId = addAsset(this.doc, { mime: 'image/png', dataUrl, width: canvas.width, height: canvas.height, name: `${asset.name || 'image'} (no background)` });
     });
     return cleared / (canvas.width * canvas.height);
   }
 
   setImageAsBackground() {
     const el = this.single;
-    if (!el || el.type !== 'image') return;
+    if (!el || el.type !== 'image' || !el.assetId) return;
     this.change(() => {
       cmd.setBackground(this.doc, this.page, { type: 'image', assetId: el.assetId, color: '#ffffff' });
       cmd.deleteElements(this.doc, this.page, [el.id]);
@@ -320,15 +682,23 @@ export class Editor {
   /** Measure text again (all of it, or the boxes `which` picks). Returns whether any height changed. */
   refitAllText(which = () => true) {
     let changed = false;
+    // Returns whether anything inside changed, so groups around it are
+    // refitted too (innermost first: each group's children are done first).
     const visit = (els) => {
+      let here = false;
       for (const el of els) {
         if (el.type === 'text' && which(el)) {
           const before = [el.w, el.h];
           this.fitText(el);
-          if (el.w !== before[0] || el.h !== before[1]) changed = true;
+          if (el.w !== before[0] || el.h !== before[1]) here = true;
         }
-        if (el.type === 'group') visit(el.children);
+        if (el.type === 'group' && visit(el.children)) {
+          refitGroup(el);
+          here = true;
+        }
       }
+      changed ||= here;
+      return here;
     };
     this.doc.pages.forEach((p) => visit(p.elements));
     return changed;
@@ -440,21 +810,39 @@ export class Editor {
     this.change(() => cmd.moveToIndex(this.doc, this.page, id, index));
   }
 
+  /**
+   * The selected ids that moving can affect: a connector held at both ends
+   * goes wherever its elements go (moving it alone would snap straight back).
+   */
+  get movable() {
+    return this.selection.filter((id) => {
+      const el = cmd.findElement(this.pageData, id);
+      return el && !(el.type === 'connector' && el.start?.id && el.end?.id);
+    });
+  }
+
+  // Align and distribute work on what can move; flip mirrors the whole
+  // selection (its bounds include held connectors, which then follow their
+  // elements). A selection of nothing but held connectors is left alone.
   align(how) {
-    if (this.selection.length) this.change(() => cmd.alignElements(this.doc, this.page, this.selection, how));
+    // Only what can move (one element alone is aligned to the page).
+    const ids = this.movable;
+    if (ids.length) this.change(() => cmd.alignElements(this.doc, this.page, ids, how));
   }
 
   distribute(axis) {
-    if (this.selection.length >= 3) this.change(() => cmd.distributeElements(this.doc, this.page, this.selection, axis));
+    const ids = this.movable;
+    if (ids.length >= 3) this.change(() => cmd.distributeElements(this.doc, this.page, ids, axis));
   }
 
   flip(axis) {
-    if (this.selection.length) this.change(() => cmd.flipElements(this.doc, this.page, this.selection, axis));
+    if (this.movable.length) this.change(() => cmd.flipElements(this.doc, this.page, this.selection, axis));
   }
 
   nudge(dx, dy) {
-    if (!this.selection.length) return;
-    this.change(() => cmd.moveElements(this.doc, this.page, this.selection, dx, dy), { key: `nudge:${this.selection.join(',')}` });
+    const ids = this.movable;
+    if (!ids.length) return;
+    this.change(() => cmd.moveElements(this.doc, this.page, ids, dx, dy), { key: `nudge:${ids.join(',')}` });
   }
 
   selectionBounds() {
@@ -484,6 +872,22 @@ export class Editor {
     this.setPage(n);
   }
 
+  /** A page's title shows in the page strip and grid view; it isn't printed on the page. */
+  setPageTitle(i, title) {
+    const clean = String(title || '').trim().slice(0, 120);
+    if ((this.doc.pages[i].title || '') === clean) return;
+    // Titles aren't on the canvas: no redraw there, only the page strip's
+    // (which batches them, rather than one per keystroke).
+    this.change(() => (this.doc.pages[i].title = clean || undefined), { key: `title:${i}`, quiet: true });
+    this.emit('strip');
+  }
+
+  /** Hidden pages stay in the design but are skipped when presenting and downloading. */
+  setPageHidden(i, hidden) {
+    this.change(() => (this.doc.pages[i].hidden = hidden || undefined));
+    this.emit('page');
+  }
+
   movePage(from, to) {
     const n = this.change(() => cmd.movePage(this.doc, from, to));
     this.page = -1;
@@ -505,9 +909,8 @@ export class Editor {
       let at = this.page;
       let firstAdded = -1;
       for (const p of resized.pages) {
-        const page = clone(p);
-        page.id = uid('p');
-        at = cmd.addPage(this.doc, at, page);
+        // New ids, so adding the same template twice never repeats an id.
+        at = cmd.addPage(this.doc, at, cmd.freshPage(p));
         if (firstAdded < 0) firstAdded = at;
       }
       return firstAdded;
