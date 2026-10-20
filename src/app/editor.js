@@ -476,7 +476,8 @@ export class Editor {
           if (hit !== null) return hit;
           continue; // a gap between the group's parts
         }
-        const frame = isEmptyFrame(this.doc, el) || (el.type === 'image' && el.mask && el.mask !== 'none');
+        // Any picture takes a dropped photo (a filled frame or photo is refilled).
+        const frame = el.type === 'image';
         if (!frame) return BLOCKED;
         if (!inMask(el, q)) continue;
         return el.locked ? BLOCKED : el;
@@ -816,19 +817,19 @@ export class Editor {
     });
   }
 
+  // Align, distribute and flip work on the whole selection (its bounds
+  // include held connectors, which then follow their elements); only a
+  // selection of nothing but held connectors is left alone.
   align(how) {
-    const ids = this.movable;
-    if (ids.length) this.change(() => cmd.alignElements(this.doc, this.page, ids, how));
+    if (this.movable.length) this.change(() => cmd.alignElements(this.doc, this.page, this.selection, how));
   }
 
   distribute(axis) {
-    const ids = this.movable;
-    if (ids.length >= 3) this.change(() => cmd.distributeElements(this.doc, this.page, ids, axis));
+    if (this.selection.length >= 3 && this.movable.length) this.change(() => cmd.distributeElements(this.doc, this.page, this.selection, axis));
   }
 
   flip(axis) {
-    const ids = this.movable;
-    if (ids.length) this.change(() => cmd.flipElements(this.doc, this.page, ids, axis));
+    if (this.movable.length) this.change(() => cmd.flipElements(this.doc, this.page, this.selection, axis));
   }
 
   nudge(dx, dy) {

@@ -489,7 +489,12 @@ export function applyBrand(doc, brand) {
       if (el.highlight) el.highlight = { ...el.highlight, color: swap(el.highlight.color) };
       if (el.outline) el.outline = { ...el.outline, color: swap(el.outline.color) };
       if (el.effect) el.effect = { ...el.effect, color: swap(el.effect.color), color2: swap(el.effect.color2) };
-      if (el.filters?.duotone) el.filters = { ...el.filters, duotone: { dark: swap(el.filters.duotone.dark), light: swap(el.filters.duotone.light) } };
+      if (el.filters?.duotone) {
+        const dark = swap(el.filters.duotone.dark);
+        const light = swap(el.filters.duotone.light);
+        // Both ends on one brand color would flatten the photo to a block: keep it as it was.
+        if (dark !== light) el.filters = { ...el.filters, duotone: { dark, light } };
+      }
       if (el.type === 'text') texts.push(el);
       if (el.type === 'group') visit(el.children);
     }

@@ -276,15 +276,17 @@ function route(el, a, b, horizontal, bend) {
     };
     const ds = dirFor(el.start?.side, a, b);
     const de = dirFor(el.end?.side, b, a);
-    const c1 = [a[0] + ds[0] * k, a[1] + ds[1] * k];
-    const c2 = [b[0] + de[0] * k, b[1] + de[1] * k];
+    // A trimmed curve keeps the untrimmed one's control points, so it's the
+    // same curve, just shorter.
+    const c1 = bend?.c1 || [a[0] + ds[0] * k, a[1] + ds[1] * k];
+    const c2 = bend?.c2 || [b[0] + de[0] * k, b[1] + de[1] * k];
     // Sampled along the curve, for hit testing.
     const pts = Array.from({ length: 21 }, (_, i) => {
       const t = i / 20;
       const u = 1 - t;
       return [0, 1].map((n) => u * u * u * a[n] + 3 * u * u * t * c1[n] + 3 * u * t * t * c2[n] + t * t * t * b[n]);
     });
-    return done({ d: `M${f(a[0])} ${f(a[1])} C${f(c1[0])} ${f(c1[1])} ${f(c2[0])} ${f(c2[1])} ${f(b[0])} ${f(b[1])}`, pts, startDir: [c1[0] - a[0], c1[1] - a[1]], endDir: [b[0] - c2[0], b[1] - c2[1]] });
+    return done({ bend: { c1, c2 }, d: `M${f(a[0])} ${f(a[1])} C${f(c1[0])} ${f(c1[1])} ${f(c2[0])} ${f(c2[1])} ${f(b[0])} ${f(b[1])}`, pts, startDir: [c1[0] - a[0], c1[1] - a[1]], endDir: [b[0] - c2[0], b[1] - c2[1]] });
   }
   return done({ d: path([a, b]), pts: [a, b], startDir: [b[0] - a[0], b[1] - a[1]], endDir: [b[0] - a[0], b[1] - a[1]] });
 }

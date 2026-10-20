@@ -591,3 +591,13 @@ test('[DOC-12] a version keeps only the images the design shows', async () => {
   doc.pages[0].elements.push(createImage('now'));
   assert.deepEqual(Object.keys(versionSnapshot(doc).assets), ['now']);
 });
+
+test('[BRD-03] applying a brand never flattens a duotone to one color', async () => {
+  const { createDesign, createImage } = await import('../../src/model/doc.js');
+  const { applyBrand } = await import('../../src/model/commands.js');
+  const doc = createDesign({ width: 100, height: 100 });
+  const img = createImage('a', { filters: { duotone: { dark: '#112233', light: '#ddeeff' } } });
+  doc.pages[0].elements.push(img);
+  applyBrand(doc, { colors: ['#ff0000'] });
+  assert.notEqual(img.filters.duotone.dark, img.filters.duotone.light);
+});

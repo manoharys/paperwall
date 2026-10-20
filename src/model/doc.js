@@ -39,6 +39,11 @@ export function pageName(page, i) {
   return page.title ? `Page ${i + 1}: ${page.title}` : `Page ${i + 1}`;
 }
 
+/** Its name, saying so when it's hidden. */
+export function pageLabel(page, i) {
+  return page.hidden ? `${pageName(page, i)} (hidden)` : pageName(page, i);
+}
+
 /** Page px in one mm or inch (or 1 for px), unrounded. */
 export function pxPerUnit(unit, dpi = DPI) {
   return unit === 'mm' ? dpi / 25.4 : unit === 'in' ? dpi : 1;
@@ -405,8 +410,9 @@ export function clone(value) {
 
 /** A copy of a design for its version history. Images never change once added, so they're shared, not copied. */
 export function versionSnapshot(doc) {
-  // Only the images it shows: ones replaced long ago needn't be kept by every version.
+  // Only the images it shows (ones replaced long ago needn't be kept by every
+  // version), and every font it carries.
   const used = usedAssetIds(doc);
-  const assets = Object.fromEntries(Object.entries(doc.assets || {}).filter(([id]) => used.has(id)));
+  const assets = Object.fromEntries(Object.entries(doc.assets || {}).filter(([id, a]) => used.has(id) || a?.type === 'font'));
   return { ...clone({ ...doc, assets: undefined }), assets };
 }

@@ -4,7 +4,7 @@
 import { renderPage, textRuns } from '../model/render.js';
 import { buildPdf } from '../model/pdf.js';
 import { buildZip } from '../model/zip.js';
-import { validateDesign, clone, visiblePages, printDpi, pageName } from '../model/doc.js';
+import { validateDesign, clone, visiblePages, printDpi, pageLabel } from '../model/doc.js';
 import { measure, fontCssFor, registerDesignFonts } from './fonts.js';
 import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage } from './ui.js';
 import { section, segmented, slider, toggle } from './widgets.js';
@@ -171,7 +171,7 @@ export function exportDialog(editor) {
         cb.checked = state.pages.has(i);
         cb.addEventListener('change', () => (cb.checked ? state.pages.add(i) : state.pages.delete(i)));
         const p = doc.pages[i];
-        return h('label', { class: 'toggle' }, cb, h('span', null, `${pageName(p, i)}${p.hidden ? ' (hidden)' : ''}`));
+        return h('label', { class: 'toggle' }, cb, h('span', null, pageLabel(p, i)));
       }))) : null,
       h('div', { class: 'export-actions' },
         h('button', { type: 'button', class: 'btn primary big', 'data-testid': 'export-download', onClick: () => run() }, icon('download'), 'Download'),

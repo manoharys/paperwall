@@ -3,7 +3,7 @@
 import { h, icon, iconButton, clear, debounce, dialog, toast, lazily, forget, pressable } from './ui.js';
 import { renderPage } from '../model/render.js';
 import { measure } from './fonts.js';
-import { visiblePages, pageName } from '../model/doc.js';
+import { visiblePages, pageName, pageLabel } from '../model/doc.js';
 
 export class PageStrip {
   constructor(editor, canvas) {
@@ -36,8 +36,7 @@ export class PageStrip {
     if (items.length !== this.ed.doc.pages.length) return this.redraw();
     this.ed.doc.pages.forEach((p, i) => {
       const item = items[i];
-      const name = pageName(p, i);
-      const label = p.hidden ? `${name} (hidden)` : name;
+      const label = pageLabel(p, i);
       const thumb = item.querySelector('.page-thumb');
       thumb.title = label;
       thumb.setAttribute('aria-label', label);
@@ -52,9 +51,9 @@ export class PageStrip {
     const ed = this.ed;
     clear(this.list);
     ed.doc.pages.forEach((p, i) => {
-      const name = pageName(p, i);
+      const label = pageLabel(p, i);
       const item = h('li', { class: `${i === ed.page ? 'on' : ''}${p.hidden ? ' hidden-page' : ''}`, draggable: 'true', 'data-testid': 'page-thumb' },
-        pressable({ class: 'page-thumb', title: p.hidden ? `${name} (hidden)` : name, 'aria-label': p.hidden ? `${name} (hidden)` : name, 'aria-current': String(i === ed.page) }, () => ed.setPage(i),
+        pressable({ class: 'page-thumb', title: label, 'aria-label': label, 'aria-current': String(i === ed.page) }, () => ed.setPage(i),
           h('span', { class: 'page-img', style: { aspectRatio: `${ed.doc.width} / ${ed.doc.height}` }, html: renderPage(ed.doc, i, { measure, noSize: true, placeholders: true, idPrefix: `ps${i}`, assetHref: this.canvas.assetHref }) }),
           h('span', { class: 'page-no' }, String(i + 1)),
           p.hidden ? h('span', { class: 'page-hidden-mark', 'aria-hidden': 'true' }, icon('eyeOff', 14)) : null),
