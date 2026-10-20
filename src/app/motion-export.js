@@ -35,6 +35,7 @@ export function frameSize(doc, kind, wanted = null) {
  */
 async function eachFrame(doc, pages, { fps, width, height, onProgress, signal }, each) {
   const tl = timeline(doc, pages);
+  if (!tl.parts.length) throw new Error('Pick at least one page.');
   const count = Math.max(1, Math.round(tl.total * fps));
   const fontCss = await fontCssFor(doc);
   const canvas = document.createElement('canvas');

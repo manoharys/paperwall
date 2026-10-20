@@ -286,3 +286,26 @@ test('[MOT-03] motion types are checked as the design\'s own names, not inherite
   doc.pages[0].elements.push(createVideo('a'));
   assert.ok(pageMoves(doc.pages[0]));
 });
+
+test('[MOT-02] reading order is the same whatever the layer order', async () => {
+  const { readingOrder } = await import('../../src/model/motion.js');
+  const A = { id: 'A', x: 300, y: 0 };
+  const B = { id: 'B', x: 200, y: 6 };
+  const C = { id: 'C', x: 100, y: 12 };
+  const D = { id: 'D', x: 0, y: 200 };
+  const orders = [[A, B, C, D], [D, C, B, A], [B, D, A, C]].map((els) => readingOrder({ elements: els }).join(''));
+  assert.equal(new Set(orders).size, 1, orders.join(' / '));
+  assert.equal(orders[0].at(-1), 'D', 'the lower row comes last');
+});
+
+test('[MOT-01] typewriter counts an emoji as one letter', async () => {
+  const { createDesign, createText } = await import('../../src/model/doc.js');
+  const { renderPage } = await import('../../src/model/render.js');
+  const doc = createDesign({ width: 1000, height: 1000 });
+  const t = createText({ text: 'a🎉b', w: 900 });
+  t.anim = { type: 'typewriter', duration: 3 };
+  doc.pages[0].elements.push(t);
+  const svg = renderPage(doc, 0, { time: 2 }); // two of three letters
+  assert.match(svg, />a🎉</);
+  assert.ok(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(svg), 'no half an emoji');
+});

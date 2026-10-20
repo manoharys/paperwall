@@ -439,3 +439,6 @@ kbd { font: 12px ui-monospace, monospace; background: var(--panel-2); border: 1p
 .version-meta small { color: var(--muted); }
 
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+
+/* While a download is being made, its choices wait. */
+.export.busy .segmented, .export.busy .page-picks { opacity: .55; pointer-events: none; }

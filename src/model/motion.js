@@ -60,8 +60,16 @@ export function transitionOf(page) {
  * bottom, then left to right, as you'd read it.
  */
 export function readingOrder(page) {
-  const els = page.elements.filter((el) => !el.hidden);
-  return [...els].sort((a, b) => (Math.abs(a.y - b.y) > 8 ? a.y - b.y : a.x - b.x)).map((el) => el.id);
+  // Rows first (an element within 8 px of the row's top joins it), then each
+  // row left to right: the same order whatever the layers' order.
+  const els = page.elements.filter((el) => !el.hidden).sort((a, b) => a.y - b.y || a.x - b.x);
+  const rows = [];
+  for (const el of els) {
+    const row = rows[rows.length - 1];
+    if (row && el.y - row.top <= 8) row.els.push(el);
+    else rows.push({ top: el.y, els: [el] });
+  }
+  return rows.flatMap((r) => r.els.sort((a, b) => a.x - b.x || a.y - b.y)).map((el) => el.id);
 }
 
 /**

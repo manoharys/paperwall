@@ -145,6 +145,7 @@ export function present(editor, canvas, { autoplay = false } = {}) {
   let started = 0;
   let from = null; // the page before, when moving forward (its transition plays)
   let drawn = 0; // when the slide was last drawn
+  let wait = 0; // a still page's timer, when playing
   const draw = (now) => {
     frame = 0;
     const i = shown[at];
@@ -168,12 +169,20 @@ export function present(editor, canvas, { autoplay = false } = {}) {
       sound?.pause();
       return;
     }
-    // Keep drawing while anything moves (or until the page's time is up, when playing).
+    // Keep drawing while anything moves. When playing a page that's now still,
+    // just wait for its time to be up.
     const moving = local < Math.max(info.end, from !== null ? tr.duration : 0) || info.keeps;
-    if (moving || autoplay) frame = requestAnimationFrame(draw);
+    if (moving) frame = requestAnimationFrame(draw);
+    else if (autoplay) {
+      wait = setTimeout(() => {
+        wait = 0;
+        frame = requestAnimationFrame(draw);
+      }, Math.max(0, (pageDuration(page) - local) * 1000));
+    }
   };
   const go = (to, forward) => {
     cancelAnimationFrame(frame);
+    clearTimeout(wait);
     from = forward && to !== at ? shown[at] : null;
     at = to;
     started = performance.now();
@@ -202,6 +211,7 @@ export function present(editor, canvas, { autoplay = false } = {}) {
   };
   const close = () => {
     cancelAnimationFrame(frame);
+    clearTimeout(wait);
     videos.dispose();
     sound?.stop();
     document.removeEventListener('keydown', onKey, true);

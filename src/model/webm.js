@@ -90,7 +90,8 @@ export function buildWebmParts({ video, audio = null, duration }) {
     tracks.push(el(ID.TrackEntry,
       uint(ID.TrackNumber, 2), uint(ID.TrackUID, 2), uint(ID.TrackType, 2), str(ID.CodecID, 'A_OPUS'),
       el(ID.CodecPrivate, audio.codecPrivate || opusHead(audio.channels, audio.sampleRate)),
-      uint(ID.CodecDelay, 6500000), uint(ID.SeekPreRoll, 80000000),
+      // The decoder's delay, from the header's pre-skip (48 kHz samples), in ns.
+      uint(ID.CodecDelay, Math.round((opusPreSkip(audio.codecPrivate) / 48000) * 1e9)), uint(ID.SeekPreRoll, 80000000),
       el(ID.Audio, float(ID.SamplingFrequency, audio.sampleRate), uint(ID.Channels, audio.channels))));
   }
   const info = el(ID.Info, uint(ID.TimecodeScale, 1000000), float(ID.Duration, duration * 1000), str(ID.MuxingApp, 'Paperwall'), str(ID.WritingApp, 'Paperwall'));
@@ -136,6 +137,12 @@ export function buildWebmParts({ video, audio = null, duration }) {
   const header = el(ID.EBML,
     uint(0x4286, 1), uint(0x42f7, 1), uint(0x42f2, 4), uint(0x42f3, 8), str(0x4282, 'webm'), uint(0x4287, 4), uint(0x4285, 2));
   return [...header.parts, ...segment.parts];
+}
+
+/** The pre-skip (samples at 48 kHz) in an OpusHead, or Opus's usual 312. */
+export function opusPreSkip(head) {
+  const ok = head && head.length >= 12 && String.fromCharCode(...head.subarray(0, 8)) === 'OpusHead';
+  return ok ? head[10] | (head[11] << 8) : 312;
 }
 
 /** Opus's header block, for when the encoder doesn't hand one over. */

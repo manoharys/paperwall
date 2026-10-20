@@ -171,6 +171,7 @@ export function exportDialog(editor) {
   const draw = () => {
     body.replaceChildren(...[
       section('File type', segmented({ label: 'File type', value: state.format, testid: 'export-format', onChange: (v) => {
+        if (state.busy) return; // one download at a time: the choices wait
         state.format = v;
         draw();
       }, options: [
@@ -202,7 +203,14 @@ export function exportDialog(editor) {
       doc.pages.length > 1 ? section('Pages', h('div', { class: 'page-picks', 'data-testid': 'export-pages' }, doc.pages.map((_, i) => {
         const cb = h('input', { type: 'checkbox', 'data-testid': `export-page-${i + 1}` });
         cb.checked = state.pages.has(i);
-        cb.addEventListener('change', () => (cb.checked ? state.pages.add(i) : state.pages.delete(i)));
+        cb.disabled = !!state.busy;
+        cb.addEventListener('change', () => {
+          if (cb.checked) state.pages.add(i);
+          else state.pages.delete(i);
+          // The animation's length depends on the pages.
+          const note = body.querySelector('[data-testid="export-length"]');
+          if (note) note.textContent = motionNote(doc, [...state.pages].sort((a, b) => a - b));
+        });
         const p = doc.pages[i];
         return h('label', { class: 'toggle' }, cb, h('span', null, pageLabel(p, i)));
       }))) : null,
@@ -230,6 +238,8 @@ export function exportDialog(editor) {
     const btn = body.querySelector('[data-testid="export-download"]');
     btn.disabled = true;
     btn.lastChild.textContent = 'Preparing…';
+    state.busy = true;
+    body.classList.add('busy');
     try {
       if (MOVING.has(state.format)) {
         // Frames take a while: say how far along it is. They're drawn from the
@@ -260,6 +270,8 @@ export function exportDialog(editor) {
       d.close();
     } catch (e) {
       if (stopper.signal.aborted) return; // closed while making it: nothing to say
+      state.busy = false;
+      body.classList.remove('busy');
       toast(e.message || 'Export failed', 'error');
       btn.disabled = false;
       btn.lastChild.textContent = 'Download';

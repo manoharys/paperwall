@@ -332,16 +332,17 @@ function renderText(ctx, el) {
   const tspans = [];
   // Typing it out (an animation): only the first letters show. Lines are
   // laid out in full first, so letters never move as more appear.
-  let left = el._typed === undefined ? Infinity : Math.round(lines.reduce((n, l) => n + (l.text || '').length, 0) * el._typed);
+  // Counted in characters (an emoji is one), not UTF-16 units.
+  let left = el._typed === undefined ? Infinity : Math.round(lines.reduce((n, l) => n + [...(l.text || '')].length, 0) * el._typed);
   lines.forEach((line0, i) => {
     let line = line0;
     if (left !== Infinity) {
-      const all = line.text || '';
+      const all = [...(line.text || '')];
       const shown = all.slice(0, Math.max(0, left));
       left -= all.length;
-      if (!shown) return;
+      if (!shown.length) return;
       // Same place as the whole line; underlines and boxes only under what's typed.
-      line = { ...line, text: shown, width: line.width * (shown.length / (all.length || 1)), fullWidth: line.width };
+      line = { ...line, text: shown.join(''), width: line.width * (shown.length / (all.length || 1)), fullWidth: line.width };
     }
     const top = pad + i * lineHeight;
     const baseline = top + (lineHeight - el.size) / 2 + ascent;

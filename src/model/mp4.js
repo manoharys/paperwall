@@ -2,6 +2,8 @@
 // VP9 where H.264 isn't on offer) and audio (AAC or Opus); this lays the
 // pieces out as an MP4 with the index first, so it starts playing at once.
 
+import { opusPreSkip } from './webm.js';
+
 const enc = new TextEncoder();
 
 function concat(parts) {
@@ -110,7 +112,7 @@ function audioEntry(t) {
   const common = [zeros(6), u16(1), zeros(8), u16(t.channels), u16(16), u16(0), u16(0), u32(t.sampleRate << 16)];
   if (t.codec === 'opus') {
     // dOps: the Opus header, big-endian, without its magic.
-    const dops = concat([u8(0, t.channels), u16(312), u32(t.sampleRate), u16(0), u8(0)]);
+    const dops = concat([u8(0, t.channels), u16(opusPreSkip(t.codecPrivate || t.description)), u32(t.sampleRate), u16(0), u8(0)]);
     return box('Opus', ...common, box('dOps', dops));
   }
   return box('mp4a', ...common, esds(t.description || aacConfig(t.sampleRate, t.channels)));
