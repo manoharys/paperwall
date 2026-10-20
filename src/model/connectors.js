@@ -277,8 +277,15 @@ function route(el, a, b, horizontal, bend) {
 }
 
 /** Points along the drawn line, in page pixels (curves are sampled). */
+const polylines = new WeakMap(); // hover hit tests ask on every mouse move
+
 export function connectorPolyline(el) {
-  return connectorGeometry(el).pts.map(([x, y]) => [el.x + x, el.y + y]);
+  const key = `${el.x},${el.y},${el.w},${el.h},${el.points},${el.route},${el.start?.side},${el.end?.side},${el.start?.id},${el.end?.id}`;
+  const hit = polylines.get(el);
+  if (hit?.key === key) return hit.pts;
+  const pts = connectorGeometry(el).pts.map(([x, y]) => [el.x + x, el.y + y]);
+  polylines.set(el, { key, pts });
+  return pts;
 }
 
 /** Whether point p is within `tol` px of the connector's line. */

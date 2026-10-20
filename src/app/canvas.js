@@ -62,10 +62,6 @@ export class Canvas {
     // Undo and redo wait while a drag is going (it holds parts of the design).
     editor.isDragging = () => !!this.drag;
     // Something else needs the design mid-drag: the drag ends here, as if let go.
-    editor.finishDrag = () => {
-      if (this.drag) this.onUp();
-      settle();
-    };
     this.el.addEventListener('dblclick', (e) => this.onDouble(e));
     this.el.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     this.el.addEventListener('dragover', (e) => {
@@ -404,7 +400,7 @@ export class Canvas {
       // The pointer is already gone, so nothing will end this drag: drop it now.
       const d = this.drag;
       this.drag = null;
-      if (d.recorded) this.ed.history.discard();
+      if (d.recorded) this.ed.revertPending(); // e.g. a guide already pulled out
       this.ed.dragEnded();
     }
   }

@@ -113,9 +113,10 @@ export class Editor {
 
   /** Run a change as one undo step. `key` merges rapid repeats (typing, nudging). */
   change(fn, { key = null, quiet = false } = {}) {
-    // A change that comes in mid-drag (a button, a timer) finishes the drag
-    // first, as its own step: the two never share an undo step.
-    if (this.isDragging?.()) this.finishDrag?.();
+    // A change that comes in mid-drag (a field committing as focus leaves it,
+    // a button, a timer) waits for the drag to end: the two never share an
+    // undo step, and the drag isn't cut short.
+    if (this.isDragging?.()) return void this.whenIdle(() => this.change(fn, { key, quiet }));
     this.history.record(this.doc, key);
     const result = fn();
     this.afterChange(quiet);

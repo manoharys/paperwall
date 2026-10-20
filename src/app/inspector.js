@@ -324,7 +324,8 @@ export class Inspector {
     return h('div', null,
       h('div', { class: 'fx-grid', role: 'group', 'aria-label': 'Text effect', 'data-testid': 'text-effects' }, TEXT_EFFECTS.map((type) => h('button', {
         type: 'button', class: `fx${fx.type === type ? ' on' : ''}`, 'aria-pressed': String(fx.type === type), title: EFFECT_NAMES[type], 'data-testid': `effect-${type}`,
-        onClick: () => this.up({ effect: type === 'none' ? null : { type, color: fx.color, offset: fx.offset, thickness: fx.thickness } }),
+        // Starting from no effect, the colors are the ones the preview shows.
+        onClick: () => this.up({ effect: type === 'none' ? null : { type, color: fx.color ?? (['splice', 'glow'].includes(type) ? '#ffb703' : undefined), offset: fx.offset, thickness: fx.thickness } }),
       }, h('span', { class: 'fx-img', html: preview(type) }), h('small', null, EFFECT_NAMES[type])))),
       fx.type !== 'none' ? h('div', { class: 'sub' },
         uses.color ? h('div', { class: 'field inline' },
@@ -538,7 +539,10 @@ export class Inspector {
       section('Page',
         (() => {
           const input = h('input', { type: 'text', value: ed.pageData.title || '', maxlength: '120', placeholder: 'Add a page title', 'aria-label': 'Page title', 'data-testid': 'page-title' });
-          input.addEventListener('change', () => ed.setPageTitle(ed.page, input.value));
+          // Saved as it's typed (one undo step): the panel can be redrawn
+          // before the field would report a change.
+          const at = ed.page;
+          input.addEventListener('input', () => ed.setPageTitle(at, input.value));
           input.addEventListener('keydown', (e) => e.key === 'Enter' && input.blur());
           return h('label', { class: 'field' }, h('span', null, 'Title'), input);
         })(),

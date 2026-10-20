@@ -362,9 +362,10 @@ export function addPage(doc, afterIndex = doc.pages.length - 1, page) {
 
 /** A page with new ids for itself and everything on it (connectors re-joined). */
 export function freshPage(page) {
-  const copy = clone(page);
+  // The elements are copied once, by freshCopies.
+  const copy = clone({ ...page, elements: [] });
   copy.id = uid('p');
-  copy.elements = freshCopies(copy.elements);
+  copy.elements = freshCopies(page.elements);
   return copy;
 }
 

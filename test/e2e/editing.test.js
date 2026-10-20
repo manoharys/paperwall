@@ -514,3 +514,15 @@ test('[VIEW-06] undo waits while a guide is being dragged', async () => {
   assert.equal((await state(page, (ed) => ed.pageData.guides || [])).length, 1, 'the guide was placed');
   await context.close();
 });
+
+test('[EDIT-01] a field that commits as you start a drag neither cuts the drag short nor is lost', async () => {
+  const { page, context } = await newDesign('square');
+  const s = await addShape(page, 'Square');
+  await page.fill('[data-testid="geo-w"]', '200'); // no Enter: commits when focus leaves
+  const c = await elementCenter(page, s.id);
+  await drag(page, c, { x: c.x + 120, y: c.y + 90 }, { steps: 10, modifiers: ['Alt'] });
+  const el = (await elements(page)).find((e) => e.id === s.id);
+  assert.equal(Math.round(el.w), 200, 'the width was kept');
+  assert.ok(el.x > s.x + 50, `and the drag moved it (${s.x} → ${el.x})`);
+  await context.close();
+});
