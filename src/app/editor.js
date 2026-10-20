@@ -467,11 +467,15 @@ export class Editor {
     if (!kind) throw new Error(`${file.name} isn't a picture, video or sound`);
     checkSize(file, kind);
     let [dataUrl, info] = await Promise.all([readFileAsDataUrl(file), kind === 'video' ? videoInfo(file) : audioInfo(file)]);
-    // A "video" with no picture is a sound (so it can be the soundtrack).
+    // A "video" with no picture this browser can show: a QuickTime movie is
+    // a video it can't play (an iPhone's HEVC, say); anything else is taken as
+    // a sound (music saved as .webm or .mp4), and said so.
     if (info.sound) {
+      if (file.type === 'video/quicktime') throw new Error(`${file.name} can't be played in this browser. Try saving it as MP4 (H.264) or WebM.`);
+      if (file.size > 25e6) throw new Error(`This browser can't show a picture in ${file.name}, and as a sound it's over the 25 MB limit.`);
       kind = 'audio';
       info = { duration: info.duration };
-      checkSize(file, kind);
+      toast(`This browser shows no picture in ${file.name}, so it's used as a sound.`);
     }
     const upload = { id: uid('u'), name: file.name, mime: file.type, dataUrl, kind, ...info, addedAt: Date.now() };
     // It's used either way; Uploads just can't keep a copy when storage is full.
