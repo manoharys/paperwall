@@ -80,8 +80,15 @@ export class Inspector {
 
   // ---------- helpers ----------
 
-  up(props, key) {
-    this.ed.update(props, key);
+  up(props, key, ids) {
+    this.ed.update(props, key, ids);
+  }
+
+  /** Charts and tables draw labels in two weights; load both first. */
+  async setFont(font) {
+    const ids = this.ed.selection;
+    await Promise.all([ensureFont(font, 400), ensureFont(font, 700)]);
+    this.up({ font }, null, ids);
   }
 
   live(prop, transform = (v) => v) {
@@ -203,7 +210,6 @@ export class Inspector {
 
   textPanel(el) {
     const ed = this.ed;
-    const fonts = [...FONTS.map((f) => f.name), ...customFontNames()];
     const fontSelect = fontPicker({ value: el.font, fonts: FONTS, kinds: FONT_KINDS, extra: customFontNames(), testid: 'font-select', onChange: (font) => ed.setFont(font) });
     const upload = h('button', { type: 'button', class: 'link-btn', 'data-testid': 'upload-font', onClick: async () => {
       const [file] = await pickFile('.woff2,.woff,.ttf,.otf,font/*');
@@ -401,10 +407,7 @@ export class Inspector {
       h('div', { class: 'row' },
         h('div', { class: 'field inline' }, h('span', null, 'First color'), colorButton({ label: 'Chart color', testid: 'chart-color', value: el.colors[0], getContext: this.colorContext, onChange: (c, l) => this.up({ colors: [c, ...el.colors.slice(1)] }, l ? 'cc' : null) })),
         h('div', { class: 'field inline' }, h('span', null, 'Labels'), colorButton({ label: 'Label color', value: el.textColor, getContext: this.colorContext, onChange: (c, l) => this.up({ textColor: c }, l ? 'tc' : null) }))),
-      fontPicker({ value: el.font, fonts: FONTS, kinds: FONT_KINDS, onChange: async (font) => {
-        await Promise.all([ensureFont(font, 400), ensureFont(font, 700)]);
-        this.up({ font });
-      } }),
+      fontPicker({ value: el.font, fonts: FONTS, kinds: FONT_KINDS, onChange: (font) => this.setFont(font) }),
       toggle({ label: el.chartType === 'pie' || el.chartType === 'donut' ? 'Show percentages' : 'Show values', checked: el.showValues, testid: 'chart-values', onChange: (showValues) => this.up({ showValues }) }))];
   }
 
@@ -429,10 +432,7 @@ export class Inspector {
           { value: 'center', label: 'Center', icon: 'tAlignCenter' },
           { value: 'right', label: 'Align right', icon: 'tAlignRight' },
         ] })),
-      fontPicker({ value: el.font, fonts: FONTS, kinds: FONT_KINDS, onChange: async (font) => {
-        await Promise.all([ensureFont(font, 400), ensureFont(font, 700)]);
-        this.up({ font });
-      } }),
+      fontPicker({ value: el.font, fonts: FONTS, kinds: FONT_KINDS, onChange: (font) => this.setFont(font) }),
       h('div', { class: 'row' },
         h('div', { class: 'field inline' }, h('span', null, 'Header'), colorButton({ label: 'Header color', testid: 'table-header-fill', value: el.headerFill, getContext: this.colorContext, onChange: (c, l) => this.up({ headerFill: c }, l ? 'hf' : null) })),
         h('div', { class: 'field inline' }, h('span', null, 'Text'), colorButton({ label: 'Table text color', value: el.color, getContext: this.colorContext, onChange: (c, l) => this.up({ color: c }, l ? 'tc' : null) })),

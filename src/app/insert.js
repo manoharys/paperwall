@@ -7,8 +7,9 @@ import { ALL_ICONS, ALL_STICKERS, searchGraphics } from '../model/graphics.js';
 import { renderPage, renderElementOnly } from '../model/render.js';
 import { createShape, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES } from '../model/doc.js';
 import { collectColors } from '../model/commands.js';
-import { TEMPLATES, TEMPLATE_CATEGORIES, TEMPLATE_FORMATS, templateDoc, searchTemplates, templateFormatLabel } from '../templates/index.js';
-import { measure, ensureFont, ensureDesignFonts } from './fonts.js';
+import { TEMPLATES, TEMPLATE_CATEGORIES, TEMPLATE_FORMATS, searchTemplates, templateFormatLabel } from '../templates/index.js';
+import { measure, ensureFont } from './fonts.js';
+import { readyTemplate } from './templates.js';
 import * as store from './store.js';
 
 const TABS = [
@@ -81,6 +82,7 @@ export class InsertPanel {
 
   render() {
     for (const b of this.rail.children) b.setAttribute('aria-current', String(b.dataset.tab === this.tab));
+    forget(this.body);
     clear(this.body);
     const fn = {
       templates: () => this.templates(),
@@ -121,10 +123,12 @@ export class InsertPanel {
 
   async useTemplate(t) {
     const ed = this.ed;
-    const blank = ed.doc.pages.length === 1 && !ed.pageData.elements.length;
-    await ed.addTemplatePage(await readyTemplate(t));
+    const doc = await readyTemplate(t);
+    // Decide only now, after the wait: the design may have changed meanwhile.
+    const blank = ed.doc.pages.length === 1 && !ed.pageData.elements.length ? ed.pageData.id : null;
+    ed.addTemplatePage(doc);
     if (blank) {
-      ed.change(() => ed.doc.pages.splice(0, 1));
+      ed.change(() => ed.doc.pages.splice(ed.doc.pages.findIndex((p) => p.id === blank), 1));
       ed.page = -1;
       ed.setPage(0);
     }
@@ -193,6 +197,8 @@ export class InsertPanel {
     };
     const fill = () => {
       const { icons, stickers, total } = searchGraphics(this.query, { limit: shown });
+      forget(iconsGrid);
+      forget(stickerGrid);
       clear(iconsGrid);
       clear(stickerGrid);
       for (const i of icons) iconsGrid.append(thumb('thumb', i.name, `icon-${i.id}`, () => ed.addIcon(i.id), () => renderElementOnly(PREVIEW_DOC, createIcon(i.id, { w: 48, h: 48, color: '#2b2b38' }))));
@@ -346,12 +352,6 @@ export class InsertPanel {
   }
 }
 
-/** A template laid out with its real fonts, ready to open or add. */
-export async function readyTemplate(t) {
-  await ensureDesignFonts(templateDoc(t));
-  return templateDoc(t, measure);
-}
-
 /** A template preview. It's drawn when it scrolls into view, once its fonts have loaded. */
 export function templateCard(t, onClick) {
   const img = h('span', { class: 'tpl-img', style: { aspectRatio: `${t.width} / ${t.height}` } });
@@ -362,7 +362,7 @@ export function templateCard(t, onClick) {
   const meta = t.pages > 1 ? `${templateFormatLabel(t)} · ${t.pages} pages` : templateFormatLabel(t);
   // Previews sit in same-sized frames so rows line up, whatever the format.
   const frame = h('span', { class: t.height / t.width > 1.25 ? 'tpl-frame tall' : 'tpl-frame' }, img);
-  return h('button', { type: 'button', class: 'tpl', title: `${t.name} (${meta})`, 'data-testid': `template-${t.id}`, 'data-format': t.format, onClick },
+  return h('button', { type: 'button', class: 'tpl', title: `${t.name} (${meta})`, 'data-testid': `template-${t.id}`, 'data-format': t.format, onClick: () => onClick(t) },
     frame,
     t.pages > 1 ? h('span', { class: 'tpl-badge', 'data-testid': 'template-pages' }, `${t.pages} pages`) : null,
     h('span', { class: 'tpl-name' }, t.name),
@@ -376,6 +376,17 @@ export function templateCard(t, onClick) {
  */
 export function templateBrowser({ state, ids, onPick, pageSize = 48, gridClass = 'tpl-grid' }) {
   const grid = h('div', { class: gridClass, 'data-testid': ids.grid });
+  // One template at a time: a second click while the first loads does nothing.
+  let busy = false;
+  const pick = async (t) => {
+    if (busy) return;
+    busy = true;
+    try {
+      await onPick(t);
+    } finally {
+      busy = false;
+    }
+  };
   const count = h('p', { class: 'tpl-count', 'data-testid': ids.count, 'aria-live': 'polite' });
   const more = h('button', { type: 'button', class: 'btn more', 'data-testid': ids.more, onClick: () => {
     state.shown += pageSize;
@@ -399,9 +410,10 @@ export function templateBrowser({ state, ids, onPick, pageSize = 48, gridClass =
   const fill = (reset = true) => {
     if (reset) state.shown = pageSize;
     const list = searchTemplates(state);
+    forget(grid);
     clear(grid);
     if (!list.length) grid.append(h('p', { class: 'empty-note' }, 'No templates match. Try "sale", "invite", "resume" or "menu".'));
-    for (const t of list.slice(0, state.shown)) grid.append(templateCard(t, () => onPick(t)));
+    for (const t of list.slice(0, state.shown)) grid.append(templateCard(t, pick));
     count.textContent = `${list.length} template${list.length === 1 ? '' : 's'}`;
     more.hidden = list.length <= state.shown;
   };
@@ -440,5 +452,15 @@ const observer = typeof IntersectionObserver !== 'undefined'
 export function lazily(el, fn) {
   if (!observer) return void fn();
   pending.set(el, fn);
+  el.dataset.lazy = '';
   observer.observe(el);
+}
+
+/** Stop waiting on everything inside root, before it is thrown away. */
+export function forget(root) {
+  if (!observer) return;
+  for (const el of root.querySelectorAll('[data-lazy]')) {
+    observer.unobserve(el);
+    pending.delete(el);
+  }
 }

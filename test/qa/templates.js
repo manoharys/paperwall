@@ -2,16 +2,16 @@
 // the template quality gate test, and handy by eye: open
 // http://127.0.0.1:5173/test/qa/templates.html with `npm run dev` running.
 
-import { TEMPLATES, templateDoc } from '../../src/templates/index.js';
-import { registerFonts, ensureDesignFonts, measure } from '../../src/app/fonts.js';
+import { TEMPLATES } from '../../src/templates/index.js';
+import { registerFonts, measure } from '../../src/app/fonts.js';
+import { readyTemplate } from '../../src/app/templates.js';
 import { renderPage } from '../../src/model/render.js';
 import { lintDesign } from '../../src/model/lint.js';
 
 registerFonts();
 
 async function check(t) {
-  await ensureDesignFonts(templateDoc(t));
-  const doc = templateDoc(t, measure);
+  const doc = await readyTemplate(t);
   return { doc, issues: lintDesign(doc, measure) };
 }
 

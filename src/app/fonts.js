@@ -113,11 +113,40 @@ async function fileAsDataUrl(file) {
   return url;
 }
 
+/** Every distinct character of text in a design, as code points. */
+function designChars(doc) {
+  const set = new Set();
+  const add = (s) => {
+    for (const ch of String(s ?? '')) set.add(ch.codePointAt(0));
+  };
+  const visit = (els) => {
+    for (const el of els) {
+      if (el.type === 'text') add(el.text);
+      if (el.type === 'table') el.rows.flat().forEach(add);
+      if (el.type === 'chart') el.data.forEach((d) => add(d.label));
+      if (el.type === 'group') visit(el.children);
+    }
+  };
+  doc.pages.forEach((p) => visit(p.elements));
+  return [...set];
+}
+
+/** Whether a code point is inside a CSS unicode-range like "U+0900-097F, U+20B9". */
+function inRange(cp, range) {
+  return range.split(',').some((part) => {
+    const [a, b = a] = part.trim().replace(/^U\+/i, '').split('-').map((x) => parseInt(x, 16));
+    return cp >= a && cp <= b;
+  });
+}
+
 /** @font-face rules for just the fonts a design uses, with the files inlined. */
 export async function fontCssFor(doc) {
   const rules = [];
+  const chars = designChars(doc);
   for (const { font, weight } of fontsUsed(doc)) {
     for (const { file, range } of fontFiles(font, weight)) {
+      // Files for other scripts go in only if the design uses that script.
+      if (range && !chars.some((c) => inRange(c, range))) continue;
       const url = await fileAsDataUrl(file);
       rules.push(`@font-face{font-family:"${font.name}";font-weight:${weight};src:url(${url}) format("woff2");${range ? `unicode-range:${range};` : ''}}`);
     }

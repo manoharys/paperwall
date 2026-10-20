@@ -13,6 +13,7 @@ import { renderHome } from './home.js';
 import { loadFonts, registerDesignFonts, ensureDesignFonts, clearMeasureCache } from './fonts.js';
 import * as store from './store.js';
 import { validateDesign } from '../model/doc.js';
+import { fontsUsed } from '../model/fonts.js';
 
 const root = document.getElementById('app');
 let current = null; // { editor, unbind }
@@ -171,10 +172,15 @@ async function openEditor(id) {
   canvas.zoomToFit();
   canvas.render();
   // A font can finish loading after the first paint (a slow device, a font
-  // picked from the list); measure again and redraw when it does.
-  const onFontsLoaded = () => {
+  // picked from the list). When one this design uses arrives, measure its
+  // text again and redraw. Fonts loading for previews elsewhere are ignored.
+  const onFontsLoaded = (e) => {
+    const families = new Set((e.fontfaces || []).map((f) => f.family.replace(/^["']|["']$/g, '')));
+    const used = new Set(fontsUsed(editor.doc).map(({ font }) => font.name));
+    if (![...families].some((f) => used.has(f))) return;
     clearMeasureCache();
-    editor.refitAllText();
+    editor.refitAllText((el) => families.has(el.font));
+    editor.afterChange(true);
     canvas.render();
   };
   document.fonts.addEventListener('loadingdone', onFontsLoaded);

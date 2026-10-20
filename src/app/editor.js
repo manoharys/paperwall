@@ -10,7 +10,7 @@ import {
 import { fitHeight } from '../model/text-layout.js';
 import { curveGeometry } from '../model/render.js';
 import { unionBounds } from '../model/geometry.js';
-import { measure, ensureDesignFonts, ensureFont } from './fonts.js';
+import { measure, ensureFont } from './fonts.js';
 import { removePlainBackground } from '../model/bgremove.js';
 import { readFileAsDataUrl, loadImage, toast, debounce } from './ui.js';
 import * as store from './store.js';
@@ -284,17 +284,20 @@ export class Editor {
 
   /** Switch the selected text to another font, once it has loaded. */
   async setFont(font) {
+    // Remember what was selected: the selection can change while the font loads.
+    const ids = this.selection;
     const weights = new Set(this.selected.map((el) => el.weight || 400));
     await Promise.all([...weights].map((w) => ensureFont(font, w)));
-    this.update({ font });
+    this.update({ font }, null, ids);
   }
 
-  update(props, key = null) {
-    const ids = this.selection;
+  /** Change elements (the selection by default) on the current page. */
+  update(props, key = null, ids = this.selection) {
+    ids = ids.filter((id) => cmd.findElement(this.pageData, id));
     if (!ids.length) return;
     this.change(() => {
       cmd.updateElements(this.doc, this.page, ids, props);
-      for (const el of this.selected) if (el.type === 'text') this.fitText(el);
+      for (const el of cmd.selectElements(this.pageData, ids)) if (el.type === 'text') this.fitText(el);
     }, { key: key ? `${key}:${ids.join(',')}` : null });
   }
 
@@ -311,10 +314,10 @@ export class Editor {
     el.h = fitHeight(el, measure);
   }
 
-  refitAllText() {
+  refitAllText(which = () => true) {
     const visit = (els) => {
       for (const el of els) {
-        if (el.type === 'text') this.fitText(el);
+        if (el.type === 'text' && which(el)) this.fitText(el);
         if (el.type === 'group') visit(el.children);
       }
     };
@@ -481,9 +484,11 @@ export class Editor {
     this.change(() => cmd.setBackground(this.doc, this.page, bg), { key: key ? `bg:${key}:${this.page}` : null });
   }
 
-  /** Add every page of a template after the current page, resized to fit. */
-  async addTemplatePage(templateDoc) {
-    await ensureDesignFonts(templateDoc);
+  /**
+   * Add every page of a template after the current page, resized to fit.
+   * Its fonts must already be loaded (see readyTemplate).
+   */
+  addTemplatePage(templateDoc) {
     const resized = cmd.resizeDesign(templateDoc, this.doc.width, this.doc.height);
     const first = this.change(() => {
       for (const [id, a] of Object.entries(resized.assets || {})) this.doc.assets[id] = a;

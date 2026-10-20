@@ -2,7 +2,7 @@
 // text, icons and stickers, and is dedicated to the public domain (CC0).
 
 import { createDesign, createText, createShape, createLine, createIcon, createSticker, createQr, createPage, clone } from '../model/doc.js';
-import { FONT_PAIRS } from '../model/fonts.js';
+import { FONT_PAIRS, fontsUsed } from '../model/fonts.js';
 import { approxMeasure } from '../model/text-layout.js';
 import { layoutDesign } from '../model/layout.js';
 import { PALETTES, makePage } from './kit.js';
@@ -284,6 +284,12 @@ export function searchTemplates({ query = '', category = 'All', format = 'All' }
   return TEMPLATES.filter((t) => (category === 'All' || t.category === category) &&
     (format === 'All' || t.format === format) &&
     words.every((w) => `${t.name} ${t.category} ${t.tags}`.toLowerCase().includes(w)));
+}
+
+/** The fonts a template uses, without laying it out. */
+export function templateFonts(t) {
+  const spec = t.build();
+  return fontsUsed({ pages: spec.pages || [{ elements: spec.elements }] });
 }
 
 /**

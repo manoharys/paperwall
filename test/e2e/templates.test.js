@@ -89,3 +89,15 @@ test('[TPL-09] filter templates by size', async () => {
   assert.deepEqual(both, searchTemplates({ format: 'story', category: 'Sales' }).map((t) => t.id));
   await context.close();
 });
+
+test('double-clicking a template adds it once and keeps your pages', async () => {
+  const { page, context } = await newDesign('square');
+  await openTab(page, 'templates');
+  await page.dblclick('[data-testid="template-quote-card"]');
+  await page.waitForFunction(() => window.paperwall.editor.doc.pages[0].elements.length > 0);
+  await page.waitForTimeout(300);
+  const doc = await state(page);
+  assert.equal(doc.pages.length, 1, 'one copy, and the blank page was replaced');
+  assert.ok(doc.pages[0].elements.some((e) => e.type === 'text' && /Make the thing/.test(e.text)));
+  await context.close();
+});

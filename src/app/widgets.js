@@ -27,9 +27,32 @@ let openPopover = null;
 
 export function closePopover() {
   if (!openPopover) return;
+  openPopover.cleanup?.();
   openPopover.remove();
   openPopover = null;
   document.dispatchEvent(new Event('paperwall:popover-closed'));
+}
+
+/**
+ * Show a popover under the button that opened it, kept on screen. Escape
+ * closes it and puts focus back on the button.
+ */
+function showPopover(pop, btn, { alignRight = false } = {}) {
+  pop.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      closePopover();
+      btn.focus();
+    }
+  });
+  document.body.append(pop);
+  const r = btn.getBoundingClientRect();
+  const left = alignRight ? r.left - pop.offsetWidth + r.width : r.left;
+  Object.assign(pop.style, {
+    top: `${Math.max(8, Math.min(window.innerHeight - pop.offsetHeight - 8, r.bottom + 6))}px`,
+    left: `${Math.max(8, Math.min(window.innerWidth - pop.offsetWidth - 8, left))}px`,
+  });
+  openPopover = pop;
 }
 
 export function popoverOpen() {
@@ -37,7 +60,8 @@ export function popoverOpen() {
 }
 
 document.addEventListener('pointerdown', (e) => {
-  if (openPopover && !openPopover.contains(e.target) && !e.target.closest?.('.swatch-btn')) closePopover();
+  // A popover's own button toggles it on click, so leave those clicks to it.
+  if (openPopover && !openPopover.contains(e.target) && !e.target.closest?.('.swatch-btn, .font-btn')) closePopover();
 });
 
 /**
@@ -93,19 +117,7 @@ export function colorButton({ label, value, onChange, getContext = () => ({}), t
       row('In this design', ctx.used),
       row('Brand kit', ctx.brand),
       PALETTES.map((p) => row(p.name, p.colors)));
-    pop.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        closePopover();
-        btn.focus();
-      }
-    });
-    document.body.append(pop);
-    const r = btn.getBoundingClientRect();
-    const top = Math.min(window.innerHeight - pop.offsetHeight - 8, r.bottom + 6);
-    const left = Math.min(window.innerWidth - pop.offsetWidth - 8, Math.max(8, r.left - pop.offsetWidth + r.width));
-    Object.assign(pop.style, { top: `${Math.max(8, top)}px`, left: `${left}px` });
-    openPopover = pop;
+    showPopover(pop, btn, { alignRight: true });
   });
   return btn;
 }
@@ -236,21 +248,9 @@ export function fontPicker({ label = 'Font', value, fonts, kinds, onChange, test
       fill();
     } }, k)));
     const pop = h('div', { class: 'popover font-pop', 'data-for': label, 'data-testid': 'font-popover' }, search, chips, list);
-    pop.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        closePopover();
-        btn.focus();
-      }
-    });
-    document.body.append(pop);
+    pop.cleanup = () => seen.disconnect();
     fill();
-    const r = btn.getBoundingClientRect();
-    Object.assign(pop.style, {
-      top: `${Math.max(8, Math.min(window.innerHeight - pop.offsetHeight - 8, r.bottom + 6))}px`,
-      left: `${Math.max(8, Math.min(window.innerWidth - pop.offsetWidth - 8, r.left))}px`,
-    });
-    openPopover = pop;
+    showPopover(pop, btn);
     search.focus();
     list.querySelector('.on')?.scrollIntoView({ block: 'center' });
   });

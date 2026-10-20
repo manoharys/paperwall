@@ -189,3 +189,13 @@ test('[TXT-20] use your own font file', async () => {
   assert.ok(svg.includes('font-family:"My Hand"'), 'embedded in exports');
   await context.close();
 });
+
+test('the font button opens and closes its list', async () => {
+  const { page, context } = await newDesign('square');
+  await addText(page);
+  await page.click('[data-testid="font-select"]');
+  assert.equal(await page.locator('[data-testid="font-popover"]').count(), 1);
+  await page.click('[data-testid="font-select"]');
+  assert.equal(await page.locator('[data-testid="font-popover"]').count(), 0);
+  await context.close();
+});
