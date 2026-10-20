@@ -817,15 +817,16 @@ export class Editor {
     });
   }
 
-  // Align, distribute and flip work on the whole selection (its bounds
-  // include held connectors, which then follow their elements); only a
-  // selection of nothing but held connectors is left alone.
+  // Align and flip work on the whole selection (its bounds include held
+  // connectors, which then follow their elements); distribute spaces out
+  // only what can move. A selection of nothing but held connectors is left alone.
   align(how) {
     if (this.movable.length) this.change(() => cmd.alignElements(this.doc, this.page, this.selection, how));
   }
 
   distribute(axis) {
-    if (this.selection.length >= 3 && this.movable.length) this.change(() => cmd.distributeElements(this.doc, this.page, this.selection, axis));
+    const ids = this.movable;
+    if (ids.length >= 3) this.change(() => cmd.distributeElements(this.doc, this.page, ids, axis));
   }
 
   flip(axis) {

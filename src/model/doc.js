@@ -340,7 +340,6 @@ export function addAsset(doc, { mime, dataUrl, width, height, name = '' }) {
   return id;
 }
 
-/** Remove images that no element or background uses any more. */
 /** The ids of the images a design actually shows (on elements, in groups, as backgrounds). */
 export function usedAssetIds(doc) {
   const used = new Set();
@@ -357,6 +356,7 @@ export function usedAssetIds(doc) {
   return used;
 }
 
+/** Remove images that no element or background uses any more. */
 export function pruneAssets(doc) {
   const used = usedAssetIds(doc);
   for (const id of Object.keys(doc.assets)) if (!used.has(id)) delete doc.assets[id];

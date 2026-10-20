@@ -600,3 +600,18 @@ test('[ELM-09] a turned drawing is hit only near its stroke', async () => {
   assert.ok(drawHit(d, c, 8), 'on the line (its middle stays put)');
   assert.ok(!drawHit(d, { x: d.x + 10, y: d.y + d.h - 10 }, 8), 'a far corner of its box is not');
 });
+
+test('[ELM-10] a live drag passing through a turn detaches nothing', async () => {
+  const { createConnector, updateConnectors } = await import('../../src/model/connectors.js');
+  const { createShape, createGroup } = await import('../../src/model/doc.js');
+  const a = createShape('rect', { x: 0, y: 0, w: 100, h: 100 });
+  const b = createShape('rect', { x: 400, y: 0, w: 100, h: 100 });
+  const c = createConnector({ from: [100, 50], to: [400, 50], start: a.id, end: b.id });
+  const g = createGroup([a, c]);
+  const page = { elements: [g, b] };
+  g.rotation = 5;
+  updateConnectors(page, { refit: false }); // a frame of a rotate drag
+  g.rotation = 0;
+  updateConnectors(page);
+  assert.equal(c.end.id, b.id);
+});

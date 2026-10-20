@@ -119,7 +119,11 @@ export function updateConnectors(page, { refit = true } = {}) {
         // A turned or mirrored group moves as one picture, connectors and all.
         // An end on an element outside it (or one that's gone) comes loose:
         // it can't follow without bending the picture.
-        if (el.rotation || el.flipX || el.flipY) freeOutside(el.children, idsIn(el.children));
+        // Only once a change is committed (refit): a live preview passing
+        // through a turn (a rotate drag that ends at 0°) mustn't detach anything.
+        if (el.rotation || el.flipX || el.flipY) {
+          if (refit) freeOutside(el.children, idsIn(el.children));
+        }
         else {
           const before = changed;
           changed = false;
@@ -168,11 +172,12 @@ export function updateConnectors(page, { refit = true } = {}) {
     const sTarget = el.start?.id ? byId.get(el.start.id) : null;
     const eTarget = el.end?.id ? byId.get(el.end.id) : null;
     // A deleted target frees the end where it was, keeping the side it left from.
-    if (el.start?.id && !sTarget) {
+    // (Only when committing, like freeOutside: live previews never detach.)
+    if (refit && el.start?.id && !sTarget) {
       el.start = { id: null, side: el.start.side };
       moved = true; // a change too, if the line itself stays put
     }
-    if (el.end?.id && !eTarget) {
+    if (refit && el.end?.id && !eTarget) {
       el.end = { id: null, side: el.end.side };
       moved = true;
     }
