@@ -317,7 +317,8 @@ export class Canvas {
     if (!sel.length) return;
     ed.history.record(ed.doc);
     if (handle === 'end0' || handle === 'end1') {
-      this.drag = { mode: 'end', el: sel[0], which: +handle.slice(3), moved: false, target: null };
+      const el = sel[0];
+      this.drag = { mode: 'end', el, which: +handle.slice(3), moved: false, target: null, orig: clone({ x: el.x, y: el.y, w: el.w, h: el.h, points: el.points, start: el.start, end: el.end }) };
     } else if (handle === 'rotate') {
       this.drag = { mode: 'rotate', el: sel[0], moved: false };
     } else if (sel.length === 1) {
@@ -459,6 +460,14 @@ export class Canvas {
       this.drag = null;
       this.stroke?.remove();
       this.stroke = null;
+      return;
+    }
+    if (d?.mode === 'end') {
+      // Put the end back where it was, attached as it was.
+      this.drag = null;
+      Object.assign(d.el, d.orig);
+      this.ed.history.discard();
+      this.ed.emit('doc');
       return;
     }
     if (d?.mode === 'guide') {
@@ -686,7 +695,8 @@ export class Canvas {
     const raw = 60 / (z * perUnit);
     const pow = 10 ** Math.floor(Math.log10(raw));
     const step = [1, 2, 5, 10].map((k) => k * pow).find((s) => s >= raw);
-    const digits = step < 1 ? 1 : 0;
+    // Enough decimals for the labelled step (0.05 → two, 0.5 → one, 5 → none).
+    const digits = Math.max(0, -Math.floor(Math.log10(step) + 1e-9));
     const ticks = (lenPx, vertical) => {
       const out = [];
       const len = lenPx / perUnit;

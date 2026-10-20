@@ -88,7 +88,8 @@ function freshCopies(els) {
     for (const c of els) {
       if (c.type === 'group') remap(c.children);
       if (c.type !== 'connector') continue;
-      for (const k of ['start', 'end']) c[k] = { id: c[k]?.id ? map.get(c[k].id) ?? null : null };
+      // Keep the side an end left from, so a loose end keeps the line's shape.
+      for (const k of ['start', 'end']) c[k] = { id: c[k]?.id ? map.get(c[k].id) ?? null : null, side: c[k]?.side };
     }
   };
   remap(copies);

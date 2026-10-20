@@ -8,6 +8,7 @@ const STORES = ['designs', 'uploads', 'settings', 'versions'];
 let dbPromise = null;
 const memory = Object.fromEntries(STORES.map((s) => [s, new Map()]));
 let persistent = true;
+let outdated = false; // a newer Paperwall upgraded storage in another tab
 
 function open() {
   if (dbPromise) return dbPromise;
@@ -44,6 +45,15 @@ function open() {
       globalThis.dispatchEvent?.(new CustomEvent('paperwall:storage-blocked'));
     };
     req.onerror = () => {
+      if (req.error?.name === 'VersionError') {
+        // A newer Paperwall in another tab upgraded the database. Don't fall
+        // back to memory (edits would vanish): stop saving and say so.
+        outdated = true;
+        globalThis.dispatchEvent?.(new CustomEvent('paperwall:storage-outdated'));
+        dbPromise = null;
+        resolve(null);
+        return;
+      }
       persistent = false;
       resolve(null);
     };
@@ -83,6 +93,7 @@ export function isPersistent() {
 }
 
 export async function put(store, key, value) {
+  if (outdated) throw new Error('Paperwall was updated in another tab. Reload this tab to keep saving.');
   const db = await open();
   if (!db) return void memory[store].set(key, value);
   await txRetry(db, store, 'readwrite', (s) => s.put(value, key));
@@ -91,6 +102,7 @@ export async function put(store, key, value) {
 /** Several puts (value set) and deletes (value undefined) in one transaction. */
 async function batch(store, ops) {
   if (!ops.length) return;
+  if (outdated) throw new Error('Paperwall was updated in another tab. Reload this tab to keep saving.');
   const db = await open();
   if (!db) {
     for (const [k, v] of ops) v === undefined ? memory[store].delete(k) : memory[store].set(k, v);

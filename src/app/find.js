@@ -57,7 +57,6 @@ export function findDialog(editor) {
       const r = replaceText(editor.doc, find.value, repl.value, opts);
       count = r.count;
       refit(r.changed);
-      editor.syncAllConnectors(); // boxes on other pages may have grown
     });
     refresh();
     toast(count ? `Replaced ${count} time${count === 1 ? '' : 's'}. Undo to put it back.` : 'Nothing to replace.');

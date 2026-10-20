@@ -182,3 +182,16 @@ export function snapMove(moving, others, page, threshold = 6, extra = {}) {
 export function round2(n) {
   return Math.round(n * 100) / 100;
 }
+
+/** Whether point p is within `tol` of a polyline through pts ([[x, y], ...]). */
+export function nearPolyline(pts, p, tol) {
+  if (pts.length === 1) return Math.hypot(p.x - pts[0][0], p.y - pts[0][1]) <= tol;
+  for (let i = 1; i < pts.length; i++) {
+    const [ax, ay] = pts[i - 1];
+    const [bx, by] = pts[i];
+    const len2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
+    const t = Math.max(0, Math.min(1, ((p.x - ax) * (bx - ax) + (p.y - ay) * (by - ay)) / len2));
+    if (Math.hypot(p.x - (ax + t * (bx - ax)), p.y - (ay + t * (by - ay))) <= tol) return true;
+  }
+  return false;
+}

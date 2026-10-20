@@ -89,9 +89,9 @@ export class Editor {
   }
 
   afterChange(quiet = false) {
-    // Connectors follow what they're attached to. Changes reach other pages
-    // only through syncAllConnectors() (find and replace, restoring).
-    updateConnectors(this.pageData);
+    // Connectors on every page follow what they're attached to (pages
+    // without connectors return at once).
+    this.syncAllConnectors();
     this.doc.updatedAt = Date.now();
     this.changedSinceVersion = true;
     this.selection = this.selection.filter((id) => cmd.findElement(this.pageData, id));
@@ -104,7 +104,8 @@ export class Editor {
     try {
       await store.saveDesign(this.doc);
       // Every few minutes of work, keep a version to go back to.
-      if (Date.now() - (this.versionAt || 0) > VERSION_EVERY) await this.saveVersion();
+      // Not awaited: saving the design itself shouldn't wait on history.
+      if (Date.now() - (this.versionAt || 0) > VERSION_EVERY) this.saveVersion();
     } catch (e) {
       toast(`Couldn't save on this device: ${e.message}`, 'error');
     }
@@ -142,7 +143,6 @@ export class Editor {
       // Keep today's images too: undo snapshots share the design's assets.
       Object.assign(this.doc, { name: v.name, width: v.width, height: v.height, unit: v.unit, pages: v.pages, assets: { ...this.doc.assets, ...v.assets } });
       this.page = 0; // the version may have fewer pages than the one in view
-      this.syncAllConnectors();
     });
     this.selection = [];
     this.page = -1;
@@ -493,7 +493,6 @@ export class Editor {
     this.change(() => {
       cmd.updateElements(this.doc, page, ids, props);
       for (const el of cmd.selectElements(this.doc.pages[page], ids)) if (el.type === 'text') this.fitText(el);
-      if (page !== this.page) updateConnectors(this.doc.pages[page]);
     }, { key: key ? `${key}:${ids.join(',')}` : null });
   }
 

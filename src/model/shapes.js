@@ -1,5 +1,7 @@
 // SVG path data for shapes, drawn to fill a w × h box.
 
+import { nearPolyline } from './geometry.js';
+
 const f = (n) => Math.round(n * 100) / 100;
 
 function poly(points) {
@@ -107,18 +109,11 @@ export function drawPath(el) {
   return `${d} L${f(z[0])} ${f(z[1])}`;
 }
 
-/** Whether point p (page px) is within `tol` px of a drawing's stroke. */
+/** Whether point p (page px) is within `tol` px of a drawing's stroke (unrotated drawings). */
 export function drawHit(el, p, tol) {
-  const pts = (el.points || []).map(([x, y]) => [el.x + x * el.w, el.y + y * el.h]);
-  if (pts.length === 1) return Math.hypot(p.x - pts[0][0], p.y - pts[0][1]) <= tol;
-  for (let i = 1; i < pts.length; i++) {
-    const [ax, ay] = pts[i - 1];
-    const [bx, by] = pts[i];
-    const len2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
-    const t = Math.max(0, Math.min(1, ((p.x - ax) * (bx - ax) + (p.y - ay) * (by - ay)) / len2));
-    if (Math.hypot(p.x - (ax + t * (bx - ax)), p.y - (ay + t * (by - ay))) <= tol) return true;
-  }
-  return false;
+  // A flipped drawing is drawn mirrored about its centre; mirror the point to match.
+  const q = { x: el.flipX ? 2 * el.x + el.w - p.x : p.x, y: el.flipY ? 2 * el.y + el.h - p.y : p.y };
+  return nearPolyline((el.points || []).map(([x, y]) => [el.x + x * el.w, el.y + y * el.h]), q, tol);
 }
 
 /** The outline a photo is clipped to: its frame shape, or a (rounded) rectangle. */

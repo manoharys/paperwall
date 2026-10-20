@@ -3,7 +3,7 @@
 // follows the target when it moves. Routes: straight, elbow or curved.
 
 import { uid } from './doc.js';
-import { boundsOf, rotatePoint } from './geometry.js';
+import { boundsOf, rotatePoint, nearPolyline } from './geometry.js';
 import { refitGroup } from './commands.js';
 
 const f = (n) => Math.round(n * 100) / 100;
@@ -163,7 +163,6 @@ export function connectorGeometry(el, trim = { start: 0, end: 0 }) {
 
 function routeBetween(el, a, b, horizontal) {
   const r = route(el, a, b, horizontal);
-  r.horizontal = horizontal ?? (el.start?.side ? 'lr'.includes(el.start.side) : Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]));
   // A route can fold flat (two boxes side by side): point the arrows along the line between the ends.
   const along = [b[0] - a[0] || 1, b[1] - a[1]];
   const some = (d) => (Math.hypot(d[0], d[1]) > 1e-6 ? d : along);
@@ -173,15 +172,16 @@ function routeBetween(el, a, b, horizontal) {
 function route(el, a, b, horizontal) {
   const path = (pts) => `M${f(pts[0][0])} ${f(pts[0][1])} ` + pts.slice(1).map(([x, y]) => `L${f(x)} ${f(y)}`).join(' ');
   const horizontalStart = horizontal ?? (el.start?.side ? 'lr'.includes(el.start.side) : Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]));
+  const done = (r) => ({ ...r, horizontal: horizontalStart });
   if (el.route === 'elbow') {
     if (horizontalStart) {
       const mx = (a[0] + b[0]) / 2;
       const pts = [a, [mx, a[1]], [mx, b[1]], b];
-      return { d: path(pts), pts, startDir: [mx - a[0], 0], endDir: [b[0] - mx, 0] };
+      return done({ d: path(pts), pts, startDir: [mx - a[0], 0], endDir: [b[0] - mx, 0] });
     }
     const my = (a[1] + b[1]) / 2;
     const pts = [a, [a[0], my], [b[0], my], b];
-    return { d: path(pts), pts, startDir: [0, my - a[1]], endDir: [0, b[1] - my] };
+    return done({ d: path(pts), pts, startDir: [0, my - a[1]], endDir: [0, b[1] - my] });
   }
   if (el.route === 'curved') {
     const dist = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -203,9 +203,9 @@ function route(el, a, b, horizontal) {
       const u = 1 - t;
       return [0, 1].map((n) => u * u * u * a[n] + 3 * u * u * t * c1[n] + 3 * u * t * t * c2[n] + t * t * t * b[n]);
     });
-    return { d: `M${f(a[0])} ${f(a[1])} C${f(c1[0])} ${f(c1[1])} ${f(c2[0])} ${f(c2[1])} ${f(b[0])} ${f(b[1])}`, pts, startDir: [c1[0] - a[0], c1[1] - a[1]], endDir: [b[0] - c2[0], b[1] - c2[1]] };
+    return done({ d: `M${f(a[0])} ${f(a[1])} C${f(c1[0])} ${f(c1[1])} ${f(c2[0])} ${f(c2[1])} ${f(b[0])} ${f(b[1])}`, pts, startDir: [c1[0] - a[0], c1[1] - a[1]], endDir: [b[0] - c2[0], b[1] - c2[1]] });
   }
-  return { d: path([a, b]), pts: [a, b], startDir: [b[0] - a[0], b[1] - a[1]], endDir: [b[0] - a[0], b[1] - a[1]] };
+  return done({ d: path([a, b]), pts: [a, b], startDir: [b[0] - a[0], b[1] - a[1]], endDir: [b[0] - a[0], b[1] - a[1]] });
 }
 
 /** Points along the drawn line, in page pixels (curves are sampled). */
@@ -215,15 +215,7 @@ export function connectorPolyline(el) {
 
 /** Whether point p is within `tol` px of the connector's line. */
 export function connectorHit(el, p, tol) {
-  const pts = connectorPolyline(el);
-  for (let i = 1; i < pts.length; i++) {
-    const [ax, ay] = pts[i - 1];
-    const [bx, by] = pts[i];
-    const len2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
-    const t = Math.max(0, Math.min(1, ((p.x - ax) * (bx - ax) + (p.y - ay) * (by - ay)) / len2));
-    if (Math.hypot(p.x - (ax + t * (bx - ax)), p.y - (ay + t * (by - ay))) <= tol) return true;
-  }
-  return false;
+  return nearPolyline(connectorPolyline(el), p, tol);
 }
 
 /** An arrowhead at point p, pointing along direction dir. */
