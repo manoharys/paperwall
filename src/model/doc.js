@@ -1,5 +1,7 @@
 // The design document: pages of elements, plus the images they use.
 
+import { round4 } from './geometry.js';
+
 export const FORMAT_VERSION = 1;
 export const DPI = 300;
 
@@ -191,11 +193,10 @@ export function createDrawing(points, { tool = 'pen', stroke = '#1a1a2e', stroke
   const y = Math.min(...ys) - pad;
   const w = Math.max(1, Math.max(...xs) + pad - x);
   const h = Math.max(1, Math.max(...ys) + pad - y);
-  const r4 = (n) => Math.round(n * 10000) / 10000;
   return base('draw', {
     x, y, w, h, tool, stroke, strokeWidth: width,
     opacity: DRAW_TOOLS[tool]?.opacity ?? 1,
-    points: points.map(([px, py]) => [r4((px - x) / w), r4((py - y) / h)]),
+    points: points.map(([px, py]) => [round4((px - x) / w), round4((py - y) / h)]),
     ...props,
   });
 }

@@ -18,7 +18,12 @@ const LOOKBEHIND = (() => {
 function matcher(query, { matchCase = false, wholeWord = false } = {}) {
   if (!query) return null;
   const body = escapeRe(query);
-  if (wholeWord && !LOOKBEHIND) return new RegExp(`\\b${body}\\b`, `g${matchCase ? '' : 'i'}u`);
+  if (wholeWord && !LOOKBEHIND) {
+    // \b only works next to a letter or digit; a query starting or ending with a symbol gets none there.
+    const left = /^\w/.test(query) ? '\\b' : '';
+    const right = /\w$/.test(query) ? '\\b' : '';
+    return new RegExp(`${left}${body}${right}`, `g${matchCase ? '' : 'i'}u`);
+  }
   return new RegExp(wholeWord ? `(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])` : body, `g${matchCase ? '' : 'i'}u`);
 }
 
@@ -75,7 +80,7 @@ export function replaceText(doc, query, replacement, opts = {}) {
   let count = 0;
   if (!re) return { count, changed: [] };
   for (const slot of textSlots(doc)) {
-    if (opts.onlyId && slot.owner.id !== opts.onlyId) continue;
+    if (opts.onlyId && (slot.owner.id !== opts.onlyId || (opts.onlyPage !== undefined && slot.page !== opts.onlyPage))) continue;
     const before = String(slot.get() ?? '');
     const n = (before.match(re) || []).length;
     if (!n) continue;

@@ -116,7 +116,10 @@ export class Editor {
   async persistThumb() {
     if (!this.makeThumb) return;
     try {
-      await store.saveDesign(this.doc, await this.makeThumb(this.doc));
+      const at = this.doc.updatedAt;
+      const url = await this.makeThumb(this.doc);
+      this.lastThumb = { url, at }; // reused by a version saved soon after
+      await store.saveDesign(this.doc, url);
     } catch {
       /* thumbnails are optional */
     }
@@ -131,10 +134,13 @@ export class Editor {
   async saveVersion(label = '') {
     this.versionAt = Date.now();
     this.changedSinceVersion = false;
+    // The design as it is right now, before anything below waits.
+    const snapshot = clone(this.doc);
     try {
-      // A small picture of the first page, so the history list needn't load whole designs.
-      const thumb = this.makeThumb ? await this.makeThumb(this.doc).catch(() => null) : null;
-      await store.saveVersion(this.doc, { label, thumb });
+      // A small picture of the first page, so the history list needn't load
+      // whole designs: the home-screen one if it's up to date, else a new one.
+      const thumb = this.lastThumb?.at >= snapshot.updatedAt ? this.lastThumb.url : this.makeThumb ? await this.makeThumb(snapshot).catch(() => null) : null;
+      await store.saveVersion(snapshot, { label, thumb });
     } catch {
       /* history is a convenience; saving the design itself matters more */
     }
@@ -301,9 +307,10 @@ export class Editor {
   }
 
   /** Put a picture in an image or frame, keeping its place and shape: it's cropped to fill. */
-  fillFrame(id, upload) {
-    // Look on every page: the page may have changed while a photo was being picked.
-    const page = this.doc.pages.find((p) => cmd.findElement(p, id));
+  fillFrame(id, upload, pageId = this.pageData.id) {
+    // The frame's own page (it may not be in view any more: the page can change
+    // while a photo is being picked), else wherever it is now.
+    const page = this.doc.pages.find((p) => p.id === pageId && cmd.findElement(p, id)) || this.doc.pages.find((p) => cmd.findElement(p, id));
     const el = page && cmd.findElement(page, id);
     if (!el || el.type !== 'image' || el.locked) return null;
     this.change(() => {
@@ -714,9 +721,8 @@ export class Editor {
       let at = this.page;
       let firstAdded = -1;
       for (const p of resized.pages) {
-        const page = clone(p);
-        page.id = uid('p');
-        at = cmd.addPage(this.doc, at, page);
+        // New ids, so adding the same template twice never repeats an id.
+        at = cmd.addPage(this.doc, at, cmd.freshPage(p));
         if (firstAdded < 0) firstAdded = at;
       }
       return firstAdded;

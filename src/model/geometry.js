@@ -179,6 +179,11 @@ export function snapMove(moving, others, page, threshold = 6, extra = {}) {
   return { dx: bx ? bx.d : 0, dy: by ? by.d : 0, guides };
 }
 
+/** Round to 4 decimals (positions stored as shares of a box). */
+export function round4(n) {
+  return Math.round(n * 10000) / 10000;
+}
+
 export function round2(n) {
   return Math.round(n * 100) / 100;
 }
@@ -194,4 +199,22 @@ export function nearPolyline(pts, p, tol) {
     if (Math.hypot(p.x - (ax + t * (bx - ax)), p.y - (ay + t * (by - ay))) <= tol) return true;
   }
   return false;
+}
+
+/**
+ * Make a group's box fit its children again (after their sizes changed),
+ * keeping them where they are on the page. Unrotated groups only.
+ */
+export function refitGroup(group) {
+  // Moving the box of a turned or mirrored group would move what's inside it.
+  if (group.type !== 'group' || group.rotation || group.flipX || group.flipY || !group.children.length) return;
+  const b = unionBounds(group.children);
+  for (const c of group.children) {
+    c.x -= b.x;
+    c.y -= b.y;
+  }
+  group.x += b.x;
+  group.y += b.y;
+  group.w = b.w;
+  group.h = b.h;
 }

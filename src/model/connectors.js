@@ -3,8 +3,7 @@
 // follows the target when it moves. Routes: straight, elbow or curved.
 
 import { uid } from './doc.js';
-import { boundsOf, rotatePoint, nearPolyline, round2 } from './geometry.js';
-import { refitGroup } from './commands.js';
+import { boundsOf, boxCenter, rotatePoint, nearPolyline, round2, round4, refitGroup } from './geometry.js';
 
 const f = round2;
 
@@ -36,7 +35,7 @@ export function setEnds(el, a, b) {
   const h = Math.max(1, Math.abs(a[1] - b[1]));
   // A connector is defined by its ends alone: never rotated or flipped.
   Object.assign(el, { x, y, w, h, rotation: 0, flipX: false, flipY: false });
-  el.points = [a, b].map(([px, py]) => [Math.round(((px - x) / w) * 10000) / 10000, Math.round(((py - y) / h) * 10000) / 10000]);
+  el.points = [a, b].map(([px, py]) => [round4((px - x) / w), round4((py - y) / h)]);
 }
 
 /** Where a connector meets a box: the middle of the side facing `toward`. */
@@ -69,8 +68,8 @@ function visualEnds(el) {
 }
 
 const center = (box) => {
-  const b = boundsOf(box);
-  return [b.x + b.w / 2, b.y + b.h / 2];
+  const c = boxCenter(box);
+  return [c.x, c.y];
 };
 
 /**
@@ -83,10 +82,19 @@ export function updateConnectors(page, { refit = true } = {}) {
   // Every element's box on the page. Inside unrotated groups that's the
   // element's own box moved by the group; inside a rotated or flipped group
   // the end attaches to the outermost group's box instead.
+  // Only the elements some connector is attached to are looked up.
+  const refs = new Set();
+  const collect = (els) => {
+    for (const e of els) {
+      if (e.type === 'connector') for (const k of ['start', 'end']) if (e[k]?.id) refs.add(e[k].id);
+      if (e.type === 'group') collect(e.children);
+    }
+  };
+  collect(page.elements);
   const byId = new Map();
   const index = (els, ox, oy, top) => {
     for (const e of els) {
-      byId.set(e.id, top || { ...e, x: e.x + ox, y: e.y + oy });
+      if (refs.has(e.id)) byId.set(e.id, top || { ...e, x: e.x + ox, y: e.y + oy });
       if (e.type !== 'group') continue;
       const plain = !top && !e.rotation && !e.flipX && !e.flipY;
       index(e.children, ox + e.x, oy + e.y, plain ? null : top || { ...e, x: e.x + ox, y: e.y + oy });

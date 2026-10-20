@@ -773,10 +773,11 @@ export class Canvas {
 
   /** Choose a photo from the device for an empty frame. */
   async pickPhotoFor(frame) {
+    const pageId = this.ed.pageData.id;
     const [file] = await pickFile('image/*');
     if (!file) return;
     try {
-      this.ed.fillFrame(frame.id, await this.ed.importImageFile(file));
+      this.ed.fillFrame(frame.id, await this.ed.importImageFile(file), pageId);
     } catch (err) {
       toast(err.message, 'error');
     }

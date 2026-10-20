@@ -82,6 +82,17 @@ async function txRetry(db, store, mode, fn) {
   }
 }
 
+/** Run fn(db) with the open database, reopening once if another tab closed it. */
+async function withDb(fn) {
+  try {
+    return await fn(await open());
+  } catch (e) {
+    if (e?.name !== 'InvalidStateError') throw e;
+    dbPromise = null;
+    return fn(await open());
+  }
+}
+
 function tx(db, store, mode, fn) {
   return new Promise((resolve, reject) => {
     const t = db.transaction(store, mode);
@@ -201,8 +212,15 @@ async function writeVersion(doc, { label = '', thumb = null } = {}) {
   const details = { key: vKey(doc.id, at), designId: doc.id, at, label, thumb, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, assetIds: Object.keys(assets || {}) };
   // Which images are already stored is checked in the same transaction that
   // writes the version, so another tab's clean-up can't remove one in between.
-  const db = await open();
   const [alo, ahi] = range(`${doc.id}|a|`);
+  await withDb((db) => writeVersionTx(db, doc, at, assets, rest, details, alo, ahi));
+  const keys = await keysIn(`${doc.id}|v|`);
+  const drop = keys.slice(0, Math.max(0, keys.length - MAX_VERSIONS));
+  if (drop.length) await prune(doc.id, drop);
+  return vKey(doc.id, at);
+}
+
+async function writeVersionTx(db, doc, at, assets, rest, details, alo, ahi) {
   if (!db) {
     for (const [id, a] of Object.entries(assets || {})) if (!memory.versions.has(aKey(doc.id, id))) memory.versions.set(aKey(doc.id, id), a);
     memory.versions.set(dKey(doc.id, at), rest);
@@ -223,10 +241,6 @@ async function writeVersion(doc, { label = '', thumb = null } = {}) {
       t.onabort = () => reject(t.error || new Error('Storage is full'));
     });
   }
-  const keys = await keysIn(`${doc.id}|v|`);
-  const drop = keys.slice(0, Math.max(0, keys.length - MAX_VERSIONS));
-  if (drop.length) await prune(doc.id, drop);
-  return vKey(doc.id, at);
 }
 
 /**
@@ -235,9 +249,12 @@ async function writeVersion(doc, { label = '', thumb = null } = {}) {
  * between deciding what's unused and deleting it.
  */
 async function prune(designId, drop) {
+  await withDb((db) => pruneTx(db, designId, drop));
+}
+
+async function pruneTx(db, designId, drop) {
   const [vlo, vhi] = range(`${designId}|v|`);
   const [alo, ahi] = range(`${designId}|a|`);
-  const db = await open();
   if (!db) {
     const m = memory.versions;
     for (const k of drop) {

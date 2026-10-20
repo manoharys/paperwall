@@ -4,7 +4,7 @@
 import { h, dialog, toast } from './ui.js';
 import { toggle } from './widgets.js';
 import { findText, replaceText } from '../model/find.js';
-import { refitGroup } from '../model/commands.js';
+import { refitGroup } from '../model/geometry.js';
 
 export function findDialog(editor) {
   const opts = { matchCase: false, wholeWord: false };
@@ -42,7 +42,7 @@ export function findDialog(editor) {
     if (!hits.length) return;
     if (at < 0) return show(0);
     const hit = hits[at];
-    editor.change(() => refit(replaceText(editor.doc, find.value, repl.value, { ...opts, onlyId: hit.id }).changed));
+    editor.change(() => refit(replaceText(editor.doc, find.value, repl.value, { ...opts, onlyId: hit.id, onlyPage: hit.page }).changed));
     refresh();
     if (!hits.length) return;
     // Move on: if the new text still contains the query, the same place

@@ -3,6 +3,7 @@
 
 import { uid, createPage, clone } from './doc.js';
 import { boundsOf, unionBounds, rotatePoint, boxCenter } from './geometry.js';
+import { updateConnectors } from './connectors.js';
 
 export function getPage(doc, index) {
   const p = doc.pages[index];
@@ -96,23 +97,6 @@ function freshCopies(els) {
   return copies;
 }
 
-/**
- * Make a group's box fit its children again (after their sizes changed),
- * keeping them where they are on the page. Unrotated groups only.
- */
-export function refitGroup(group) {
-  // Moving the box of a turned or mirrored group would move what's inside it.
-  if (group.type !== 'group' || group.rotation || group.flipX || group.flipY || !group.children.length) return;
-  const b = unionBounds(group.children);
-  for (const c of group.children) {
-    c.x -= b.x;
-    c.y -= b.y;
-  }
-  group.x += b.x;
-  group.y += b.y;
-  group.w = b.w;
-  group.h = b.h;
-}
 
 /** Copies of elements with new ids, ready to paste. */
 export function copyElements(doc, pageIndex, ids) {
@@ -362,6 +346,14 @@ export function addPage(doc, afterIndex = doc.pages.length - 1, page) {
   return afterIndex + 1;
 }
 
+/** A page with new ids for itself and everything on it (connectors re-joined). */
+export function freshPage(page) {
+  const copy = clone(page);
+  copy.id = uid('p');
+  copy.elements = freshCopies(copy.elements);
+  return copy;
+}
+
 export function duplicatePage(doc, index) {
   const copy = clone(getPage(doc, index));
   copy.id = uid('p');
@@ -418,6 +410,8 @@ export function resizeDesign(doc, width, height) {
     }
     // Guides keep their place relative to the page (a centre guide stays centred).
     if (page.guides) page.guides = page.guides.map((g) => ({ ...g, pos: Math.round(g.pos * (g.axis === 'x' ? sx : sy)) }));
+    // Elements were nudged back onto the page one by one; re-attach connectors to where they ended up.
+    updateConnectors(page);
   }
   out.width = Math.round(width);
   out.height = Math.round(height);

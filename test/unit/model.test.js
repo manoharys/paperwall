@@ -424,7 +424,8 @@ test('[EDIT-19] find and replace across pages, groups, tables and charts', async
 
 test('[ELM-10] copied connectors join the copies, or come loose', async () => {
   const { createDesign, createShape } = await import('../../src/model/doc.js');
-  const { duplicatePage, pasteElements, copyElements, refitGroup } = await import('../../src/model/commands.js');
+  const { duplicatePage, pasteElements, copyElements } = await import('../../src/model/commands.js');
+  const { refitGroup } = await import('../../src/model/geometry.js');
   const { createConnector } = await import('../../src/model/connectors.js');
   const doc = createDesign({ width: 1000, height: 1000 });
   const a = createShape('rect', { x: 0, y: 0, w: 100, h: 100 });
@@ -523,4 +524,19 @@ test('[EDIT-01] discarding at the history limit keeps the oldest step', async ()
   h.discard();
   assert.equal(h.past.length, 2);
   assert.equal(JSON.parse(h.past[0]).n, 1, 'the oldest step came back');
+});
+
+test('[TPL-04] adding the same template page twice gives every element its own id', async () => {
+  const { createDesign, createShape, createPage } = await import('../../src/model/doc.js');
+  const { freshPage } = await import('../../src/model/commands.js');
+  const { createConnector } = await import('../../src/model/connectors.js');
+  const a = createShape('rect');
+  const b = createShape('rect');
+  const page = { ...createPage(), elements: [a, b, createConnector({ from: [0, 0], to: [1, 1], start: a.id, end: b.id })] };
+  const one = freshPage(page);
+  const two = freshPage(page);
+  const ids = [...one.elements, ...two.elements].map((e) => e.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.notEqual(one.id, two.id);
+  assert.deepEqual([two.elements[2].start.id, two.elements[2].end.id], [two.elements[0].id, two.elements[1].id]);
 });

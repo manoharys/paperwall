@@ -71,10 +71,10 @@ async function closeEditor() {
   current = null;
   editor.closed = true;
   unbind();
-  // Leaving a design you changed keeps a version of it.
-  if (editor.changedSinceVersion) await editor.saveVersion();
   window.paperwall = null;
+  // Save the design first; then, if it changed, keep a version of it.
   await editor.flush();
+  if (editor.changedSinceVersion) await editor.saveVersion();
   // Make sure the home screen has a preview, even for a design opened and left unchanged.
   await editor.thumb.flush();
 }
