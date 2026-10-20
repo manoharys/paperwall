@@ -28,6 +28,7 @@ export class History {
   record(doc, key = null, now = Date.now()) {
     if (key && key === this.lastKey && now - this.lastAt < 800) {
       this.lastAt = now;
+      this.pending = false; // part of an earlier step: there's nothing new to discard
       return;
     }
     this.past.push(snapshot(doc));

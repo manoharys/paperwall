@@ -532,7 +532,8 @@ export class Canvas {
       const size = d.axis === 'x' ? ed.doc.width : ed.doc.height;
       const off = !g || g.pos < 0 || g.pos > size;
       if (off) ed.pageData.guides.splice(d.index, 1);
-      if ((d.isNew && off) || !d.moved) {
+      // Dragged back to where it started counts as not moved.
+      if ((d.isNew && off) || !d.moved || (!off && !d.isNew && g.pos === d.orig)) {
         ed.history.discard();
         ed.emit('aids');
       } else ed.afterChange();
@@ -777,14 +778,16 @@ export class Canvas {
   }
 
   /** Choose a photo from the device for an empty frame. */
-  async pickPhotoFor(frame) {
+  /** Pick a photo for a frame or picture. `evenLocked` for an explicit Replace. */
+  async pickPhotoFor(frame, { evenLocked = false } = {}) {
+    // Which picture and page, decided now: either can change while a file is picked.
     const pageId = this.ed.pageData.id;
     const [file] = await pickFile('image/*');
-    if (!file) return;
+    if (!file || this.ed.closed) return;
     try {
       const upload = await this.ed.importImageFile(file);
       if (this.ed.closed) return; // the design was closed while the photo loaded
-      this.ed.fillFrame(frame.id, upload, pageId);
+      this.ed.fillFrame(frame.id, upload, pageId, { evenLocked });
     } catch (err) {
       toast(err.message, 'error');
     }

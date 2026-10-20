@@ -414,18 +414,7 @@ export class Inspector {
               ed.emit('selection');
             } else this.canvas.startCrop(el);
           } }, icon('crop'), cropping ? 'Done cropping' : 'Crop'),
-          h('button', { type: 'button', class: 'btn small', 'data-testid': 'replace-image', onClick: async () => {
-            // Which picture, decided now: the selection can change while a file is picked.
-            const id = el.id;
-            const pageId = ed.pageData.id;
-            const [file] = await pickFile('image/*');
-            if (!file || ed.closed) return;
-            try {
-              ed.replaceImage(await ed.importImageFile(file), id, pageId);
-            } catch (e) {
-              toast(e.message, 'error');
-            }
-          } }, icon('image'), 'Replace')),
+          h('button', { type: 'button', class: 'btn small', 'data-testid': 'replace-image', onClick: () => this.canvas.pickPhotoFor(el, { evenLocked: true }) }, icon('image'), 'Replace')),
         cropping && asset ? h('div', { class: 'sub' },
           h('p', { class: 'hint' }, 'Drag the picture to move it inside the frame.'),
           slider({ label: 'Zoom', value: Math.round(cropZoom(el, asset.width, asset.height) * 100), min: 100, max: 400, unit: '%', testid: 'crop-zoom', onChange: (v, l) => {

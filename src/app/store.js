@@ -205,8 +205,11 @@ export function saveVersion(doc, opts) {
   return run;
 }
 
+let lastAt = 0;
+
 async function writeVersion(doc, { label = '', thumb = null } = {}) {
-  const at = Date.now();
+  // Keyed by time: two versions in the same millisecond mustn't share a key.
+  const at = (lastAt = Math.max(Date.now(), lastAt + 1));
   const { assets, ...meta } = doc;
   const rest = JSON.parse(JSON.stringify(meta)); // the images are stored separately, once
   const details = { key: vKey(doc.id, at), designId: doc.id, at, label, thumb, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, assetIds: Object.keys(assets || {}) };
@@ -308,8 +311,11 @@ export async function versionDoc(version) {
   return { ...doc, assets };
 }
 
-async function deleteVersions(designId) {
-  await batch('versions', (await keysIn(`${designId}|`)).map((k) => [k, undefined]));
+function deleteVersions(designId) {
+  // After any version still being saved, so it can't land once the rest is gone.
+  const run = versionQueue.then(async () => batch('versions', (await keysIn(`${designId}|`)).map((k) => [k, undefined])));
+  versionQueue = run.catch(() => null);
+  return run;
 }
 
 // ---------- uploads (reusable across designs) ----------

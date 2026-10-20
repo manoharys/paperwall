@@ -174,31 +174,33 @@ export function connectorGeometry(el, trim = { start: 0, end: 0 }) {
   const [us, ue] = [unit(g.startDir), unit(g.endDir)];
   const a2 = [a[0] + us[0] * trim.start, a[1] + us[1] * trim.start];
   const b2 = [b[0] - ue[0] * trim.end, b[1] - ue[1] * trim.end];
-  // Same route shape as the untrimmed line, so it still meets the arrowheads.
-  return { ...routeBetween(el, a2, b2, g.horizontal), startDir: g.startDir, endDir: g.endDir };
+  // Same route shape (and bend) as the untrimmed line, so it still meets the
+  // arrowheads and runs where clicks find it.
+  return { ...routeBetween(el, a2, b2, g.horizontal, g.bend), startDir: g.startDir, endDir: g.endDir };
 }
 
-function routeBetween(el, a, b, horizontal) {
-  const r = route(el, a, b, horizontal);
+function routeBetween(el, a, b, horizontal, bend) {
+  const r = route(el, a, b, horizontal, bend);
   // A route can fold flat (two boxes side by side): point the arrows along the line between the ends.
   const along = [b[0] - a[0] || 1, b[1] - a[1]];
   const some = (d) => (Math.hypot(d[0], d[1]) > 1e-6 ? d : along);
   return { ...r, startDir: some(r.startDir), endDir: some(r.endDir) };
 }
 
-function route(el, a, b, horizontal) {
+function route(el, a, b, horizontal, bend) {
   const path = (pts) => `M${f(pts[0][0])} ${f(pts[0][1])} ` + pts.slice(1).map(([x, y]) => `L${f(x)} ${f(y)}`).join(' ');
-  const horizontalStart = horizontal ?? (el.start?.side ? 'lr'.includes(el.start.side) : Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]));
+  // An attached start leaves by its side; a loose one goes the way the line mostly runs.
+  const horizontalStart = horizontal ?? (el.start?.id && el.start.side ? 'lr'.includes(el.start.side) : Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]));
   const done = (r) => ({ ...r, horizontal: horizontalStart });
   if (el.route === 'elbow') {
     if (horizontalStart) {
-      const mx = (a[0] + b[0]) / 2;
+      const mx = bend ?? (a[0] + b[0]) / 2;
       const pts = [a, [mx, a[1]], [mx, b[1]], b];
-      return done({ d: path(pts), pts, startDir: [mx - a[0], 0], endDir: [b[0] - mx, 0] });
+      return done({ d: path(pts), pts, bend: mx, startDir: [mx - a[0], 0], endDir: [b[0] - mx, 0] });
     }
-    const my = (a[1] + b[1]) / 2;
+    const my = bend ?? (a[1] + b[1]) / 2;
     const pts = [a, [a[0], my], [b[0], my], b];
-    return done({ d: path(pts), pts, startDir: [0, my - a[1]], endDir: [0, b[1] - my] });
+    return done({ d: path(pts), pts, bend: my, startDir: [0, my - a[1]], endDir: [0, b[1] - my] });
   }
   if (el.route === 'curved') {
     const dist = Math.hypot(b[0] - a[0], b[1] - a[1]);

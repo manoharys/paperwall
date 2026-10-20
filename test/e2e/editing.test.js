@@ -401,14 +401,19 @@ test('[VIEW-07] grid with snapping, safe margins and print bleed', async () => {
   await page.click('[data-testid="view-grid"]');
   await page.click('[data-testid="view-margins"]');
   await page.click('[data-testid="view-bleed"]');
-  assert.equal(await page.locator('[data-testid="grid-lines"]').count(), 1);
-  assert.equal(await page.locator('[data-testid="margin-box"]').count(), 1);
-  assert.equal(await page.locator('[data-testid="bleed-zone"]').count(), 1);
+  // The overlay is drawn on the next animation frame: wait for it.
+  const shown = async (sel) => {
+    await page.locator(sel).first().waitFor({ state: 'attached', timeout: 5000 });
+    return page.locator(sel).count();
+  };
+  assert.equal(await shown('[data-testid="grid-lines"]'), 1);
+  assert.equal(await shown('[data-testid="margin-box"]'), 1);
+  assert.equal(await shown('[data-testid="bleed-zone"]'), 1);
   await page.keyboard.press('Escape');
   // Settings are remembered after a reload; none of it shows in exports.
   await page.reload();
   await page.waitForFunction(() => window.paperwall?.editor);
-  assert.equal(await page.locator('[data-testid="grid-lines"]').count(), 1);
+  assert.equal(await shown('[data-testid="grid-lines"]'), 1);
   const svg = await page.evaluate(async () => (await window.paperwall.export.exportSvg(window.paperwall.editor.doc, 0)).text());
   assert.ok(!/grid-lines|margin-box|bleed/.test(svg));
   // Elements snap to grid lines (every 54 px on a 1080 px page).

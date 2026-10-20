@@ -158,7 +158,8 @@ export class Editor {
    */
   async saveVersion(label = '', { snapshot = null, quick = false } = {}) {
     this.versionAt = Date.now();
-    this.changedSinceVersion = false;
+    // Edits made after an earlier snapshot was taken still need a version of their own.
+    if (!snapshot || snapshot.updatedAt >= this.doc.updatedAt) this.changedSinceVersion = false;
     // The design as it is right now, before anything below waits.
     snapshot ||= versionSnapshot(this.doc);
     try {
@@ -326,13 +327,6 @@ export class Editor {
     const upload = { id: uid('u'), name: file.name, mime: file.type, dataUrl, width: img.naturalWidth, height: img.naturalHeight, addedAt: Date.now() };
     await store.saveUpload(upload).catch(() => null);
     return upload;
-  }
-
-  /** Replace a picture's image. Pass the id and page captured before any wait (picking a file). */
-  replaceImage(upload, id = this.single?.id, pageId = this.pageData.id) {
-    if (!id) return;
-    // An explicit Replace works on locked pictures too, as it always has.
-    this.fillFrame(id, upload, pageId, { evenLocked: true });
   }
 
   /** Put a picture in an image or frame, keeping its place and shape: it's cropped to fill. */

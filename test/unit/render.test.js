@@ -469,3 +469,20 @@ test('[ELM-10] an elbow with a short first or last leg never runs backwards unde
   assert.ok(xs.every((x, i) => i === 0 || x >= xs[i - 1]), `heads right all the way: ${g.d}`);
   assert.ok(xs.at(-1) <= 10);
 });
+
+test('[ELM-10] a trimmed elbow keeps its bend where the untrimmed line has it', async () => {
+  const { createConnector, connectorGeometry } = await import('../../src/model/connectors.js');
+  const el = createConnector({ from: [0, 0], to: [100, 40], route: 'elbow', strokeWidth: 20 });
+  const plain = connectorGeometry(el);
+  const trimmed = connectorGeometry(el, { start: 0, end: 25 });
+  assert.equal(trimmed.pts[1][0], plain.pts[1][0], 'the middle leg stays put');
+});
+
+test('[ELM-10] a loose end runs the way the line goes, not the side it once left from', async () => {
+  const { createConnector, connectorGeometry } = await import('../../src/model/connectors.js');
+  const el = createConnector({ from: [0, 0], to: [10, 200], route: 'elbow' });
+  el.start = { id: null, side: 'r' };
+  const g = connectorGeometry(el);
+  assert.equal(g.endDir[0], 0, 'the end arrow points down');
+  assert.ok(g.endDir[1] > 0);
+});

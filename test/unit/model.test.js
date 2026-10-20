@@ -551,3 +551,14 @@ test('[EDIT-07] a turned group is refitted without moving its contents on the pa
   const after = rotatePoint(g.x + g.children[0].x + 300, g.y + g.children[0].y + 100, g.x + g.w / 2, g.y + g.h / 2, 90);
   assert.ok(Math.abs(before.x - after.x) < 1e-6 && Math.abs(before.y - after.y) < 1e-6, 'the child stays put');
 });
+
+test('[EDIT-01] discarding after a merged step keeps the earlier undo step', () => {
+  const h = new History();
+  const doc = { pages: [{ n: 1 }] };
+  h.record(doc, 'k', 1000);
+  doc.pages[0].n = 2;
+  h.record(doc, 'k', 1100); // merged into the step above
+  h.discard();
+  assert.equal(h.past.length, 1, 'the step before the edits is still there');
+  assert.equal(JSON.parse(h.past[0]).pages[0].n, 1);
+});
