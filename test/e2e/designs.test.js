@@ -126,9 +126,10 @@ test('[DOC-10] resize a design to another format', async () => {
   assert.equal(doc.width, 1080);
   assert.equal(doc.pages[0].elements.length, 1);
   assert.match(doc.name, /Story/);
-  // The original square design still exists unchanged.
+  // The original square design still exists unchanged, and both have previews.
   await page.click('[data-testid="home-link"]');
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="design-card"]').length === 2);
+  assert.equal(await page.locator('[data-testid="design-card"] .design-img img').count(), 2, 'every design shows a preview');
   await context.close();
 });
 

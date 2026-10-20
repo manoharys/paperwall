@@ -67,6 +67,8 @@ async function closeEditor() {
   unbind();
   window.paperwall = null;
   await editor.flush();
+  // Make sure the home screen has a preview, even for a design opened and left unchanged.
+  await editor.thumb.flush();
 }
 
 async function showHome() {
@@ -111,6 +113,8 @@ async function openEditor(id) {
     editor.refitAllText();
     pendingFit = false;
   }
+  const meta = (await store.listDesigns()).find((d) => d.id === doc.id);
+  if (!meta?.thumb) editor.thumb();
   const canvas = new Canvas(editor);
   const inspector = new Inspector(editor, canvas, { onResizeDesign: () => resizeDialog(editor) });
   const insert = new InsertPanel(editor);
