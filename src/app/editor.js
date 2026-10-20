@@ -81,6 +81,9 @@ export class Editor {
     this.listeners = new Set();
     this.onOpenDesign = onOpenDesign;
     this.saving = false;
+    // A design from elsewhere (a file, an older version) may have connector
+    // ends out of place: put them on their elements before anything is drawn.
+    this.syncAllConnectors();
     this.save = debounce(() => this.persist(), 400);
     this.thumb = debounce(() => this.persistThumb(), 1500);
   }
@@ -149,7 +152,9 @@ export class Editor {
     try {
       const at = this.doc.updatedAt;
       const url = await this.makeThumb(this.doc);
-      this.lastThumb = { url, at }; // reused by a version saved soon after
+      // Reused by a version saved soon after, if it's known to show that state
+      // (nothing changed while it was drawn).
+      if (this.doc.updatedAt === at) this.lastThumb = { url, at };
       await store.saveDesign(this.doc, url);
     } catch {
       /* thumbnails are optional */
@@ -165,11 +170,13 @@ export class Editor {
    * Keep a copy of the design as it is now (or `snapshot`, taken earlier) in
    * its version history. `quick` skips drawing a new thumbnail (the tab is
    * closing); the history list draws one from the version instead.
+   * Resolves to whether it was saved.
    */
   async saveVersion(label = '', { snapshot = null, quick = false } = {}) {
     this.versionAt = Date.now();
     // Edits made after an earlier snapshot was taken still need a version of their own.
-    if (!snapshot || snapshot.updatedAt >= this.doc.updatedAt) this.changedSinceVersion = false;
+    const covers = !snapshot || snapshot.updatedAt >= this.doc.updatedAt;
+    if (covers) this.changedSinceVersion = false;
     // The design as it is right now, before anything below waits.
     snapshot ||= versionSnapshot(this.doc);
     try {
@@ -180,14 +187,19 @@ export class Editor {
       if (!fresh() && !quick) await this.thumb.flush();
       const thumb = fresh() || (quick || !this.makeThumb ? null : await this.makeThumb(snapshot).catch(() => null));
       await store.saveVersion(snapshot, { label, thumb });
+      return true;
     } catch {
-      /* history is a convenience; saving the design itself matters more */
+      // History is a convenience; saving the design itself matters more. The
+      // work still needs a version, so the next chance (closing, say) tries again.
+      if (covers) this.changedSinceVersion = true;
+      return false;
     }
   }
 
   /** Put the design back the way a version had it, as one undo step. */
   restoreVersion(versionDoc) {
-    const v = clone(versionDoc);
+    // Images aren't copied: they never change once added.
+    const v = { ...clone({ ...versionDoc, assets: undefined }), assets: versionDoc.assets };
     this.change(() => {
       // Keep today's images too: undo snapshots share the design's assets.
       Object.assign(this.doc, { name: v.name, width: v.width, height: v.height, unit: v.unit, pages: v.pages, assets: { ...this.doc.assets, ...v.assets } });
@@ -413,7 +425,6 @@ export class Editor {
     return { x, y };
   }
 
-  /** Guides are part of the page, so they're saved and can be undone. */
   /** Move a guide while it's dragged (the drag records one undo step for the whole move). */
   moveGuide(i, pos) {
     const g = this.pageData.guides?.[i];

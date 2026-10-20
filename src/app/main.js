@@ -17,7 +17,6 @@ import { fontsUsed } from '../model/fonts.js';
 import { menuButton, toggle, segmented } from './widgets.js';
 import { findDialog } from './find.js';
 import { historyDialog } from './history.js';
-import { hasVersions } from './store.js';
 
 const root = document.getElementById('app');
 let current = null; // { editor, unbind }
@@ -126,7 +125,7 @@ async function openEditor(id) {
   // that, the next version comes after a few minutes of work. The original is
   // copied now (text measured), before any edit can land while storage answers.
   const original = versionSnapshot(doc);
-  hasVersions(doc.id).then((has) => (has ? (editor.versionAt = Date.now()) : editor.saveVersion('Original', { snapshot: original }))).catch(() => null);
+  store.hasVersions(doc.id).then((has) => (has ? (editor.versionAt = Date.now()) : editor.saveVersion('Original', { snapshot: original }))).catch(() => null);
   const meta = (await store.listDesigns()).find((d) => d.id === doc.id);
   if (!meta?.thumb) editor.thumb();
   const canvas = new Canvas(editor);

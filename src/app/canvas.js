@@ -57,7 +57,12 @@ export class Canvas {
       if (e.code === 'Space') this.spaceDown = false;
     });
     editor.on((what) => {
-      if (what === 'live') return this.schedule();
+      // Mid-drag: attached connector ends follow what's being moved (group
+      // boxes are refitted once the drag ends, in afterChange).
+      if (what === 'live') {
+        editor.syncConnectors();
+        return this.schedule();
+      }
       if (what === 'tool') return void this.el.classList.toggle('drawing', !!editor.drawTool);
       if (what === 'aids') {
         this.drawRulers(); // switching rulers on or off shows at once (cheap: cached)
@@ -114,7 +119,6 @@ export class Canvas {
 
   render() {
     const ed = this.ed;
-    ed.syncConnectors();
     this.layout();
     const skip = ed.editingTextId ? new Set([ed.editingTextId]) : null;
     this.svgHost.innerHTML = renderPage(ed.doc, ed.page, { measure, assetHref: this.assetHref, editor: true, scale: ed.zoom, skip, idPrefix: 'cv' });
@@ -782,7 +786,6 @@ export class Canvas {
     }
   }
 
-  /** Choose a photo from the device for an empty frame. */
   /** Pick a photo for a frame or picture. `evenLocked` for an explicit Replace. */
   async pickPhotoFor(frame, { evenLocked = false } = {}) {
     // Which picture and page, decided now: either can change while a file is picked.

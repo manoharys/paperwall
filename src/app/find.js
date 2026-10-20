@@ -51,12 +51,13 @@ export function findDialog(editor) {
       refit(r.changed);
       editor.afterChange();
     } else editor.history.discard();
-    refresh();
-    if (!matches.length) return;
     // Move on to the next match. It slides into this one's place, unless the
     // new text contains the query too: then step past it, or it never ends.
+    // (Worked out before the list shrinks, so the last match wraps to the first.)
     const again = r.count ? findText({ pages: [{ elements: [{ id: 'x', type: 'text', text: repl.value }] }] }, find.value, opts)[0]?.count || 0 : 1;
-    show(at + again);
+    const next = at + again;
+    refresh();
+    if (matches.length) show(next);
   };
   const replaceAll = () => {
     // One walk over the design: record an undo step, replace, and drop the

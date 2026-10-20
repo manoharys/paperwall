@@ -314,7 +314,7 @@ export class Inspector {
     if (!heavy) ensureFont(el.font, 800).catch(() => null);
     const preview = (type) => cached(`${el.font}|${type}`, heavy, () => renderElementOnly(this.ed.doc, createText({
       text: 'Ag', w: 64, h: 44, size: 32, weight: 800, font: el.font, color: type === 'neon' ? '#ff2d95' : '#1a1a2e', align: 'center', lineHeight: 1.2,
-      effect: { type, color: type === 'splice' ? '#ffb703' : type === 'glow' ? '#ffb703' : undefined },
+      effect: { type, color: ['splice', 'glow'].includes(type) ? '#ffb703' : undefined },
     }), { measure, idPrefix: `fx-${type}` }));
     const uses = {
       color: ['splice', 'glitch', 'glow', 'neon'].includes(fx.type),

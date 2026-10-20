@@ -19,7 +19,14 @@ function when(at) {
 export function historyDialog(editor) {
   const list = h('ol', { class: 'versions', 'data-testid': 'versions' });
   const fill = async () => {
-    const rows = await store.listVersions(editor.doc.id);
+    let rows;
+    try {
+      rows = await store.listVersions(editor.doc.id);
+    } catch (e) {
+      clear(list);
+      list.append(h('p', { class: 'empty-note' }, `Couldn't read the versions: ${e.message}`));
+      return;
+    }
     forget(list);
     clear(list);
     if (!rows.length) list.append(h('p', { class: 'empty-note' }, 'No versions yet. One is kept every few minutes while you work, and whenever you leave a design you changed.'));
@@ -55,7 +62,7 @@ export function historyDialog(editor) {
     h('p', { class: 'hint' }, `The last ${store.MAX_VERSIONS} versions are kept in this browser, on this device.`),
     h('button', { type: 'button', class: 'btn small', 'data-testid': 'version-save', onClick: async () => {
       await editor.flush();
-      await editor.saveVersion('Saved by you');
+      if (!(await editor.saveVersion('Saved by you'))) toast("Couldn't save a version on this device.", 'error');
       fill();
     } }, 'Save a version now'),
     list), { wide: true, testid: 'history-dialog', onClose: () => forget(list) });

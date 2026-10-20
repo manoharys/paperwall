@@ -194,18 +194,18 @@ async function valuesIn(prefix) {
   return txRetry(db, 'versions', 'readonly', (s) => s.getAll(IDBKeyRange.bound(lo, hi)));
 }
 
-/** Keys and values under a prefix, as a Map, in one transaction. */
-async function entriesIn(prefix) {
-  const [lo, hi] = range(prefix);
+/** Several values by key, in one transaction (undefined where missing). */
+async function getMany(store, keys) {
+  if (!keys.length) return [];
   const db = await open();
-  if (!db) return new Map([...memory.versions.entries()].filter(([k]) => k >= lo && k <= hi));
+  if (!db) return keys.map((k) => memory[store].get(k));
   return withDb((fresh) => new Promise((resolve, reject) => {
-    const t = fresh.transaction('versions', 'readonly');
-    const s = t.objectStore('versions');
-    const keys = s.getAllKeys(IDBKeyRange.bound(lo, hi));
-    const values = s.getAll(IDBKeyRange.bound(lo, hi));
-    t.oncomplete = () => resolve(new Map(keys.result.map((k, i) => [k, values.result[i]])));
+    const t = fresh.transaction(store, 'readonly');
+    const s = t.objectStore(store);
+    const reqs = keys.map((k) => s.get(k));
+    t.oncomplete = () => resolve(reqs.map((r) => r.result));
     t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error || new Error('Reading storage was stopped'));
   }));
 }
 
@@ -318,11 +318,13 @@ export async function listVersions(designId) {
 export async function versionDoc(version) {
   const doc = await get('versions', dKey(version.designId, version.at));
   if (!doc) throw new Error('This version is missing');
-  // Every stored image of the design in one read, then the ones this version uses.
-  const prefix = `${version.designId}|a|`;
-  const stored = await entriesIn(prefix);
+  // Just the images this version uses, in one read.
+  const ids = version.assetIds || [];
+  const found = await getMany('versions', ids.map((id) => aKey(version.designId, id)));
   const assets = {};
-  for (const id of version.assetIds || []) if (stored.has(prefix + id)) assets[id] = stored.get(prefix + id);
+  ids.forEach((id, i) => {
+    if (found[i]) assets[id] = found[i];
+  });
   return { ...doc, assets };
 }
 
