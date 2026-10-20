@@ -11,7 +11,7 @@ import { measure, addCustomFont, customFontNames, ensureFont, fontSettled } from
 import { iconById, stickerById } from '../model/graphics.js';
 import { getSetting } from './store.js';
 
-const MASK_LABELS = { none: 'Rectangle', circle: 'Circle', arch: 'Arch', blob: 'Blob', heart: 'Heart', star: 'Star', polygon: 'Hexagon', triangle: 'Triangle', diamond: 'Diamond' };
+
 
 const DUOTONES = [
   ['Ink', '#1a1a2e', '#f7f4ef'], ['Ocean', '#0b2a45', '#7fd1c7'], ['Sunset', '#5b1a6e', '#ffb36b'], ['Berry', '#3b1426', '#ff8fa3'],
@@ -31,6 +31,8 @@ const EFFECT_NAMES = { none: 'None', lift: 'Lift', hollow: 'Hollow', splice: 'Sp
 
 const TYPE_NAMES = { text: 'Text', shape: 'Shape', line: 'Line', image: 'Image', icon: 'Icon', sticker: 'Sticker', qr: 'QR code', group: 'Group', chart: 'Chart', table: 'Table', draw: 'Drawing', connector: 'Connector' };
 const SHAPE_NAMES = { rect: 'Rectangle', ellipse: 'Circle', triangle: 'Triangle', star: 'Star', polygon: 'Polygon', heart: 'Heart', arrow: 'Arrow', bubble: 'Speech bubble', diamond: 'Diamond', arch: 'Arch', blob: 'Blob' };
+// Frame shapes are named as shapes are, but for these three.
+const MASK_LABELS = { ...SHAPE_NAMES, none: 'Rectangle', circle: 'Circle', polygon: 'Hexagon' };
 
 // Presets set the basic adjustments only; warmth, tint, hue, vignette and
 // duotone are left as they are. Original puts everything back.

@@ -5,8 +5,7 @@ function escapeRe(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// Older browsers (Safari before 16.4) can't look behind; they get \b, which
-// only knows Latin letters but still works.
+// Older browsers (Safari before 16.4) can't look behind; they get wordMatcher.
 const LOOKBEHIND = (() => {
   try {
     return new RegExp('(?<!a)b').test('b');
@@ -15,16 +14,53 @@ const LOOKBEHIND = (() => {
   }
 })();
 
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+
+/**
+ * Without look-behind: matches of `re` (which checks the character after)
+ * whose character before isn't a letter or digit either, checked by hand so
+ * that no character is used up (two matches may share the one between them).
+ * Works with String match and replace, like a RegExp.
+ */
+function wordMatcher(re) {
+  const find = (text) => {
+    const out = [];
+    re.lastIndex = 0;
+    for (let m; (m = re.exec(text)); ) {
+      if (!m[0]) {
+        re.lastIndex++;
+        continue;
+      }
+      if (m.index === 0 || !WORD_CHAR.test(text[m.index - 1])) out.push(m);
+      re.lastIndex = m.index + 1;
+    }
+    // Overlapping matches (a query like "--" in "---") count once, left first.
+    return out.filter((m, i) => i === 0 || m.index >= out[i - 1].index + out[i - 1][0].length);
+  };
+  return {
+    [Symbol.match]: (text) => {
+      const all = find(text);
+      return all.length ? all.map((m) => m[0]) : null;
+    },
+    [Symbol.replace]: (text, fn) => {
+      let out = '';
+      let at = 0;
+      for (const m of find(text)) {
+        out += text.slice(at, m.index) + fn(m[0]);
+        at = m.index + m[0].length;
+      }
+      return out + text.slice(at);
+    },
+  };
+}
+
+// (Exported for tests, which can't turn look-behind off.)
+export { wordMatcher };
+
 function matcher(query, { matchCase = false, wholeWord = false } = {}) {
   if (!query) return null;
   const body = escapeRe(query);
-  if (wholeWord && !LOOKBEHIND) {
-    // No look-behind: the character before is matched too (group 1) and put
-    // back on replacing. Any letter counts, not just Latin ones as with \b.
-    const re = new RegExp(`(^|[^\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, `g${matchCase ? '' : 'i'}u`);
-    re.keepsBefore = true;
-    return re;
-  }
+  if (wholeWord && !LOOKBEHIND) return wordMatcher(new RegExp(`${body}(?![\\p{L}\\p{N}])`, `g${matchCase ? '' : 'i'}u`));
   return new RegExp(wholeWord ? `(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])` : body, `g${matchCase ? '' : 'i'}u`);
 }
 
@@ -102,10 +138,7 @@ export function replaceText(doc, query, replacement, opts = {}) {
     }
     // A function replacement keeps "$" in the new text literal.
     let seen = 0;
-    slot.set(before.replace(re, (m, ...groups) => {
-      const kept = re.keepsBefore ? groups[0] : '';
-      return skip < 0 || seen++ === skip ? kept + replacement : m;
-    }));
+    slot.set(before.replace(re, (m) => (skip < 0 || seen++ === skip ? replacement : m)));
     count += skip < 0 ? n : 1;
     changed.set(`${slot.page}:${slot.el.id}`, { page: slot.page, id: slot.el.id, el: slot.el, owner: slot.owner, groups: slot.groups });
     if (skip >= 0) break; // the one match is done

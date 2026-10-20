@@ -825,9 +825,10 @@ export class Editor {
   // selection (its bounds include held connectors, which then follow their
   // elements). A selection of nothing but held connectors is left alone.
   align(how) {
-    // Only what can move (one element alone is aligned to the page).
+    // Only what can move; to the page only when one thing is selected (with a
+    // held connector, the element lines up with the selection: it stays).
     const ids = this.movable;
-    if (ids.length) this.change(() => cmd.alignElements(this.doc, this.page, ids, how));
+    if (ids.length) this.change(() => cmd.alignElements(this.doc, this.page, ids, how, { toPage: this.selection.length === 1 }));
   }
 
   distribute(axis) {

@@ -40,7 +40,7 @@ on-device AI models. Not approved: a collaboration server.
 - [ ] Page timing and transitions
 - [ ] Download as GIF and video (WebM/MP4)
 - [ ] Video and audio elements
-- [ ] Carried over from v0.3 review: a page-level connector whose two ends are both inside one turned group follows that group when it moves
+- [x] Carried over from v0.3 review: a page-level connector whose two ends are both inside one turned group follows that group when it moves
 
 ## v0.5 Present, docs and whiteboards
 

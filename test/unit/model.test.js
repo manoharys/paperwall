@@ -612,3 +612,12 @@ test('[BRD-03] short #rgb colors are listed and rebranded too', async () => {
   applyBrand(doc, { colors: ['#123456'] });
   assert.equal(s.fill, '#123456');
 });
+
+test('[EDIT-19] whole words without look-behind: any letter counts, no match is skipped', async () => {
+  const { wordMatcher } = await import('../../src/model/find.js');
+  const m = (q, flags = 'giu') => wordMatcher(new RegExp(`${q}(?![\\p{L}\\p{N}])`, flags));
+  assert.deepEqual('Kübersee über, über'.match(m('über')), ['über', 'über'], 'not inside Kübersee');
+  assert.deepEqual('- -'.match(m('-')), ['-', '-'], 'neighbours sharing the space between them');
+  assert.equal('über über'.replace(m('über'), () => 'X'), 'X X');
+  assert.equal('abc'.match(m('b')), null);
+});

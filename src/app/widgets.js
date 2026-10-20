@@ -288,12 +288,12 @@ export function gradientEditor({ label, value, onChange, getContext, testid, cur
   // Stops are kept in order, so the page draws the same gradient as the bar above.
   const setStop = (i, patch, live) => {
     const tagged = nowStops().map((s, k) => ({ s: k === order[i] ? { ...s, ...patch } : s, k }));
-    tagged.sort((a, b) => a.s.offset - b.s.offset);
+    tagged.sort((a, b) => (a.s.offset ?? 0) - (b.s.offset ?? 0)); // a stop without an offset counts as 0, as when drawn
     order = order.map((k) => tagged.findIndex((t) => t.k === k));
     emit({ stops: tagged.map((t) => t.s) }, live);
   };
   const addStop = () => {
-    const stops = nowStops();
+    const stops = nowStops().map((s) => ({ ...s, offset: s.offset ?? 0 }));
     // Put the new color in the middle of the widest gap.
     let at = 0;
     for (let i = 1; i < stops.length - 1; i++) if (stops[i + 1].offset - stops[i].offset > stops[at + 1].offset - stops[at].offset) at = i;
