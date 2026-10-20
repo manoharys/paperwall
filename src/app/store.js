@@ -194,11 +194,11 @@ export function saveVersion(doc, opts) {
   return run;
 }
 
-async function writeVersion(doc, { label = '' } = {}) {
+async function writeVersion(doc, { label = '', thumb = null } = {}) {
   const at = Date.now();
   const { assets, ...meta } = doc;
   const rest = JSON.parse(JSON.stringify(meta)); // the images are stored separately, once
-  const details = { key: vKey(doc.id, at), designId: doc.id, at, label, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, assetIds: Object.keys(assets || {}) };
+  const details = { key: vKey(doc.id, at), designId: doc.id, at, label, thumb, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, assetIds: Object.keys(assets || {}) };
   // Which images are already stored is checked in the same transaction that
   // writes the version, so another tab's clean-up can't remove one in between.
   const db = await open();

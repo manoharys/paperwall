@@ -99,8 +99,10 @@ export function present(editor, canvas) {
   const doc = editor.doc;
   const shown = visiblePages(doc);
   if (!shown.length) return toast('Every page is hidden. Show a page to present it.');
-  // Start on the page in view, or the next visible one after it.
-  let at = Math.max(0, shown.findIndex((k) => k >= editor.page));
+  // Start on the page in view, or the next visible one after it (the last
+  // visible one if none come after).
+  const next = shown.findIndex((k) => k >= editor.page);
+  let at = next >= 0 ? next : shown.length - 1;
   const slide = h('div', { class: 'slide' });
   const counter = h('div', { class: 'slide-count' });
   const root = h('div', { class: 'presenter', 'data-testid': 'presenter', tabindex: '-1' }, slide, counter,

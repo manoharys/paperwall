@@ -200,6 +200,16 @@ export function createDrawing(points, { tool = 'pen', stroke = '#1a1a2e', stroke
   });
 }
 
+/**
+ * The same drawing with a different line width: the box is padded again so
+ * the thicker (or thinner) line still fits inside it, with the line in place.
+ */
+export function restroke(el, width) {
+  const abs = el.points.map(([x, y]) => [el.x + x * el.w, el.y + y * el.h]);
+  const { x, y, w, h, points } = createDrawing(abs, { strokeWidth: width });
+  return { x, y, w, h, points, strokeWidth: width };
+}
+
 /** Drop points closer than `min` px to the last kept one (they add size, not shape). */
 export function thinPoints(points, min = 2) {
   const out = [];

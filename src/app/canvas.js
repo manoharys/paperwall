@@ -271,10 +271,12 @@ export class Canvas {
       return;
     }
     if (ed.drawTool) {
-      // Drawing: every press on the page starts a new stroke.
+      // Drawing: every press on the page starts a new stroke. A second finger
+      // or a palm while one stroke is going is ignored.
       e.preventDefault();
+      if (this.drag?.mode === 'draw') return;
       ed.deselect();
-      this.drag = { mode: 'draw', points: [[p.x, p.y]] };
+      this.drag = { mode: 'draw', points: [[p.x, p.y]], pointerId: e.pointerId };
       this.el.setPointerCapture(e.pointerId);
       this.drawStroke();
       return;
@@ -378,6 +380,7 @@ export class Canvas {
       return;
     }
     if (d.mode === 'draw') {
+      if (e.pointerId !== d.pointerId) return;
       for (const ev of e.getCoalescedEvents?.() || [e]) {
         const q = this.toPage(ev);
         d.points.push([q.x, q.y]);
@@ -477,6 +480,7 @@ export class Canvas {
   onCancel(e) {
     const d = this.drag;
     if (d?.mode === 'draw') {
+      if (e.pointerId !== d.pointerId) return;
       this.drag = null;
       this.stroke?.remove();
       this.stroke = null;
@@ -502,9 +506,10 @@ export class Canvas {
     this.onUp(e);
   }
 
-  onUp() {
+  onUp(e) {
     const ed = this.ed;
     const d = this.drag;
+    if (d?.mode === 'draw' && e && e.pointerId !== d.pointerId) return; // another finger lifting
     this.drag = null;
     if (!d) return;
     if (d.mode === 'marquee') {

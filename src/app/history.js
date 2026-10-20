@@ -25,8 +25,10 @@ export function historyDialog(editor) {
     if (!rows.length) list.append(h('p', { class: 'empty-note' }, 'No versions yet. One is kept every few minutes while you work, and whenever you leave a design you changed.'));
     for (const v of rows) {
       const img = h('span', { class: 'version-img', style: { aspectRatio: `${v.width} / ${v.height}` } });
-      // Previews load as they scroll into view, each with its own images.
-      lazily(img, () => store.versionDoc(v).then(async (doc) => {
+      // The saved thumbnail if there is one; otherwise drawn from the version
+      // as it scrolls into view.
+      if (v.thumb) img.append(h('img', { src: v.thumb, alt: '' }));
+      else lazily(img, () => store.versionDoc(v).then(async (doc) => {
         await ensureDesignFonts(doc);
         img.innerHTML = renderPage(doc, 0, { measure, noSize: true, placeholders: true, idPrefix: `v${v.at}` });
       }).catch(() => img.classList.add('broken')));

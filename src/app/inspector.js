@@ -4,7 +4,7 @@
 import { h, icon, iconButton, clear, toast, pickFile, readFileAsDataUrl, dialog, mod } from './ui.js';
 import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover, popoverOpen, PALETTES, fontPicker, gradientEditor } from './widgets.js';
 import { FONTS, FONT_KINDS } from '../model/fonts.js';
-import { SHAPES, FRAME_MASKS, createText, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, parseChartData, chartDataText, parseTable, tableText } from '../model/doc.js';
+import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, parseChartData, chartDataText, parseTable, tableText } from '../model/doc.js';
 import { collectColors, cropZoom } from '../model/commands.js';
 import { renderElementOnly, TEXT_EFFECTS } from '../model/render.js';
 import { measure, addCustomFont, customFontNames, ensureFont, fontLoaded } from './fonts.js';
@@ -32,12 +32,15 @@ const EFFECT_NAMES = { none: 'None', lift: 'Lift', hollow: 'Hollow', splice: 'Sp
 const TYPE_NAMES = { text: 'Text', shape: 'Shape', line: 'Line', image: 'Image', icon: 'Icon', sticker: 'Sticker', qr: 'QR code', group: 'Group', chart: 'Chart', table: 'Table', draw: 'Drawing', connector: 'Connector' };
 const SHAPE_NAMES = { rect: 'Rectangle', ellipse: 'Circle', triangle: 'Triangle', star: 'Star', polygon: 'Polygon', heart: 'Heart', arrow: 'Arrow', bubble: 'Speech bubble', diamond: 'Diamond', arch: 'Arch', blob: 'Blob' };
 
+// Presets set the basic adjustments only; warmth, tint, hue, vignette and
+// duotone are left as they are.
+const BASIC = { brightness: 100, contrast: 100, saturation: 100, grayscale: 0, sepia: 0, blur: 0 };
 const FILTER_PRESETS = {
-  original: { ...DEFAULT_FILTERS },
-  bw: { ...DEFAULT_FILTERS, grayscale: 100, contrast: 110 },
-  sepia: { ...DEFAULT_FILTERS, sepia: 80, contrast: 95 },
-  vivid: { ...DEFAULT_FILTERS, saturation: 150, contrast: 115 },
-  fade: { ...DEFAULT_FILTERS, saturation: 70, contrast: 85, brightness: 110 },
+  original: { ...BASIC },
+  bw: { ...BASIC, grayscale: 100, contrast: 110 },
+  sepia: { ...BASIC, sepia: 80, contrast: 95 },
+  vivid: { ...BASIC, saturation: 150, contrast: 115 },
+  fade: { ...BASIC, saturation: 70, contrast: 85, brightness: 110 },
 };
 
 export class Inspector {
@@ -220,7 +223,7 @@ export class Inspector {
         ...this.linePanel(el)],
       draw: () => [section('Drawing',
         h('div', { class: 'field inline' }, h('span', null, 'Color'), colorButton({ label: 'Drawing color', testid: 'draw-color', value: el.stroke, getContext: this.colorContext, onChange: (c, l) => this.up({ stroke: c }, l ? 'stroke' : null) })),
-        slider({ label: 'Thickness', value: Math.round(el.strokeWidth), min: 1, max: 120, testid: 'draw-width', onChange: this.live('strokeWidth') }))],
+        slider({ label: 'Thickness', value: Math.round(el.strokeWidth), min: 1, max: 120, testid: 'draw-width', onChange: (v, l) => this.up(restroke(this.ed.single || el, v), l ? 'strokeWidth' : null) }))],
       qr: () => this.qrPanel(el),
       chart: () => this.chartPanel(el),
       table: () => this.tablePanel(el),

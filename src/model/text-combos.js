@@ -82,6 +82,11 @@ export const TEXT_COMBOS = [
   ] },
 ];
 
+/** The fonts a combination uses, as [{ font, weight }], without laying it out. */
+export function comboFonts(combo) {
+  return combo.items.filter((it) => it.font).map((it) => ({ font: it.font, weight: it.weight || 400 }));
+}
+
 /**
  * A combination as one group of elements, laid out with `measure` and
  * centered on (cx, cy).

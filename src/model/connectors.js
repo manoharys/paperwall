@@ -3,10 +3,10 @@
 // follows the target when it moves. Routes: straight, elbow or curved.
 
 import { uid } from './doc.js';
-import { boundsOf, rotatePoint, nearPolyline } from './geometry.js';
+import { boundsOf, rotatePoint, nearPolyline, round2 } from './geometry.js';
 import { refitGroup } from './commands.js';
 
-const f = (n) => Math.round(n * 100) / 100;
+const f = round2;
 
 export const ROUTES = ['straight', 'elbow', 'curved'];
 
@@ -128,8 +128,9 @@ export function updateConnectors(page, { refit = true } = {}) {
     if (!sTarget && !eTarget) return moved;
     const a = sTarget ? anchorOn(sTarget, eTarget ? center(eTarget) : b0) : null;
     const b = eTarget ? anchorOn(eTarget, sTarget ? center(sTarget) : a0) : null;
-    el.start.side = a?.side;
-    el.end.side = b?.side;
+    // Attached ends take the side they meet; loose ends keep the one they had.
+    if (a) el.start.side = a.side;
+    if (b) el.end.side = b.side;
     const na = a ? a.point : a0;
     const nb = b ? b.point : b0;
     if (Math.abs(na[0] - a0[0]) + Math.abs(na[1] - a0[1]) + Math.abs(nb[0] - b0[0]) + Math.abs(nb[1] - b0[1]) > 0.01) {

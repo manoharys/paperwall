@@ -82,5 +82,8 @@ export class History {
     this.past = [];
     this.future = [];
     this.lastKey = null;
+    this.pending = false;
+    this.shifted = null;
+    this.discardedFuture = null;
   }
 }

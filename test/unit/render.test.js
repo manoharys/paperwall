@@ -432,3 +432,18 @@ test('[ELM-09] drawings are picked near their stroke, not anywhere in their box'
   assert.ok(drawHit(d, { x: 398, y: 300 }, 6));
   assert.ok(!drawHit(d, { x: 100, y: 300 }, 6), 'inside the box, far from the stroke');
 });
+
+test('[TXT-22] underlines follow text effects', () => {
+  const doc = createDesign({ width: 600, height: 300 });
+  addElement(doc, 0, createText({ text: 'Hello', w: 600, size: 80, color: '#123456', underline: true, effect: { type: 'hollow' } }));
+  const svg = renderPage(doc, 0, { measure: approxMeasure });
+  assert.match(svg, /<rect [^>]*fill="none" stroke="#123456"/, 'a hollow underline');
+});
+
+test('[ELM-09] a thicker drawing line grows its box', async () => {
+  const { createDrawing, restroke } = await import('../../src/model/doc.js');
+  const d = createDrawing([[100, 100], [300, 100]], { strokeWidth: 6 });
+  const r = restroke(d, 40);
+  assert.equal(r.strokeWidth, 40);
+  assert.deepEqual([r.x, r.y, r.w, r.h].map((n) => Math.round(n)), [80, 80, 240, 40]);
+});

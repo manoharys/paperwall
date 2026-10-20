@@ -132,7 +132,9 @@ export class Editor {
     this.versionAt = Date.now();
     this.changedSinceVersion = false;
     try {
-      await store.saveVersion(this.doc, { label });
+      // A small picture of the first page, so the history list needn't load whole designs.
+      const thumb = this.makeThumb ? await this.makeThumb(this.doc).catch(() => null) : null;
+      await store.saveVersion(this.doc, { label, thumb });
     } catch {
       /* history is a convenience; saving the design itself matters more */
     }

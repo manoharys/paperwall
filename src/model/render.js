@@ -325,12 +325,12 @@ function renderText(ctx, el) {
     if (line.prefix) tspans.push(`<tspan x="${f(x - line.indent)}" y="${f(baseline)}">${esc(line.prefix.trim())}</tspan>`);
     if (line.text) tspans.push(`<tspan x="${f(x)}" y="${f(baseline)}">${esc(line.text)}</tspan>`);
     const thick = Math.max(1, el.size * 0.06);
-    if (el.underline && line.width) deco.push(`<rect x="${f(x)}" y="${f(baseline + el.size * 0.1)}" width="${f(line.width)}" height="${f(thick)}" fill="${esc(el.color)}"/>`);
-    if (el.strike && line.width) deco.push(`<rect x="${f(x)}" y="${f(baseline - el.size * 0.3)}" width="${f(line.width)}" height="${f(thick)}" fill="${esc(el.color)}"/>`);
+    if (el.underline && line.width) deco.push(`<rect x="${f(x)}" y="${f(baseline + el.size * 0.1)}" width="${f(line.width)}" height="${f(thick)}"`);
+    if (el.strike && line.width) deco.push(`<rect x="${f(x)}" y="${f(baseline - el.size * 0.3)}" width="${f(line.width)}" height="${f(thick)}"`);
   });
   parts.push(...marks);
-  parts.push(textEffect(ctx, el, (paint) => `<text ${textAttrs(el)}${paint} xml:space="preserve">${tspans.join('')}</text>`));
-  parts.push(...deco);
+  // Underlines and strike lines are painted like the letters, so effects apply to them too.
+  parts.push(textEffect(ctx, el, (paint) => `<text ${textAttrs(el)}${paint} xml:space="preserve">${tspans.join('')}</text>${deco.map((r) => `${r}${paint}/>`).join('')}`));
   return parts.join('');
 }
 
