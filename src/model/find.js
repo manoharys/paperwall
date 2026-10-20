@@ -27,6 +27,12 @@ function matcher(query, { matchCase = false, wholeWord = false } = {}) {
   return new RegExp(wholeWord ? `(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])` : body, `g${matchCase ? '' : 'i'}u`);
 }
 
+/** How many times a query appears in a piece of text. */
+export function countMatches(text, query, opts) {
+  const re = matcher(query, opts);
+  return re ? (String(text).match(re) || []).length : 0;
+}
+
 /**
  * Every place with text, as { page, el, owner, groups, get(), set(v) }, in
  * reading order. `groups` are the groups around el, outermost first.

@@ -9,7 +9,7 @@ import {
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
 import { curveGeometry } from '../model/render.js';
-import { unionBounds, pointInBox } from '../model/geometry.js';
+import { unionBounds, pointInBox, rotatePoint, boxCenter } from '../model/geometry.js';
 import { gridBoxes } from '../model/grids.js';
 import { createConnector, updateConnectors } from '../model/connectors.js';
 import { gridLines, marginSize } from '../model/view.js';
@@ -50,13 +50,10 @@ function inMask(el, p) {
   maskCtx ||= document.createElement('canvas').getContext('2d');
   if (!maskCtx || typeof Path2D === 'undefined') return true;
   // Into the frame's own box: undo its turn, then its mirroring.
-  const cx = el.x + el.w / 2;
-  const cy = el.y + el.h / 2;
-  const a = (-(el.rotation || 0) * Math.PI) / 180;
-  const dx = p.x - cx;
-  const dy = p.y - cy;
-  let x = cx + dx * Math.cos(a) - dy * Math.sin(a) - el.x;
-  let y = cy + dx * Math.sin(a) + dy * Math.cos(a) - el.y;
+  const c = boxCenter(el);
+  const q = rotatePoint(p.x, p.y, c.x, c.y, -(el.rotation || 0));
+  let x = q.x - el.x;
+  let y = q.y - el.y;
   if (el.flipX) x = el.w - x;
   if (el.flipY) y = el.h - y;
   return maskCtx.isPointInPath(new Path2D(maskPath(el)), x, y);
@@ -217,6 +214,16 @@ export class Editor {
     this.page = Math.min(this.page, this.doc.pages.length - 1);
     this.editingTextId = null;
     this.afterChange();
+  }
+
+  /** Call off a change halfway: the design goes back to its last recorded step, which is forgotten. */
+  revertPending() {
+    const back = this.history.revert(this.doc);
+    if (!back) return;
+    this.doc = back;
+    this.selection = this.selection.filter((id) => cmd.findElement(this.pageData, id));
+    this.emit('doc');
+    this.emit('aids');
   }
 
   redo() {

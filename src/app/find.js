@@ -3,7 +3,7 @@
 
 import { h, dialog, toast } from './ui.js';
 import { toggle } from './widgets.js';
-import { findText, replaceText } from '../model/find.js';
+import { findText, replaceText, countMatches } from '../model/find.js';
 import { refitGroup } from '../model/geometry.js';
 
 export function findDialog(editor) {
@@ -54,7 +54,7 @@ export function findDialog(editor) {
     // Move on to the next match. It slides into this one's place, unless the
     // new text contains the query too: then step past it, or it never ends.
     // (Worked out before the list shrinks, so the last match wraps to the first.)
-    const again = r.count ? findText({ pages: [{ elements: [{ id: 'x', type: 'text', text: repl.value }] }] }, find.value, opts)[0]?.count || 0 : 1;
+    const again = r.count ? countMatches(repl.value, find.value, opts) : 1;
     const next = at + again;
     refresh();
     if (matches.length) show(next);

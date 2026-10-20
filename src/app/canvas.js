@@ -18,6 +18,9 @@ import * as store from './store.js';
 const PAD = 64;
 const RATIO_LOCKED = new Set(['image', 'icon', 'sticker', 'qr', 'group']);
 
+// Drags that record an undo step when they begin.
+const UNDOABLE_DRAGS = new Set(['guide', 'crop', 'move', 'end', 'rotate', 'resize', 'resize-many']);
+
 export class Canvas {
   constructor(editor) {
     this.ed = editor;
@@ -252,6 +255,8 @@ export class Canvas {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     if (this.textarea && e.target === this.textarea) return;
     const ed = this.ed;
+    // A second finger or a palm while a stroke is going is ignored (even on a ruler).
+    if (this.drag?.mode === 'draw') return void e.preventDefault();
     if (this.textarea) this.finishTextEdit();
     if (this.spaceDown || e.button === 1) {
       this.drag = { mode: 'pan', sx: e.clientX, sy: e.clientY, left: this.el.scrollLeft, top: this.el.scrollTop };
@@ -410,7 +415,10 @@ export class Canvas {
     if (d.mode === 'move') {
       if (!d.moved && Math.hypot(dx, dy) * ed.zoom < 3) return;
       d.moved = true;
-      const moving = unionBounds(d.items.map(({ el, x, y }) => ({ ...el, x: x + dx, y: y + dy })));
+      // Connectors stretch as their far ends stay put, so the box that snaps is
+      // the rest of the selection (unless it's only connectors).
+      const solid = d.items.filter(({ el }) => el.type !== 'connector');
+      const moving = unionBounds((solid.length ? solid : d.items).map(({ el, x, y }) => ({ ...el, x: x + dx, y: y + dy })));
       ed.guides = [];
       if (!e.altKey) {
         // Connectors follow what's being moved, so they aren't something to snap to.
@@ -491,21 +499,12 @@ export class Canvas {
       this.stroke = null;
       return;
     }
-    if (d?.mode === 'end') {
-      // Put the end back where it was, attached as it was.
+    // Drags that took an undo step when they began put the design back as it
+    // was then (a cancel is the system or a palm, not the person finishing).
+    if (d && UNDOABLE_DRAGS.has(d.mode)) {
       this.drag = null;
-      Object.assign(d.el, d.orig);
-      this.ed.history.discard();
-      this.ed.emit('doc');
-      return;
-    }
-    if (d?.mode === 'guide') {
-      this.drag = null;
-      const ed = this.ed;
-      if (d.isNew) ed.pageData.guides.splice(d.index, 1);
-      else if (d.orig !== undefined) ed.pageData.guides[d.index].pos = d.orig;
-      ed.history.discard();
-      ed.emit('aids');
+      this.ed.guides = [];
+      this.ed.revertPending();
       return;
     }
     this.onUp(e);
@@ -694,9 +693,14 @@ export class Canvas {
     const W = ed.doc.width;
     const H = ed.doc.height;
     if (v.grid) {
-      const g = gridLines(ed.doc, v.gridSize);
-      const d = [...g.x.map((x) => `M${x * z} 0V${H * z}`), ...g.y.map((y) => `M0 ${y * z}H${W * z}`)];
-      parts.push(`<path class="grid-lines" data-testid="grid-lines" d="${d.join('')}"/>`);
+      // The overlay is redrawn every frame of a drag: the grid only when it changes.
+      const key = `${W}|${H}|${z}|${v.gridSize}|${ed.doc.unit}`;
+      if (this.gridKey !== key) {
+        const g = gridLines(ed.doc, v.gridSize);
+        this.gridKey = key;
+        this.gridPath = [...g.x.map((x) => `M${x * z} 0V${H * z}`), ...g.y.map((y) => `M0 ${y * z}H${W * z}`)].join('');
+      }
+      parts.push(`<path class="grid-lines" data-testid="grid-lines" d="${this.gridPath}"/>`);
     }
     if (v.margins) {
       const m = marginSize(ed.doc) * z;

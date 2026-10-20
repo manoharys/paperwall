@@ -475,3 +475,21 @@ test('clicking a ruler without dragging leaves no guide and no undo step', async
   assert.equal(await state(page, (ed) => ed.history.canUndo), false);
   await context.close();
 });
+
+test('[EDIT-01] a drag the system calls off puts everything back, with no undo step', async () => {
+  const { page, context } = await newDesign('square');
+  const s = await addShape(page, 'Square');
+  const steps = await state(page, (ed) => ed.history.past.length);
+  const c = await elementCenter(page, s.id);
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 120, c.y + 80, { steps: 6 });
+  assert.notEqual((await elements(page)).find((e) => e.id === s.id).x, s.x, 'moving');
+  // A palm or a system gesture: the browser cancels the pointer.
+  await page.evaluate(() => document.querySelector('[data-testid="stage"]').dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: 1 })));
+  await page.mouse.up();
+  const back = (await elements(page)).find((e) => e.id === s.id);
+  assert.deepEqual([back.x, back.y], [s.x, s.y]);
+  assert.equal(await state(page, (ed) => ed.history.past.length), steps);
+  await context.close();
+});

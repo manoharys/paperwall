@@ -55,6 +55,17 @@ export class History {
     this.lastKey = null;
   }
 
+  /**
+   * Put the design back as the step just recorded had it, and forget the
+   * step: for a change that was called off halfway. Null if there's no such step.
+   */
+  revert(doc) {
+    if (!this.pending) return null;
+    const snap = this.past[this.past.length - 1];
+    this.discard();
+    return restore(snap, doc.assets);
+  }
+
   get canUndo() {
     return this.past.length > 0;
   }

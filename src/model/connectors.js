@@ -3,7 +3,7 @@
 // follows the target when it moves. Routes: straight, elbow or curved.
 
 import { uid } from './doc.js';
-import { boundsOf, boxCenter, rotatePoint, nearPolyline, round2, boxAround, refitGroup } from './geometry.js';
+import { boxCenter, rotatePoint, nearPolyline, round2, boxAround, refitGroup } from './geometry.js';
 
 const f = round2;
 
@@ -32,16 +32,25 @@ export function setEnds(el, a, b) {
   Object.assign(el, { x, y, w, h, rotation: 0, flipX: false, flipY: false, points: shares });
 }
 
-/** Where a connector meets a box: the middle of the side facing `toward`. */
+/**
+ * Where a connector meets a box: the middle of the side facing `toward`.
+ * On a turned box that's the middle of its own (turned) side.
+ */
 export function anchorOn(box, toward) {
-  const b = boundsOf(box);
-  const cx = b.x + b.w / 2;
-  const cy = b.y + b.h / 2;
+  const rot = box.rotation || 0;
+  const cx = box.x + box.w / 2;
+  const cy = box.y + box.h / 2;
+  // Work in the box's own frame, then turn the point back.
+  const t = rot ? rotatePoint(toward[0], toward[1], cx, cy, -rot) : { x: toward[0], y: toward[1] };
   // Leave by the side facing the main direction of travel, as flowcharts do.
-  const dx = toward[0] - cx;
-  const dy = toward[1] - cy;
-  if (Math.abs(dx) >= Math.abs(dy)) return { point: [dx >= 0 ? b.x + b.w : b.x, cy], side: dx >= 0 ? 'r' : 'l' };
-  return { point: [cx, dy >= 0 ? b.y + b.h : b.y], side: dy >= 0 ? 'b' : 't' };
+  const dx = t.x - cx;
+  const dy = t.y - cy;
+  const [px, py, side] = Math.abs(dx) >= Math.abs(dy)
+    ? [dx >= 0 ? box.x + box.w : box.x, cy, dx >= 0 ? 'r' : 'l']
+    : [cx, dy >= 0 ? box.y + box.h : box.y, dy >= 0 ? 'b' : 't'];
+  if (!rot) return { point: [px, py], side };
+  const p = rotatePoint(px, py, cx, cy, rot);
+  return { point: [p.x, p.y], side };
 }
 
 function hasConnector(els) {
@@ -86,6 +95,7 @@ export function updateConnectors(page, { refit = true } = {}) {
   };
   collect(page.elements);
   const byId = new Map();
+  let refitted = false;
   const index = (els, ox, oy, top) => {
     for (const e of els) {
       if (refs.has(e.id)) byId.set(e.id, top || { ...e, x: e.x + ox, y: e.y + oy });
@@ -105,7 +115,10 @@ export function updateConnectors(page, { refit = true } = {}) {
           visit(el.children, ox + el.x, oy + el.y);
           // A connector inside that moved may now reach past the group's box.
           // Not mid-drag (refit false): the drag code owns the group's box then.
-          if (changed && refit) refitGroup(el);
+          if (changed && refit) {
+            refitGroup(el);
+            refitted = true;
+          }
           changed = changed || before;
         }
         continue;
@@ -142,6 +155,14 @@ export function updateConnectors(page, { refit = true } = {}) {
     return moved;
   };
   visit(page.elements, 0, 0);
+  if (refitted) {
+    // A refitted group may itself be a target: place ends on its new box.
+    // (Once: this second pass only moves ends onto boxes that are settled now.)
+    byId.clear();
+    index(page.elements, 0, 0, null);
+    refit = false;
+    visit(page.elements, 0, 0);
+  }
   return changed;
 }
 

@@ -508,3 +508,30 @@ test('[ELM-10] a route folded flat points its arrows straight along the line', a
   assert.equal(g.endDir[0], 0);
   assert.ok(g.endDir[1] > 0);
 });
+
+test('[ELM-10] an end on a turned shape sits on its turned side', async () => {
+  const { anchorOn } = await import('../../src/model/connectors.js');
+  const box = { x: 0, y: 0, w: 200, h: 100, rotation: 30 };
+  const { point, side } = anchorOn(box, [1000, 50 + 1000 * Math.tan(Math.PI / 6)]);
+  assert.equal(side, 'r');
+  const dist = Math.hypot(point[0] - 100, point[1] - 50);
+  assert.ok(Math.abs(dist - 100) < 0.01, `on the edge, half the width from the middle (${dist})`);
+});
+
+test('[ELM-10] an end attached to a group follows the group when it is refitted in the same sync', async () => {
+  const { createConnector, updateConnectors, endsOf } = await import('../../src/model/connectors.js');
+  const { createShape, createGroup } = await import('../../src/model/doc.js');
+  const a = createShape('rect', { x: 0, y: 0, w: 100, h: 100 });
+  const x = createShape('rect', { x: 0, y: 200, w: 100, h: 100 });
+  const inner = createConnector({ from: [50, 100], to: [50, 200], start: a.id, end: x.id });
+  const g = createGroup([a, inner]);
+  const z = createShape('rect', { x: 600, y: 0, w: 100, h: 100 });
+  const outer = createConnector({ from: [600, 50], to: [100, 50], start: z.id, end: g.id });
+  const page = { elements: [g, x, z, outer] };
+  updateConnectors(page);
+  x.y = 800; // the inner connector stretches, so the group grows
+  updateConnectors(page);
+  const [, end] = endsOf(outer);
+  const box = { x: g.x, y: g.y, w: g.w, h: g.h };
+  assert.ok(Math.abs(end[1] - (box.y + box.h / 2)) < 0.01, `on the grown group's side (${end[1]} vs ${box.y + box.h / 2})`);
+});
