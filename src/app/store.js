@@ -1,6 +1,8 @@
 // Everything is stored in this browser, on this device: designs, the images
 // you've added, and your brand kit. Nothing is ever sent anywhere.
 
+import { keptAssets } from '../model/doc.js';
+
 const DB_NAME = 'paperwall';
 const DB_VERSION = 2;
 const STORES = ['designs', 'uploads', 'settings', 'versions'];
@@ -133,7 +135,8 @@ export function all(store) {
 /** Save a design with a small preview image. */
 export async function saveDesign(doc, thumb) {
   const prev = thumb === undefined ? await get('designs', doc.id) : null;
-  await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: doc.height, pages: doc.pages.length, thumb: thumb ?? prev?.thumb ?? null, doc });
+  // Without files nothing uses any more (a deleted video, a replaced soundtrack).
+  await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: doc.height, pages: doc.pages.length, thumb: thumb ?? prev?.thumb ?? null, doc: keptAssets(doc) });
 }
 
 export async function loadDesign(id) {

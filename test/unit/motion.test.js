@@ -460,3 +460,15 @@ test('[MOT-01] inside a flipped or turned group, an element still rises up the p
   const [turnedX, turnedY] = offsetAt({ rotation: 90 });
   assert.ok(Math.abs(turnedX - plain) < 0.01 && Math.abs(turnedY) < 0.01, 'a quarter turn: along its own x');
 });
+
+test('[MOT-07] what\'s saved keeps only the files the design uses (and its fonts)', async () => {
+  const { keptAssets, createVideo } = await import('../../src/model/doc.js');
+  const doc = createDesign({ width: 100, height: 100 });
+  doc.assets.v = { type: 'video', dataUrl: 'data:video/webm;base64,AA==' };
+  doc.assets.gone = { type: 'video', dataUrl: 'data:video/webm;base64,AB==' };
+  doc.assets.f = { type: 'font', dataUrl: 'data:font/woff2;base64,AA==' };
+  doc.pages[0].elements.push(createVideo('v'));
+  const saved = keptAssets(doc);
+  assert.deepEqual(Object.keys(saved.assets).sort(), ['f', 'v']);
+  assert.ok(doc.assets.gone, 'the open design keeps it (undo can bring it back)');
+});

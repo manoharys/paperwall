@@ -4,7 +4,7 @@
 import { renderPage, textRuns } from '../model/render.js';
 import { buildPdf } from '../model/pdf.js';
 import { buildZip } from '../model/zip.js';
-import { validateDesign, clone, visiblePages, printDpi, pageLabel, versionSnapshot, soundtrackOf } from '../model/doc.js';
+import { validateDesign, clone, visiblePages, printDpi, pageLabel, versionSnapshot, soundtrackOf, keptAssets } from '../model/doc.js';
 import { measure, fontCssFor, registerDesignFonts } from './fonts.js';
 import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage } from './ui.js';
 import { section, segmented, slider, toggle } from './widgets.js';
@@ -117,7 +117,7 @@ export async function printDesign(doc, pages) {
 // ---------- project files ----------
 
 export function projectBlob(doc) {
-  return new Blob([JSON.stringify(doc)], { type: 'application/json' });
+  return new Blob([JSON.stringify(keptAssets(doc))], { type: 'application/json' });
 }
 
 export function saveProjectFile(doc) {

@@ -478,9 +478,17 @@ export function clone(value) {
 
 /** A copy of a design for its version history. Images never change once added, so they're shared, not copied. */
 export function versionSnapshot(doc) {
-  // Only the images it shows (ones replaced long ago needn't be kept by every
-  // version), and every font it carries.
-  const used = usedAssetIds(doc);
-  const assets = Object.fromEntries(Object.entries(doc.assets || {}).filter(([id, a]) => used.has(id) || a?.type === 'font'));
+  const { assets } = keptAssets(doc);
   return { ...clone({ ...doc, assets: undefined }), assets };
+}
+
+/**
+ * The design with only the files it uses (and every font it carries): what's
+ * worth saving. Pictures, videos and sounds taken off the pages stay in the
+ * open design (undo can bring them back), not in what's saved. Not a copy:
+ * shares everything with `doc`.
+ */
+export function keptAssets(doc) {
+  const used = usedAssetIds(doc);
+  return { ...doc, assets: Object.fromEntries(Object.entries(doc.assets || {}).filter(([id, a]) => used.has(id) || a?.type === 'font')) };
 }

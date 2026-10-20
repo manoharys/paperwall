@@ -38,7 +38,8 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal, r
   const tl = timeline(doc, pages);
   if (!tl.parts.length) throw new Error('Pick at least one page.');
   const count = Math.max(1, Math.round(tl.total * fps));
-  const fontCss = await fontCssFor(doc);
+  // Fonts of just the pages being played (each frame carries them).
+  const fontCss = await fontCssFor({ ...doc, pages: pages.map((i) => doc.pages[i]) });
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -66,7 +67,8 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal, r
         const got = await Promise.all(wanted.map(([el, local]) => videos.seek(el, local, width / doc.width)));
         wanted.forEach(([el], k) => pictures.set(el.id, got[k]));
       }
-      const svg = renderFrame(doc, frame, { measure, fontCss, idPrefix: 'mv', videoFrame: (el) => pictures.get(el.id) });
+      // Drawn at the frame's own size, not the design's (a print-size page needn't be rasterized big).
+      const svg = renderFrame(doc, frame, { measure, fontCss, scale: width / doc.width, idPrefix: 'mv', videoFrame: (el) => pictures.get(el.id) });
       const same = svg === last;
       if (!same) await drawFrame(svg, { ctx, width, height });
       last = svg;
@@ -121,7 +123,11 @@ async function pickVideoCodec(container, width, height) {
     // H.264 at level 5.1 first (big frames, up to 4K), then 4.0 and 3.1 for smaller encoders.
     ? [['avc', 'avc1.640033'], ['avc', 'avc1.640028'], ['avc', 'avc1.4d0028'], ['avc', 'avc1.42001f'], ['vp9', vp9]]
     : [['vp9', vp9], ['vp8', 'vp8']];
+  // H.264 levels by how many 16×16 blocks a frame may have: 3.1, 4.0, 5.1.
+  const blocks = Math.ceil(width / 16) * Math.ceil(height / 16);
+  const AVC_MAX = { '1f': 3600, 28: 8192, 33: 36864 };
   for (const [codec, codecString] of tries) {
+    if (codec === 'avc' && blocks > AVC_MAX[codecString.slice(-2)]) continue;
     const config = { codec: codecString, width, height, bitrate: Math.round(width * height * 30 * 0.12), framerate: FPS.video, ...(codec === 'avc' ? { avc: { format: 'avc' } } : {}) };
     try {
       if ((await VideoEncoder.isConfigSupported(config)).supported) return { codec, codecString, config };
