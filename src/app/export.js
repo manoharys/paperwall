@@ -9,7 +9,6 @@ import { measure, fontCssFor, registerDesignFonts } from './fonts.js';
 import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage } from './ui.js';
 import { section, segmented, slider, toggle } from './widgets.js';
 import { exportGif, exportVideo, canMakeVideo } from './motion-export.js';
-import { dataUrlBlob } from './media.js';
 import { designMoves, startsTooLate, timeline } from '../model/motion.js';
 
 const MAX_SIDE = 16000;
@@ -143,9 +142,14 @@ const MOVING = new Set(['gif', 'mp4', 'webm']);
 
 /** How long the animation will be, and a nudge when nothing moves yet. */
 function motionNote(doc, pages) {
+  if (!pages.length) return 'Pick at least one page.';
   const { total } = timeline(doc, pages);
   const length = `${Math.round(total * 10) / 10} seconds`;
-  if (!designMoves(doc, pages)) return `${length} long. Nothing moves yet: pick an animation in the Animate panel.`;
+  if (!designMoves(doc, pages)) {
+    return pages.length > 1
+      ? `${length} long: each page in turn. To make things move, pick an animation in the Animate panel.`
+      : `${length} long. Nothing moves yet: pick an animation in the Animate panel.`;
+  }
   const late = pages.find((i) => startsTooLate(doc.pages[i]));
   if (late !== undefined) return `${length} long. On page ${late + 1}, something is set to come in after the page's time is up, so it won't show: shorten its delay or show the page for longer.`;
   return `${length} long. Set each page's time and transition with nothing selected.`;
@@ -159,7 +163,7 @@ export async function soundtrackBuffer(doc) {
   if (!Ctx) return null;
   const ctx = new Ctx();
   try {
-    return await ctx.decodeAudioData(await (await dataUrlBlob(a.dataUrl)).arrayBuffer());
+    return await ctx.decodeAudioData(dataUrlToBytes(a.dataUrl).bytes.buffer);
   } finally {
     ctx.close?.();
   }

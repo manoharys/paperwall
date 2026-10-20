@@ -4,7 +4,7 @@
 import { h, icon, iconButton, clear, toast, pickFile, readFileAsDataUrl, dialog, mod } from './ui.js';
 import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover, popoverOpen, PALETTES, fontPicker, gradientEditor } from './widgets.js';
 import { FONTS, FONT_KINDS } from '../model/fonts.js';
-import { ANIMATIONS, TRANSITIONS, DEFAULT_ANIM_DURATION, DEFAULT_STAGGER, DEFAULT_TRANSITION_DURATION, LIMITS, pageDuration } from '../model/motion.js';
+import { ANIMATIONS, PAGE_ANIMATIONS, TRANSITIONS, DEFAULT_ANIM_DURATION, DEFAULT_STAGGER, DEFAULT_TRANSITION_DURATION, LIMITS, pageDuration } from '../model/motion.js';
 import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, isEmptyFrame, parseChartData, chartDataText, parseTable, tableText } from '../model/doc.js';
 import { collectColors, cropZoom } from '../model/commands.js';
 import { renderElementOnly, TEXT_EFFECTS } from '../model/render.js';
@@ -280,7 +280,7 @@ export class Inspector {
     const tr = page.transition || { type: 'none' };
     const set = (patch, key) => ed.setPageMotion(at, patch, key);
     return section('Motion',
-      selectField({ label: 'Animate the page', value: pa.type, testid: 'page-anim', options: Object.entries(ANIMATIONS).filter(([, v]) => !v.loop).map(([value, { name }]) => ({ value, label: name })), onChange: (type) => set({ anim: type === 'none' ? undefined : { type, stagger: pa.stagger ?? DEFAULT_STAGGER } }) }),
+      selectField({ label: 'Animate the page', value: pa.type, testid: 'page-anim', options: Object.entries(PAGE_ANIMATIONS).map(([value, { name }]) => ({ value, label: name })), onChange: (type) => set({ anim: type === 'none' ? undefined : { type, stagger: pa.stagger ?? DEFAULT_STAGGER } }) }),
       slider({ label: 'Show for', value: pageDuration(page), min: LIMITS.page[0], max: LIMITS.page[1], step: 0.5, unit: 's', testid: 'page-duration', onChange: (v, l) => set({ duration: v }, l ? `duration:${at}` : null) }),
       selectField({ label: 'Transition into this page', value: tr.type, testid: 'page-transition', options: Object.entries(TRANSITIONS).map(([value, { name }]) => ({ value, label: name })), onChange: (type) => set({ transition: type === 'none' ? undefined : { type, duration: tr.duration ?? DEFAULT_TRANSITION_DURATION } }) }),
       at === 0 && tr.type !== 'none' ? h('p', { class: 'hint' }, 'Shows when this page follows another, as when pages are moved.') : null,

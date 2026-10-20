@@ -17,6 +17,9 @@ export const ANIMATIONS = {
   breathe: { name: 'Breathe', loop: true },
 };
 
+/** What a whole page can come in with: the animations that don't loop (it'd never be still). */
+export const PAGE_ANIMATIONS = Object.fromEntries(Object.entries(ANIMATIONS).filter(([, a]) => !a.loop));
+
 /** How one page gives way to the next. */
 export const TRANSITIONS = {
   none: { name: 'None' },
@@ -80,8 +83,7 @@ export function animationOf(page, el, order = readingOrder(page), { nested = fal
   const known = (a) => a && Object.hasOwn(ANIMATIONS, a.type) && a.type !== 'none';
   const own = known(el.anim) ? el.anim : null;
   // Inside a group, only an element's own animation (the group comes in as one).
-  // A whole page doesn't loop (it would never be still).
-  const pageAnim = !nested && known(page.anim) && !ANIMATIONS[page.anim.type].loop ? page.anim : null;
+  const pageAnim = !nested && known(page.anim) && Object.hasOwn(PAGE_ANIMATIONS, page.anim.type) ? page.anim : null;
   const anim = own || pageAnim;
   if (!anim) return null;
   const duration = clampNum(anim.duration, ...LIMITS.duration, DEFAULT_ANIM_DURATION);

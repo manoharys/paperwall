@@ -103,16 +103,9 @@ export async function audioInfo(file) {
 }
 
 /** A blob: URL for a stored data: URL (much quicker for players than the long string). */
+// (Not by fetch: the page's security policy allows no fetching at all, data: included.)
 export async function blobUrlFor(dataUrl) {
-  return URL.createObjectURL(await dataUrlBlob(dataUrl));
-}
-
-/**
- * A stored data: URL as a Blob. (Not by fetch: the page's security policy
- * allows no fetching at all, data: included.)
- */
-export async function dataUrlBlob(dataUrl) {
-  return dataUrlToBlob(dataUrl);
+  return URL.createObjectURL(dataUrlToBlob(dataUrl));
 }
 
 /**

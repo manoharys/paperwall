@@ -313,6 +313,7 @@ function soundtrackPlayer(doc) {
       if (audio.readyState >= 1) play();
     },
     pause() {
+      wanted = null; // and it doesn't start once it has loaded, either
       audio.pause();
     },
     stop() {

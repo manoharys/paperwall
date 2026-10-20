@@ -1,10 +1,7 @@
 // The design document: pages of elements, plus the images they use.
 
 import { boxAround } from './geometry.js';
-import { ANIMATIONS, TRANSITIONS, LIMITS } from './motion.js';
-
-// What a whole page can come in with: the animations that don't loop.
-const PAGE_ANIMATIONS = Object.fromEntries(Object.entries(ANIMATIONS).filter(([, a]) => !a.loop));
+import { ANIMATIONS, PAGE_ANIMATIONS, TRANSITIONS, LIMITS } from './motion.js';
 
 export const FORMAT_VERSION = 1;
 export const DPI = 300;

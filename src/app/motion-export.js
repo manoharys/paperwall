@@ -168,8 +168,15 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
     if (encoder.state !== 'closed') encoder.close();
   }
   if (failure) throw failure;
-  const sound = audio ? await encodeAudio(audio, total, container, volume, signal) : null;
-  if (audio && !sound) onNote?.("This browser can't encode sound, so the video is silent.");
+  let sound = null;
+  if (audio) {
+    // The pictures are done: a sound that won't encode leaves a silent video, not nothing.
+    sound = await encodeAudio(audio, total, container, volume, signal).catch((e) => {
+      if (signal?.aborted) throw e;
+      return null;
+    });
+    if (!sound) onNote?.("The soundtrack couldn't be encoded here, so the video is silent.");
+  }
   const video = { codec: pick.codec, codecString: pick.codecString, width, height, description, chunks };
   const parts = container === 'mp4' ? buildMp4Parts({ video, audio: sound, duration: total }) : buildWebmParts({ video, audio: sound, duration: total });
   return new Blob(parts, { type: container === 'mp4' ? 'video/mp4' : 'video/webm' });

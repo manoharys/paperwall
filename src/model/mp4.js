@@ -81,12 +81,7 @@ function trak(t, id, offsets, duration) {
   // The last sample lasts as long as the frame shown last says.
   const lastShown = t.chunks[pts.indexOf(dts[dts.length - 1])];
   const deltas = dts.map((d, i) => (i + 1 < dts.length ? dts[i + 1] - d : Math.max(1, ticks(lastShown?.duration ?? 0) || (i ? dts[i] - dts[i - 1] : 1))));
-  const runs = [];
-  for (const d of deltas) {
-    const last = runs[runs.length - 1];
-    if (last && last[1] === d) last[0]++;
-    else runs.push([1, d]);
-  }
+  const runs = runLengths(deltas);
   const stts = full('stts', 0, 0, u32(runs.length), ...runs.map(([n, d]) => concat([u32(n), u32(d)])));
   // Offsets are kept at zero or more (some players refuse a frame decoded
   // after it's shown): every frame is shown `lead` later, and an edit list
@@ -96,12 +91,7 @@ function trak(t, id, offsets, duration) {
   const shifts = raw.map((o) => o + lead);
   let ctts = null;
   if (shifts.some((o) => o !== 0)) {
-    const oruns = [];
-    for (const o of shifts) {
-      const last = oruns[oruns.length - 1];
-      if (last && last[1] === o) last[0]++;
-      else oruns.push([1, o]);
-    }
+    const oruns = runLengths(shifts);
     ctts = full('ctts', 0, 0, u32(oruns.length), ...oruns.map(([n, o]) => concat([u32(n), u32(o)])));
   }
   const edts = lead ? box('edts', full('elst', 0, 0, u32(1), u32(Math.round(duration * 1000)), u32(lead), u16(1), u16(0))) : null;
@@ -112,6 +102,17 @@ function trak(t, id, offsets, duration) {
   const stco = full('stco', 0, 0, u32(offsets.length), ...offsets.map(u32));
   const stbl = box('stbl', full('stsd', 0, 0, u32(1), video ? videoEntry(t) : audioEntry(t)), stts, ...(ctts ? [ctts] : []), ...(stss ? [stss] : []), stsc, stsz, stco);
   return box('trak', tkhd, ...(edts ? [edts] : []), box('mdia', mdhd, hdlr, box('minf', header, dinf, stbl)));
+}
+
+/** Values as [count, value] runs of equal ones in a row. */
+function runLengths(values) {
+  const runs = [];
+  for (const v of values) {
+    const last = runs[runs.length - 1];
+    if (last && last[1] === v) last[0]++;
+    else runs.push([1, v]);
+  }
+  return runs;
 }
 
 function videoEntry(t) {
