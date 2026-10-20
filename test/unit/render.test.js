@@ -486,3 +486,25 @@ test('[ELM-10] a loose end runs the way the line goes, not the side it once left
   assert.equal(g.endDir[0], 0, 'the end arrow points down');
   assert.ok(g.endDir[1] > 0);
 });
+
+test('[ELM-10] an elbow into an attached end comes in through that end\'s side', async () => {
+  const { createConnector, updateConnectors, connectorGeometry } = await import('../../src/model/connectors.js');
+  const { createShape } = await import('../../src/model/doc.js');
+  const box = createShape('rect', { x: 10, y: 80, w: 180, h: 20 });
+  const c = createConnector({ from: [0, 0], to: [10, 90], end: box.id, route: 'elbow' });
+  updateConnectors({ elements: [box, c] });
+  assert.equal(c.end.side, 'l');
+  const g = connectorGeometry(c);
+  assert.equal(g.endDir[1], 0, 'the arrow points into the left side');
+  assert.ok(g.endDir[0] > 0);
+});
+
+test('[ELM-10] a route folded flat points its arrows straight along the line', async () => {
+  const { createConnector, connectorGeometry } = await import('../../src/model/connectors.js');
+  const c = createConnector({ from: [200, 50], to: [200, 200], route: 'elbow' });
+  c.start = { id: 'a', side: 'r' };
+  c.end = { id: 'b', side: 'l' };
+  const g = connectorGeometry(c);
+  assert.equal(g.endDir[0], 0);
+  assert.ok(g.endDir[1] > 0);
+});

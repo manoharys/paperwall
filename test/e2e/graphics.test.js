@@ -547,6 +547,21 @@ test('[IMG-15] photo grids for collages', async () => {
   await uploadImages(page, [await makePng(page, { w: 400, h: 400 })]);
   await dragUploadOnto(page, frames[2].id);
   await page.waitForFunction((id) => window.paperwall.editor.pageData.elements.find((e) => e.id === id).assetId, frames[2].id);
+  // Grouped, the grid still takes photos frame by frame.
+  const group = await page.evaluate((ids) => {
+    const ed = window.paperwall.editor;
+    ed.select(ids);
+    ed.group();
+    return ed.pageData.elements.find((e) => e.type === 'group');
+  }, frames.map((f) => f.id));
+  const before = (await elements(page)).length; // the upload itself was also added to the page
+  const inner = group.children.find((c) => c.id === frames[1].id);
+  const at = await screenPoint(page, group.x + inner.x + inner.w / 2, group.y + inner.y + inner.h / 2);
+  await openTab(page, 'uploads');
+  const box = await page.locator('[data-testid="page"]').boundingBox();
+  await page.dragAndDrop('[data-testid="upload-item"] >> nth=0', '[data-testid="page"]', { targetPosition: { x: at.x - box.x, y: at.y - box.y } });
+  await page.waitForFunction((id) => window.paperwall.editor.pageData.elements.find((e) => e.type === 'group').children.find((e) => e.id === id)?.assetId, frames[1].id);
+  assert.equal((await elements(page)).length, before, 'filled, not added on top');
   await context.close();
 });
 

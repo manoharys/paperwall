@@ -560,6 +560,11 @@ export class Canvas {
     if (hit.type === 'text') this.startTextEdit(hit);
     else if (hit.type === 'image' && !this.ed.doc.assets[hit.assetId]) this.pickPhotoFor(hit);
     else if (hit.type === 'image') this.startCrop(hit);
+    else if (hit.type === 'group') {
+      // An empty frame inside a group (a grouped photo grid) still asks for a photo.
+      const frame = this.ed.frameAt(p);
+      if (frame && !this.ed.doc.assets[frame.assetId]) this.pickPhotoFor(frame);
+    }
   }
 
   onWheel(e) {

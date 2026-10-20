@@ -32,6 +32,16 @@ function loadView() {
   }
 }
 
+/** An element anywhere on a page, inside groups too. */
+function deepFind(els, id) {
+  for (const el of els) {
+    if (el.id === id) return el;
+    const inner = el.type === 'group' && deepFind(el.children, id);
+    if (inner) return inner;
+  }
+  return null;
+}
+
 let maskCtx = null;
 
 /** Whether page point p falls inside a frame's shape (a circle frame's corners don't count). */
@@ -165,7 +175,7 @@ export class Editor {
     try {
       // A small picture of the first page, so the history list needn't load
       // whole designs: the home-screen one if it's up to date, else a new one.
-      const fresh = () => (this.lastThumb?.at >= snapshot.updatedAt ? this.lastThumb.url : null);
+      const fresh = () => (this.lastThumb?.at === snapshot.updatedAt ? this.lastThumb.url : null);
       // A home-screen thumbnail is usually on its way: draw it now and use it for both.
       if (!fresh() && !quick) await this.thumb.flush();
       const thumb = fresh() || (quick || !this.makeThumb ? null : await this.makeThumb(snapshot).catch(() => null));
@@ -333,8 +343,9 @@ export class Editor {
   fillFrame(id, upload, pageId = this.pageData.id, { evenLocked = false } = {}) {
     // The frame's own page (it may not be in view any more: the page can change
     // while a photo is being picked), else wherever it is now.
-    const page = this.doc.pages.find((p) => p.id === pageId && cmd.findElement(p, id)) || this.doc.pages.find((p) => cmd.findElement(p, id));
-    const el = page && cmd.findElement(page, id);
+    // Frames inside groups count too (a grouped photo grid).
+    const page = this.doc.pages.find((p) => p.id === pageId && deepFind(p.elements, id)) || this.doc.pages.find((p) => deepFind(p.elements, id));
+    const el = page && deepFind(page.elements, id);
     if (!el || el.type !== 'image' || (el.locked && !evenLocked)) return null;
     this.change(() => {
       el.assetId = addAsset(this.doc, upload);
@@ -342,13 +353,32 @@ export class Editor {
       const pic = upload.width / upload.height;
       el.crop = pic > frame ? { x: (1 - frame / pic) / 2, y: 0, w: frame / pic, h: 1 } : { x: 0, y: (1 - pic / frame) / 2, w: 1, h: pic / frame };
     });
-    if (page === this.pageData) this.select([el.id]);
+    // A frame in a group: the group is what's selected.
+    if (page === this.pageData) this.select([cmd.findElement(page, id) ? el.id : page.elements.find((g) => deepFind([g], id)).id]);
     return el;
   }
 
-  /** The frame at a point on the page, if any: an empty one, or a photo in a shape. */
+  /**
+   * The frame at a point on the page, if any: an empty one, or a photo in a
+   * shape. Frames inside (unturned, unlocked) groups count too.
+   */
   frameAt(p) {
-    return cmd.topmost(this.pageData, (el) => el.type === 'image' && !el.locked && !el.hidden && (!el.assetId || (el.mask && el.mask !== 'none')) && pointInBox(p.x, p.y, el) && inMask(el, p));
+    const find = (els, ox, oy) => {
+      for (let i = els.length - 1; i >= 0; i--) {
+        const el = els[i];
+        if (el.hidden || el.locked) continue;
+        if (el.type === 'group') {
+          if (el.rotation || el.flipX || el.flipY) continue;
+          const hit = find(el.children, ox + el.x, oy + el.y);
+          if (hit) return hit;
+          continue;
+        }
+        const at = { ...el, x: el.x + ox, y: el.y + oy };
+        if (el.type === 'image' && (!el.assetId || (el.mask && el.mask !== 'none')) && pointInBox(p.x, p.y, at) && inMask(at, p)) return el;
+      }
+      return null;
+    };
+    return find(this.pageData.elements, 0, 0);
   }
 
   // ---------- view: rulers, guides, grid, margins, bleed ----------

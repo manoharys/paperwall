@@ -71,7 +71,8 @@ export function findText(doc, query, opts) {
 }
 
 /**
- * Replace a query everywhere (or only in `onlyId`, a top-level element).
+ * Replace a query everywhere (or only in `onlyId`, a top-level element; with
+ * `nth` too, only that element's nth match, counting from 0 in reading order).
  * Returns { count, changed: [{ page, id }] } so text boxes can be refitted.
  */
 export function replaceText(doc, query, replacement, opts = {}) {
@@ -79,15 +80,22 @@ export function replaceText(doc, query, replacement, opts = {}) {
   const changed = new Map();
   let count = 0;
   if (!re) return { count, changed: [] };
+  let skip = opts.nth ?? -1; // matches still to pass before the one to replace
   for (const slot of textSlots(doc)) {
     if (opts.onlyId && (slot.owner.id !== opts.onlyId || (opts.onlyPage !== undefined && slot.page !== opts.onlyPage))) continue;
     const before = String(slot.get() ?? '');
     const n = (before.match(re) || []).length;
     if (!n) continue;
+    if (skip >= n) {
+      skip -= n;
+      continue;
+    }
     // A function replacement keeps "$" in the new text literal.
-    slot.set(before.replace(re, () => replacement));
-    count += n;
+    let seen = 0;
+    slot.set(before.replace(re, (m) => (skip < 0 || seen++ === skip ? replacement : m)));
+    count += skip < 0 ? n : 1;
     changed.set(`${slot.page}:${slot.el.id}`, { page: slot.page, id: slot.el.id, el: slot.el, owner: slot.owner, groups: slot.groups });
+    if (skip >= 0) break; // the one match is done
   }
   return { count, changed: [...changed.values()] };
 }

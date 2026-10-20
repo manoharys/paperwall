@@ -38,11 +38,16 @@ export function historyDialog(editor) {
           h('b', null, when(v.at)),
           h('small', null, `${v.label ? `${v.label} · ` : ''}${v.pages} page${v.pages === 1 ? '' : 's'} · ${v.width} × ${v.height}`)),
         h('button', { type: 'button', class: 'btn small', 'data-testid': 'version-restore', onClick: async () => {
-          const doc = await store.versionDoc(v);
-          await ensureDesignFonts(doc);
-          editor.restoreVersion(doc);
-          d.close();
-          toast('Restored. Undo to go back to how it was.');
+          try {
+            const doc = await store.versionDoc(v);
+            await ensureDesignFonts(doc);
+            if (editor.closed) return;
+            editor.restoreVersion(doc);
+            d.close();
+            toast('Restored. Undo to go back to how it was.');
+          } catch (e) {
+            toast(`Couldn't restore this version: ${e.message}`, 'error');
+          }
         } }, 'Restore')));
     }
   };

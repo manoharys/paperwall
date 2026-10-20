@@ -562,3 +562,15 @@ test('[EDIT-01] discarding after a merged step keeps the earlier undo step', () 
   assert.equal(h.past.length, 1, 'the step before the edits is still there');
   assert.equal(JSON.parse(h.past[0]).pages[0].n, 1);
 });
+
+test('[EDIT-19] replace one match at a time, even inside one table', async () => {
+  const { findText, replaceText } = await import('../../src/model/find.js');
+  const { createDesign, createTable } = await import('../../src/model/doc.js');
+  const doc = createDesign({ width: 500, height: 500 });
+  const t = createTable({ rows: [['2024 a', '2024'], ['2024', 'x']] });
+  doc.pages[0].elements.push(t);
+  assert.equal(findText(doc, '2024')[0].count, 3);
+  const r = replaceText(doc, '2024', '2025', { onlyId: t.id, onlyPage: 0, nth: 1 });
+  assert.equal(r.count, 1);
+  assert.deepEqual(t.rows, [['2024 a', '2025'], ['2024', 'x']], 'only the second match');
+});

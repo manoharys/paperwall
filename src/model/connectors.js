@@ -182,15 +182,17 @@ export function connectorGeometry(el, trim = { start: 0, end: 0 }) {
 function routeBetween(el, a, b, horizontal, bend) {
   const r = route(el, a, b, horizontal, bend);
   // A route can fold flat (two boxes side by side): point the arrows along the line between the ends.
-  const along = [b[0] - a[0] || 1, b[1] - a[1]];
+  const along = Math.hypot(b[0] - a[0], b[1] - a[1]) > 1e-6 ? [b[0] - a[0], b[1] - a[1]] : [1, 0];
   const some = (d) => (Math.hypot(d[0], d[1]) > 1e-6 ? d : along);
   return { ...r, startDir: some(r.startDir), endDir: some(r.endDir) };
 }
 
 function route(el, a, b, horizontal, bend) {
   const path = (pts) => `M${f(pts[0][0])} ${f(pts[0][1])} ` + pts.slice(1).map(([x, y]) => `L${f(x)} ${f(y)}`).join(' ');
-  // An attached start leaves by its side; a loose one goes the way the line mostly runs.
-  const horizontalStart = horizontal ?? (el.start?.id && el.start.side ? 'lr'.includes(el.start.side) : Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]));
+  // An attached end sets the way the line leaves (the start's side first; an
+  // elbow's two outer legs run the same way). With neither, the way it mostly runs.
+  const side = el.start?.id && el.start.side ? el.start.side : el.end?.id && el.end.side ? el.end.side : null;
+  const horizontalStart = horizontal ?? (side ? 'lr'.includes(side) : Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]));
   const done = (r) => ({ ...r, horizontal: horizontalStart });
   if (el.route === 'elbow') {
     if (horizontalStart) {

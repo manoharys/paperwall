@@ -369,10 +369,7 @@ export function freshPage(page) {
 }
 
 export function duplicatePage(doc, index) {
-  const copy = clone(getPage(doc, index));
-  copy.id = uid('p');
-  copy.elements = freshCopies(copy.elements);
-  doc.pages.splice(index + 1, 0, copy);
+  doc.pages.splice(index + 1, 0, freshPage(getPage(doc, index)));
   touch(doc);
   return index + 1;
 }

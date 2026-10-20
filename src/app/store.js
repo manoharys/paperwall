@@ -194,6 +194,21 @@ async function valuesIn(prefix) {
   return txRetry(db, 'versions', 'readonly', (s) => s.getAll(IDBKeyRange.bound(lo, hi)));
 }
 
+/** Keys and values under a prefix, as a Map, in one transaction. */
+async function entriesIn(prefix) {
+  const [lo, hi] = range(prefix);
+  const db = await open();
+  if (!db) return new Map([...memory.versions.entries()].filter(([k]) => k >= lo && k <= hi));
+  return withDb((fresh) => new Promise((resolve, reject) => {
+    const t = fresh.transaction('versions', 'readonly');
+    const s = t.objectStore('versions');
+    const keys = s.getAllKeys(IDBKeyRange.bound(lo, hi));
+    const values = s.getAll(IDBKeyRange.bound(lo, hi));
+    t.oncomplete = () => resolve(new Map(keys.result.map((k, i) => [k, values.result[i]])));
+    t.onerror = () => reject(t.error);
+  }));
+}
+
 // Versions are saved one at a time, so one save's clean-up can't remove
 // images another save has written but not yet pointed to.
 let versionQueue = Promise.resolve();
@@ -210,8 +225,8 @@ let lastAt = 0;
 async function writeVersion(doc, { label = '', thumb = null } = {}) {
   // Keyed by time: two versions in the same millisecond mustn't share a key.
   const at = (lastAt = Math.max(Date.now(), lastAt + 1));
-  const { assets, ...meta } = doc;
-  const rest = JSON.parse(JSON.stringify(meta)); // the images are stored separately, once
+  // `doc` is a copy nobody changes (versionSnapshot); the images are stored separately, once.
+  const { assets, ...rest } = doc;
   const details = { key: vKey(doc.id, at), designId: doc.id, at, label, thumb, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, assetIds: Object.keys(assets || {}) };
   // Which images are already stored is checked in the same transaction that
   // writes the version, so another tab's clean-up can't remove one in between.
@@ -303,11 +318,11 @@ export async function listVersions(designId) {
 export async function versionDoc(version) {
   const doc = await get('versions', dKey(version.designId, version.at));
   if (!doc) throw new Error('This version is missing');
+  // Every stored image of the design in one read, then the ones this version uses.
+  const prefix = `${version.designId}|a|`;
+  const stored = await entriesIn(prefix);
   const assets = {};
-  const found = await Promise.all((version.assetIds || []).map((id) => get('versions', aKey(version.designId, id))));
-  (version.assetIds || []).forEach((id, i) => {
-    if (found[i]) assets[id] = found[i];
-  });
+  for (const id of version.assetIds || []) if (stored.has(prefix + id)) assets[id] = stored.get(prefix + id);
   return { ...doc, assets };
 }
 

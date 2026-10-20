@@ -8,24 +8,26 @@ import { refitGroup } from '../model/geometry.js';
 
 export function findDialog(editor) {
   const opts = { matchCase: false, wholeWord: false };
-  let hits = [];
-  let at = -1;
+  let hits = []; // places: { page, id, count }
+  let matches = []; // every match, one by one: { page, id, nth }
+  let at = -1; // which match is shown
   const find = h('input', { type: 'search', placeholder: 'Find', 'aria-label': 'Find', 'data-testid': 'find-input' });
   const repl = h('input', { type: 'text', placeholder: 'Replace with', 'aria-label': 'Replace with', 'data-testid': 'replace-input' });
   const status = h('p', { class: 'hint', 'data-testid': 'find-status', 'aria-live': 'polite' });
   const total = () => hits.reduce((s, x) => s + x.count, 0);
   const refresh = () => {
     hits = findText(editor.doc, find.value, opts);
-    at = Math.min(at, hits.length - 1);
+    matches = hits.flatMap((x) => Array.from({ length: x.count }, (_, nth) => ({ page: x.page, id: x.id, nth })));
+    at = Math.min(at, matches.length - 1);
     const n = total();
     status.textContent = !find.value ? 'Searches text on every page, in tables and chart labels too.'
-      : n ? `${n} match${n === 1 ? '' : 'es'} in ${hits.length} place${hits.length === 1 ? '' : 's'}${at >= 0 ? ` · showing ${at + 1} of ${hits.length}` : ''}`
+      : n ? `${n} match${n === 1 ? '' : 'es'} in ${hits.length} place${hits.length === 1 ? '' : 's'}${at >= 0 ? ` · showing ${at + 1} of ${n}` : ''}`
         : 'No matches.';
   };
   const show = (i) => {
-    if (!hits.length) return;
-    at = (i + hits.length) % hits.length;
-    const hit = hits[at];
+    if (!matches.length) return;
+    at = (i + matches.length) % matches.length;
+    const hit = matches[at];
     if (editor.page !== hit.page) editor.setPage(hit.page);
     editor.select([hit.id]);
     refresh();
@@ -39,22 +41,22 @@ export function findDialog(editor) {
     for (const g of [...depth.keys()].sort((a, b) => depth.get(b) - depth.get(a))) refitGroup(g);
   };
   const replaceOne = () => {
-    if (!hits.length) return;
+    if (!matches.length) return;
     if (at < 0) return show(0);
-    const hit = hits[at];
+    const hit = matches[at];
     // An undo step only if something was replaced (the place may be locked by now).
     editor.history.record(editor.doc);
-    const r = replaceText(editor.doc, find.value, repl.value, { ...opts, onlyId: hit.id, onlyPage: hit.page });
+    const r = replaceText(editor.doc, find.value, repl.value, { ...opts, onlyId: hit.id, onlyPage: hit.page, nth: hit.nth });
     if (r.count) {
       refit(r.changed);
       editor.afterChange();
     } else editor.history.discard();
     refresh();
-    if (!hits.length) return;
-    // Move on: if the new text still contains the query, the same place
-    // still matches, and replacing it again would never end.
-    const same = hits.findIndex((x) => x.page === hit.page && x.id === hit.id);
-    show(same >= 0 ? same + 1 : at);
+    if (!matches.length) return;
+    // Move on to the next match. It slides into this one's place, unless the
+    // new text contains the query too: then step past it, or it never ends.
+    const again = r.count ? findText({ pages: [{ elements: [{ id: 'x', type: 'text', text: repl.value }] }] }, find.value, opts)[0]?.count || 0 : 1;
+    show(at + again);
   };
   const replaceAll = () => {
     // One walk over the design: record an undo step, replace, and drop the
