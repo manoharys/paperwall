@@ -30,8 +30,9 @@ export function frameSize(doc, kind, wanted = null) {
 }
 
 /**
- * Draw every frame of the design playing, calling `each(canvas, i, timeSeconds)`
- * in order. `pages` are the page indexes to play.
+ * Draw every frame of the design playing, calling `each(canvas, ctx, i,
+ * timeSeconds, same)` in order (`same`: the picture hasn't changed since the
+ * frame before). `pages` are the page indexes to play.
  */
 async function eachFrame(doc, pages, { fps, width, height, onProgress, signal }, each) {
   const tl = timeline(doc, pages);
@@ -64,9 +65,10 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal },
         wanted.forEach(([el], k) => pictures.set(el.id, got[k]));
       }
       const svg = renderFrame(doc, frame, { measure, fontCss, idPrefix: 'mv', videoFrame: (el) => pictures.get(el.id) });
-      if (svg !== last) await drawFrame(svg, { ctx, width, height });
+      const same = svg === last;
+      if (!same) await drawFrame(svg, { ctx, width, height });
       last = svg;
-      await each(canvas, ctx, i, t);
+      await each(canvas, ctx, i, t, same);
       onProgress?.((i + 1) / count);
     }
   } finally {
@@ -97,7 +99,8 @@ export async function exportGif(doc, pages, { size = null, onProgress, signal } 
   // GIF delays are whole hundredths of a second: each frame gets its share of
   // the clock, rounded, so the whole GIF keeps time (no drift).
   const at = (i) => Math.round((i * 100) / fps) * 10;
-  await eachFrame(doc, pages, { fps, width, height, onProgress, signal }, (canvas, ctx, i) => {
+  await eachFrame(doc, pages, { fps, width, height, onProgress, signal }, (canvas, ctx, i, t, same) => {
+    if (same && i > 0) return gif.hold(at(i + 1) - at(i));
     gif.add(ctx.getImageData(0, 0, width, height).data, at(i + 1) - at(i));
   });
   return new Blob([gif.finish()], { type: 'image/gif' });

@@ -222,7 +222,7 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     const page = doc.pages[shown[at]];
     info = { end: animationsEnd(page), keeps: keepsMoving(page), loops: hasLoop(page) };
     videos.pauseAll();
-    videos.start(videosOn(doc, [shown[at]]));
+    videos.start(videosOn(doc, [shown[at]]), started);
     if (!auto) sound?.seek(tl.parts[at].start);
     slide.style.aspectRatio = `${doc.width} / ${doc.height}`;
     counter.textContent = `${at + 1} / ${shown.length}`;
@@ -265,7 +265,8 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
 
 // Safari draws HTML inside SVG (the live video's place) without the page's
 // moves, turns and clipping, so there videos are shown as pictures throughout.
-const LIVE_VIDEO = typeof navigator === 'undefined' || !/^((?!chrome|chromium|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent);
+// (Every browser on iPhones and iPads is Safari inside: any WebKit that isn't Chrome's Blink.)
+const LIVE_VIDEO = typeof navigator === 'undefined' || !(/AppleWebKit/.test(navigator.userAgent) && !/Chrome\/|Chromium\//.test(navigator.userAgent));
 
 /** The design's soundtrack as something to play from a point, or null if it has none. */
 function soundtrackPlayer(doc) {
@@ -273,6 +274,9 @@ function soundtrackPlayer(doc) {
   if (!asset) return null;
   const audio = new Audio();
   audio.volume = doc.audio.volume ?? 1;
+  // Asked to play now, while the click that pressed Play still counts:
+  // Safari only lets a sound play later if it was started by a click.
+  audio.play().catch(() => null);
   let stopped = false;
   let url = null;
   const loaded = blobUrlFor(asset.dataUrl).then((u) => {

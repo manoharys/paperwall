@@ -398,3 +398,12 @@ test('[MOT-06] MP4: reordered frames get offsets of zero or more, and an edit li
   const elst = inside(edts, 'elst');
   assert.equal(view.getUint32(elst.start + 12), 3000, 'starts a frame in (33 ms at 90 kHz)');
 });
+
+test('[MOT-03] the first page\'s transition alone doesn\'t make a design move', () => {
+  const doc = createDesign({ width: 100, height: 100 });
+  doc.pages[0].transition = { type: 'fade' };
+  assert.equal(designMoves(doc, [0]), false, 'nothing comes before it');
+  doc.pages.push(createPage());
+  doc.pages[1].transition = { type: 'fade' };
+  assert.equal(designMoves(doc, [0, 1]), true);
+});

@@ -4,7 +4,12 @@
 // dither so gradients don't band. A still stretch costs nothing: the frame
 // before just shows longer.
 
-/** Writes a GIF as frames arrive: add(rgba, delayMs) for each, then finish() for the bytes. */
+/**
+ * Writes a GIF as frames arrive: add(rgba, delayMs) for each (the encoder
+ * keeps the pixels to compare with the next frame: don't change them after),
+ * hold(delayMs) for a frame known to be the same as the last, then finish()
+ * for the bytes.
+ */
 export class GifEncoder {
   constructor({ width, height, loop = 0, dither = true }) {
     Object.assign(this, { width, height, dither });
@@ -37,7 +42,12 @@ export class GifEncoder {
     const px = new Uint8ClampedArray(box.w * box.h * 4);
     for (let y = 0; y < box.h; y++) px.set(data.subarray(((box.y + y) * this.width + box.x) * 4, ((box.y + y) * this.width + box.x + box.w) * 4), y * box.w * 4);
     this.pending = { box, px, delay };
-    this.prev = data.slice();
+    this.prev = data;
+  }
+
+  /** The last frame shows `delay` ms longer. */
+  hold(delay) {
+    if (this.pending) this.pending.delay += delay;
   }
 
   /** Write the frame held back (now that its delay is final). */

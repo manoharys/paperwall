@@ -197,7 +197,8 @@ export function pageMoves(page) {
 
 /** Whether anything in a design moves (so a GIF or video is worth making). */
 export function designMoves(doc, pages = doc.pages.map((_, i) => i)) {
-  return pages.some((i) => pageMoves(doc.pages[i]));
+  // The first page's transition never plays: nothing comes before it.
+  return pages.some((i, k) => (k === 0 ? animations(doc.pages[i]).length > 0 || hasVideo(doc.pages[i]) : pageMoves(doc.pages[i])));
 }
 
 /**

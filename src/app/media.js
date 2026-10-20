@@ -174,8 +174,12 @@ export class VideoFrames {
     return this.grab(v, el);
   }
 
-  /** Start the videos of a page playing, from where the page begins. */
-  start(els) {
+  /**
+   * Start the videos of a page playing, in time with the page: `since` is
+   * when the page began (performance.now()), so a video that takes a while
+   * to load joins where the page is by then.
+   */
+  start(els, since = performance.now()) {
     const turn = (this.turn = (this.turn || 0) + 1);
     for (const el of els) {
       const p = this.player(el);
@@ -190,7 +194,7 @@ export class VideoFrames {
           v.currentTime = videoTime(el, 0, length);
           v.play().catch(() => null);
         };
-        v.currentTime = videoTime(el, 0, length);
+        v.currentTime = videoTime(el, Math.max(0, (performance.now() - since) / 1000), length);
         v.play().catch(() => null);
       });
     }
