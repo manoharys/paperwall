@@ -193,7 +193,7 @@ export class Editor {
 
   async persistThumb() {
     if (!this.makeThumb) return;
-    if (this.isDragging?.()) return void this.thumb(); // not a half-moved picture: after the drag
+    if (this.isDragging?.() && !this.closed) return void this.thumb(); // not a half-moved picture: after the drag
     try {
       const at = this.doc.updatedAt;
       const url = await this.makeThumb(this.doc);
@@ -338,6 +338,7 @@ export class Editor {
 
   setPage(i) {
     if (i < 0 || i >= this.doc.pages.length || i === this.page) return;
+    if (this.isDragging?.()) this.endDrag?.(); // a drag belongs to the page it began on
     this.page = i;
     this.selection = [];
     this.editingTextId = null;
@@ -410,7 +411,7 @@ export class Editor {
    */
   async addImage(upload, { at } = {}) {
     const frame = this.single;
-    if (!at && frame?.type === 'image' && !frame.assetId && !frame.locked) return this.fillFrame(frame.id, upload);
+    if (!at && frame?.type === 'image' && !this.doc.assets[frame.assetId] && !frame.locked) return this.fillFrame(frame.id, upload);
     const assetId = addAsset(this.doc, upload);
     const maxW = this.doc.width * 0.6;
     const maxH = this.doc.height * 0.6;

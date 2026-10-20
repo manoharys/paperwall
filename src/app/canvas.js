@@ -98,6 +98,12 @@ export class Canvas {
       if (d.mode === 'crop') d.crop = { ...d.el.crop };
       if (d.mode === 'guide' && !d.isNew) d.orig = editor.pageData.guides?.[d.index]?.pos;
     };
+    // Something needs the drag over now (leaving the design, another page):
+    // it ends as if let go.
+    editor.endDrag = () => {
+      if (this.drag) this.onUp();
+      settle();
+    };
     // The design was replaced under a drag that hadn't moved: drop it quietly.
     editor.abandonDrag = () => {
       this.drag = null;

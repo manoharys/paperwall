@@ -19,10 +19,11 @@ function matcher(query, { matchCase = false, wholeWord = false } = {}) {
   if (!query) return null;
   const body = escapeRe(query);
   if (wholeWord && !LOOKBEHIND) {
-    // \b only works next to a letter or digit; a query starting or ending with a symbol gets none there.
-    const left = /^\w/.test(query) ? '\\b' : '';
-    const right = /\w$/.test(query) ? '\\b' : '';
-    return new RegExp(`${left}${body}${right}`, `g${matchCase ? '' : 'i'}u`);
+    // No look-behind: the character before is matched too (group 1) and put
+    // back on replacing. Any letter counts, not just Latin ones as with \b.
+    const re = new RegExp(`(^|[^\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, `g${matchCase ? '' : 'i'}u`);
+    re.keepsBefore = true;
+    return re;
   }
   return new RegExp(wholeWord ? `(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])` : body, `g${matchCase ? '' : 'i'}u`);
 }
@@ -101,7 +102,10 @@ export function replaceText(doc, query, replacement, opts = {}) {
     }
     // A function replacement keeps "$" in the new text literal.
     let seen = 0;
-    slot.set(before.replace(re, (m) => (skip < 0 || seen++ === skip ? replacement : m)));
+    slot.set(before.replace(re, (m, ...groups) => {
+      const kept = re.keepsBefore ? groups[0] : '';
+      return skip < 0 || seen++ === skip ? kept + replacement : m;
+    }));
     count += skip < 0 ? n : 1;
     changed.set(`${slot.page}:${slot.el.id}`, { page: slot.page, id: slot.el.id, el: slot.el, owner: slot.owner, groups: slot.groups });
     if (skip >= 0) break; // the one match is done

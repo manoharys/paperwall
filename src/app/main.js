@@ -68,6 +68,8 @@ async function closeEditor() {
   if (!current) return;
   const { editor, unbind } = current;
   current = null;
+  // A drag still going (leaving by a key or the back button) ends as if let go.
+  editor.endDrag?.();
   editor.closed = true;
   unbind();
   window.paperwall = null;

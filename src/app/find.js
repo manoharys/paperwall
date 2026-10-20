@@ -4,7 +4,6 @@
 import { h, dialog, toast } from './ui.js';
 import { toggle } from './widgets.js';
 import { findText, replaceText, countMatches } from '../model/find.js';
-import { refitGroup } from '../model/geometry.js';
 
 export function findDialog(editor) {
   const opts = { matchCase: false, wholeWord: false };
@@ -38,12 +37,10 @@ export function findDialog(editor) {
     say();
   };
   // Replacing changes text, so boxes are measured again for their new size.
+  // (refitAllText refits the groups around them too.)
   const refit = (changed) => {
-    for (const c of changed) if (c.el.type === 'text') editor.fitText(c.el);
-    // Then every group around changed text, innermost first, so boxes nest again.
-    const depth = new Map();
-    for (const c of changed) c.groups.forEach((g, d) => depth.set(g, Math.max(d, depth.get(g) ?? 0)));
-    for (const g of [...depth.keys()].sort((a, b) => depth.get(b) - depth.get(a))) refitGroup(g);
+    const els = new Set(changed.map((c) => c.el));
+    editor.refitAllText((el) => els.has(el));
   };
   const replaceOne = () => {
     if (!matches.length) return;

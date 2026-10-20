@@ -599,3 +599,32 @@ test('[EDIT-01] a change that fails halfway is put back, with no undo step', asy
   assert.deepEqual(r, { x: s.x, same: true });
   await context.close();
 });
+
+test('[EDIT-01] leaving the design mid-drag finishes the drag and saves it', async () => {
+  const { page, context } = await newDesign('square');
+  const s = await addShape(page, 'Square');
+  const id = await state(page, (ed) => ed.doc.id);
+  const c = await elementCenter(page, s.id);
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 120, c.y + 80, { steps: 6 });
+  await page.evaluate(() => (location.hash = '#/')); // the back button, say
+  await page.waitForFunction(() => !window.paperwall);
+  await page.mouse.up();
+  const saved = await page.evaluate(async (designId) => {
+    const req = indexedDB.open('paperwall');
+    const db = await new Promise((r) => (req.onsuccess = () => r(req.result)));
+    const row = await new Promise((r) => {
+      const g = db.transaction('designs').objectStore('designs').get(designId);
+      g.onsuccess = () => r(g.result);
+    });
+    const versions = await new Promise((r) => {
+      const g = db.transaction('versions').objectStore('versions').getAllKeys(IDBKeyRange.bound(`${designId}|v|`, `${designId}|v|\uffff`));
+      g.onsuccess = () => r(g.result.length);
+    });
+    return { x: row.doc.pages[0].elements[0].x, versions };
+  }, id);
+  assert.ok(saved.x > s.x + 50, `the move was kept (${s.x} → ${saved.x})`);
+  assert.equal(saved.versions, 2, 'the Original, and the work kept on leaving');
+  await context.close();
+});
