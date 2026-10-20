@@ -7,8 +7,6 @@ import { boundsOf, boxCenter, rotatePoint, nearPolyline, round2, boxAround, refi
 
 const f = round2;
 
-export const ROUTES = ['straight', 'elbow', 'curved'];
-
 /** A connector between two points; `start`/`end` may name an element id to attach to. */
 export function createConnector({ from, to, start = null, end = null, route = 'straight', ...props }) {
   const el = {

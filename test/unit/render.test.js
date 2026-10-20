@@ -447,3 +447,15 @@ test('[ELM-09] a thicker drawing line grows its box', async () => {
   assert.equal(r.strokeWidth, 40);
   assert.deepEqual([r.x, r.y, r.w, r.h].map((n) => Math.round(n)), [80, 80, 240, 40]);
 });
+
+test('[ELM-09] pasting a thicker line style onto a drawing grows its box too', async () => {
+  const { createDrawing, createDesign } = await import('../../src/model/doc.js');
+  const { copyStyle, pasteStyle } = await import('../../src/model/commands.js');
+  const doc = createDesign({ width: 1000, height: 1000 });
+  const thin = createDrawing([[100, 100], [300, 100]], { strokeWidth: 6 });
+  const thick = createDrawing([[500, 500], [600, 500]], { strokeWidth: 40 });
+  doc.pages[0].elements = [thin, thick];
+  pasteStyle(doc, 0, [thin.id], copyStyle(thick));
+  assert.equal(thin.strokeWidth, 40);
+  assert.deepEqual([thin.x, thin.y, thin.w, thin.h].map((n) => Math.round(n)), [80, 80, 240, 40]);
+});

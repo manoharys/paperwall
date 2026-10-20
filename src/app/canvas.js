@@ -362,7 +362,7 @@ export class Canvas {
     }
     if (d.mode === 'guide') {
       d.moved = true;
-      ed.moveGuide(d.index, d.axis === 'x' ? p.x : p.y, true);
+      ed.moveGuide(d.index, d.axis === 'x' ? p.x : p.y);
       return;
     }
     if (d.mode === 'end') {

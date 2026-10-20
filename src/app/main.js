@@ -12,7 +12,7 @@ import { exportDialog, saveProjectFile, thumbnail, api as exportApi } from './ex
 import { renderHome } from './home.js';
 import { loadFonts, registerDesignFonts, ensureDesignFonts, clearMeasureCache } from './fonts.js';
 import * as store from './store.js';
-import { validateDesign } from '../model/doc.js';
+import { validateDesign, clone } from '../model/doc.js';
 import { fontsUsed } from '../model/fonts.js';
 import { menuButton, toggle, segmented } from './widgets.js';
 import { findDialog } from './find.js';
@@ -120,7 +120,9 @@ async function openEditor(id) {
   });
   // The first time a design is opened, keep its original as a version; after
   // that, the next version comes after a few minutes of work.
-  hasVersions(doc.id).then((has) => (has ? (editor.versionAt = Date.now()) : editor.saveVersion('Original'))).catch(() => null);
+  // The original is copied now, before any edit can land while storage answers.
+  const original = { ...clone({ ...doc, assets: undefined }), assets: { ...doc.assets } };
+  hasVersions(doc.id).then((has) => (has ? (editor.versionAt = Date.now()) : editor.saveVersion('Original', { snapshot: original }))).catch(() => null);
   if (pendingFit) {
     editor.refitAllText();
     pendingFit = false;
@@ -218,8 +220,14 @@ window.addEventListener('hashchange', route);
 window.addEventListener('paperwall:storage-outdated', () => toast('Paperwall was updated in another tab. Reload this tab to keep saving your work.', 'error'));
 window.addEventListener('paperwall:storage-blocked', () => toast('Paperwall is updating its storage. Close any other Paperwall tabs to finish.', 'error'));
 window.addEventListener('beforeunload', () => current?.editor.flush());
+// Hidden comes before a tab is closed or reloaded (beforeunload may not
+// come at all), so that's when work since the last version is kept too.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') current?.editor.flush();
+  if (document.visibilityState !== 'hidden' || !current) return;
+  const { editor } = current;
+  editor.flush();
+  // Not on every quick switch to another tab: at most once a minute.
+  if (editor.changedSinceVersion && Date.now() - (editor.versionAt || 0) > 60_000) editor.saveVersion('', { quick: true });
 });
 
 async function boot() {

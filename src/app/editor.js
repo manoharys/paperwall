@@ -13,6 +13,7 @@ import { unionBounds, pointInBox } from '../model/geometry.js';
 import { gridBoxes } from '../model/grids.js';
 import { createConnector, updateConnectors } from '../model/connectors.js';
 import { gridLines, marginSize } from '../model/view.js';
+import { maskPath } from '../model/shapes.js';
 
 import { measure, ensureFont } from './fonts.js';
 import { removePlainBackground } from '../model/bgremove.js';
@@ -29,6 +30,26 @@ function loadView() {
   } catch {
     return { ...DEFAULT_VIEW };
   }
+}
+
+let maskCtx = null;
+
+/** Whether page point p falls inside a frame's shape (a circle frame's corners don't count). */
+function inMask(el, p) {
+  if (!el.mask || el.mask === 'none' || el.mask === 'rect') return true;
+  maskCtx ||= document.createElement('canvas').getContext('2d');
+  if (!maskCtx || typeof Path2D === 'undefined') return true;
+  // Into the frame's own box: undo its turn, then its mirroring.
+  const cx = el.x + el.w / 2;
+  const cy = el.y + el.h / 2;
+  const a = (-(el.rotation || 0) * Math.PI) / 180;
+  const dx = p.x - cx;
+  const dy = p.y - cy;
+  let x = cx + dx * Math.cos(a) - dy * Math.sin(a) - el.x;
+  let y = cy + dx * Math.sin(a) + dy * Math.cos(a) - el.y;
+  if (el.flipX) x = el.w - x;
+  if (el.flipY) y = el.h - y;
+  return maskCtx.isPointInPath(new Path2D(maskPath(el)), x, y);
 }
 
 let clipboard = null; // shared between designs, like a real clipboard
@@ -130,16 +151,22 @@ export class Editor {
     return this.save.flush();
   }
 
-  /** Keep a copy of the design as it is now in its version history. */
-  async saveVersion(label = '') {
+  /**
+   * Keep a copy of the design as it is now (or `snapshot`, taken earlier) in
+   * its version history. `quick` skips drawing a new thumbnail (the tab is
+   * closing); the history list draws one from the version instead.
+   */
+  async saveVersion(label = '', { snapshot = null, quick = false } = {}) {
     this.versionAt = Date.now();
     this.changedSinceVersion = false;
-    // The design as it is right now, before anything below waits.
-    const snapshot = clone(this.doc);
+    // The design as it is right now, before anything below waits. Images
+    // never change once added, so they're shared rather than copied.
+    snapshot ||= { ...clone({ ...this.doc, assets: undefined }), assets: { ...this.doc.assets } };
     try {
       // A small picture of the first page, so the history list needn't load
       // whole designs: the home-screen one if it's up to date, else a new one.
-      const thumb = this.lastThumb?.at >= snapshot.updatedAt ? this.lastThumb.url : this.makeThumb ? await this.makeThumb(snapshot).catch(() => null) : null;
+      const fresh = this.lastThumb?.at >= snapshot.updatedAt ? this.lastThumb.url : null;
+      const thumb = fresh || (quick || !this.makeThumb ? null : await this.makeThumb(snapshot).catch(() => null));
       await store.saveVersion(snapshot, { label, thumb });
     } catch {
       /* history is a convenience; saving the design itself matters more */
@@ -300,11 +327,11 @@ export class Editor {
     return upload;
   }
 
-  async replaceImage(upload) {
-    const el = this.single;
-    if (!el || el.type !== 'image') return;
+  /** Replace a picture's image. Pass the id and page captured before any wait (picking a file). */
+  replaceImage(upload, id = this.single?.id, pageId = this.pageData.id) {
+    if (!id) return;
     // An explicit Replace works on locked pictures too, as it always has.
-    this.fillFrame(el.id, upload, this.pageData.id, { evenLocked: true });
+    this.fillFrame(id, upload, pageId, { evenLocked: true });
   }
 
   /** Put a picture in an image or frame, keeping its place and shape: it's cropped to fill. */
@@ -326,7 +353,7 @@ export class Editor {
 
   /** The frame at a point on the page, if any: an empty one, or a photo in a shape. */
   frameAt(p) {
-    return cmd.topmost(this.pageData, (el) => el.type === 'image' && !el.locked && !el.hidden && (!el.assetId || (el.mask && el.mask !== 'none')) && pointInBox(p.x, p.y, el));
+    return cmd.topmost(this.pageData, (el) => el.type === 'image' && !el.locked && !el.hidden && (!el.assetId || (el.mask && el.mask !== 'none')) && pointInBox(p.x, p.y, el) && inMask(el, p));
   }
 
   // ---------- view: rulers, guides, grid, margins, bleed ----------
@@ -362,14 +389,12 @@ export class Editor {
   }
 
   /** Guides are part of the page, so they're saved and can be undone. */
-  moveGuide(i, pos, live = false) {
+  /** Move a guide while it's dragged (the drag records one undo step for the whole move). */
+  moveGuide(i, pos) {
     const g = this.pageData.guides?.[i];
     if (!g) return;
-    if (live) {
-      g.pos = Math.round(pos);
-      return this.emit('aids');
-    }
-    this.change(() => (g.pos = Math.round(pos)));
+    g.pos = Math.round(pos);
+    this.emit('aids');
   }
 
   clearGuides() {

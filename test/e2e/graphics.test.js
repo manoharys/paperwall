@@ -520,6 +520,12 @@ test('[IMG-14] photo frames: drop a photo into a shape', async () => {
   await openTab(page, 'shapes');
   await page.click('[data-testid="frame-Circle frame"]');
   const circle = await last(page);
+  // A drop counts only inside the frame's shape: a circle's corners are outside it.
+  const hits = await page.evaluate((c) => {
+    const ed = window.paperwall.editor;
+    return [ed.frameAt({ x: c.x + c.w / 2, y: c.y + c.h / 2 })?.id, ed.frameAt({ x: c.x + 2, y: c.y + 2 })?.id ?? null];
+  }, circle);
+  assert.deepEqual(hits, [circle.id, null]);
   await dragUploadOnto(page, circle.id);
   await page.waitForFunction((id) => window.paperwall.editor.pageData.elements.find((e) => e.id === id).assetId, circle.id);
   assert.equal((await elements(page)).filter((e) => e.type === 'image').length, 2, 'filled, not added');

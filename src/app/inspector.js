@@ -308,8 +308,11 @@ export class Inspector {
     const fx = el.effect || { type: 'none' };
     // Start from the effect as it is now: the panel isn't redrawn while a slider is in use.
     const set = (patch, live) => this.up({ effect: { ...(this.ed.single?.effect || fx), ...patch } }, live ? 'effect' : null);
-    // Kept only once the font has loaded, so a preview never sticks with stand-in letters.
-    const preview = (type) => cached(`${el.font}|${type}`, fontLoaded(el.font, 800), () => renderElementOnly(this.ed.doc, createText({
+    // Kept only once the font has loaded, so a preview never sticks with stand-in
+    // letters. The previews use the heavy weight, which the text itself may not.
+    const heavy = fontLoaded(el.font, 800);
+    if (!heavy) ensureFont(el.font, 800).catch(() => null);
+    const preview = (type) => cached(`${el.font}|${type}`, heavy, () => renderElementOnly(this.ed.doc, createText({
       text: 'Ag', w: 64, h: 44, size: 32, weight: 800, font: el.font, color: type === 'neon' ? '#ff2d95' : '#1a1a2e', align: 'center', lineHeight: 1.2,
       effect: { type, color: type === 'splice' ? '#ffb703' : type === 'glow' ? '#ffb703' : undefined },
     }), { measure, idPrefix: `fx-${type}` }));
@@ -412,10 +415,13 @@ export class Inspector {
             } else this.canvas.startCrop(el);
           } }, icon('crop'), cropping ? 'Done cropping' : 'Crop'),
           h('button', { type: 'button', class: 'btn small', 'data-testid': 'replace-image', onClick: async () => {
+            // Which picture, decided now: the selection can change while a file is picked.
+            const id = el.id;
+            const pageId = ed.pageData.id;
             const [file] = await pickFile('image/*');
-            if (!file) return;
+            if (!file || ed.closed) return;
             try {
-              await ed.replaceImage(await ed.importImageFile(file));
+              ed.replaceImage(await ed.importImageFile(file), id, pageId);
             } catch (e) {
               toast(e.message, 'error');
             }

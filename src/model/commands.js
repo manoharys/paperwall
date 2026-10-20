@@ -1,7 +1,7 @@
 // Edits to a design. Every function changes the design in place; the editor
 // records a history snapshot before calling one, which is what makes undo work.
 
-import { uid, createPage, clone } from './doc.js';
+import { uid, createPage, clone, restroke } from './doc.js';
 import { boundsOf, unionBounds, rotatePoint, boxCenter } from './geometry.js';
 import { updateConnectors } from './connectors.js';
 
@@ -339,7 +339,14 @@ export function pasteStyle(doc, pageIndex, ids, style) {
     if (el.type === style.type) keys.push(...(STYLE_KEYS[el.type] || []));
     else if (el.type === 'shape' && style.type === 'text') el.fill = style.color;
     else if (el.type === 'text' && style.type === 'shape' && typeof style.fill === 'string') el.color = style.fill;
+    const width = el.strokeWidth;
     for (const k of keys) if (k in style) el[k] = clone(style[k]);
+    // A drawing's box leaves room for half its line: a thicker line needs more.
+    if (el.type === 'draw' && el.strokeWidth !== width) {
+      const pen = el.strokeWidth;
+      el.strokeWidth = width;
+      Object.assign(el, restroke(el, pen));
+    }
   }
   touch(doc);
 }

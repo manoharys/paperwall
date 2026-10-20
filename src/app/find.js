@@ -42,7 +42,13 @@ export function findDialog(editor) {
     if (!hits.length) return;
     if (at < 0) return show(0);
     const hit = hits[at];
-    editor.change(() => refit(replaceText(editor.doc, find.value, repl.value, { ...opts, onlyId: hit.id, onlyPage: hit.page }).changed));
+    // An undo step only if something was replaced (the place may be locked by now).
+    editor.history.record(editor.doc);
+    const r = replaceText(editor.doc, find.value, repl.value, { ...opts, onlyId: hit.id, onlyPage: hit.page });
+    if (r.count) {
+      refit(r.changed);
+      editor.afterChange();
+    } else editor.history.discard();
     refresh();
     if (!hits.length) return;
     // Move on: if the new text still contains the query, the same place
