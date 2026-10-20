@@ -3,7 +3,7 @@
 // follows the target when it moves. Routes: straight, elbow or curved.
 
 import { uid } from './doc.js';
-import { boundsOf } from './geometry.js';
+import { boundsOf, rotatePoint } from './geometry.js';
 import { refitGroup } from './commands.js';
 
 const f = (n) => Math.round(n * 100) / 100;
@@ -59,12 +59,12 @@ function hasConnector(els) {
 function visualEnds(el) {
   const cx = el.x + el.w / 2;
   const cy = el.y + el.h / 2;
-  const r = ((el.rotation || 0) * Math.PI) / 180;
   return endsOf(el).map(([x, y]) => {
-    let dx = (x - cx) * (el.flipX ? -1 : 1);
-    let dy = (y - cy) * (el.flipY ? -1 : 1);
-    [dx, dy] = [dx * Math.cos(r) - dy * Math.sin(r), dx * Math.sin(r) + dy * Math.cos(r)];
-    return [cx + dx, cy + dy];
+    // Mirror first, then turn: the same order the renderer uses.
+    const mx = el.flipX ? 2 * cx - x : x;
+    const my = el.flipY ? 2 * cy - y : y;
+    const p = rotatePoint(mx, my, cx, cy, el.rotation || 0);
+    return [p.x, p.y];
   });
 }
 
@@ -160,6 +160,14 @@ export function connectorGeometry(el, trim = { start: 0, end: 0 }) {
 }
 
 function routeBetween(el, a, b) {
+  const r = route(el, a, b);
+  // A route can fold flat (two boxes side by side): point the arrows along the line between the ends.
+  const along = [b[0] - a[0] || 1, b[1] - a[1]];
+  const some = (d) => (Math.hypot(d[0], d[1]) > 1e-6 ? d : along);
+  return { ...r, startDir: some(r.startDir), endDir: some(r.endDir) };
+}
+
+function route(el, a, b) {
   const path = (pts) => `M${f(pts[0][0])} ${f(pts[0][1])} ` + pts.slice(1).map(([x, y]) => `L${f(x)} ${f(y)}`).join(' ');
   const horizontalStart = el.start?.side ? 'lr'.includes(el.start.side) : Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]);
   if (el.route === 'elbow') {

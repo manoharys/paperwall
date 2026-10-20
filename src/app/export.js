@@ -137,6 +137,7 @@ export async function readProjectFile(file) {
 // ---------- the download dialog ----------
 
 export function exportDialog(editor) {
+  editor.syncAllConnectors(); // every page's arrows touch their boxes before anything is drawn
   const doc = editor.doc;
   // Hidden pages start unticked; tick one to download it anyway. If every
   // page is hidden (or there's just one), start with all of them.

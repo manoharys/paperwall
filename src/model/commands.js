@@ -100,7 +100,8 @@ function freshCopies(els) {
  * keeping them where they are on the page. Unrotated groups only.
  */
 export function refitGroup(group) {
-  if (group.type !== 'group' || group.rotation || !group.children.length) return;
+  // Moving the box of a turned or mirrored group would move what's inside it.
+  if (group.type !== 'group' || group.rotation || group.flipX || group.flipY || !group.children.length) return;
   const b = unionBounds(group.children);
   for (const c of group.children) {
     c.x -= b.x;
@@ -323,11 +324,13 @@ export function flipElements(doc, pageIndex, ids, axis) {
 // ---------- style painter ----------
 
 const STYLE_KEYS = {
-  text: ['font', 'size', 'weight', 'italic', 'underline', 'strike', 'color', 'align', 'lineHeight', 'letterSpacing', 'caps', 'outline', 'highlight'],
+  text: ['font', 'size', 'weight', 'italic', 'underline', 'strike', 'color', 'align', 'lineHeight', 'letterSpacing', 'caps', 'outline', 'highlight', 'effect'],
   shape: ['fill', 'stroke', 'strokeWidth', 'dash', 'radius'],
   line: ['stroke', 'strokeWidth', 'dash', 'startCap', 'endCap'],
   image: ['filters', 'radius', 'mask'],
   icon: ['color'],
+  connector: ['stroke', 'strokeWidth', 'dash', 'startCap', 'endCap', 'route'],
+  draw: ['stroke', 'strokeWidth'],
 };
 const SHARED_STYLE = ['opacity', 'shadow'];
 

@@ -95,6 +95,7 @@ export function pageGrid(editor, canvas) {
 
 /** Show pages full screen, one at a time. Arrow keys move, Escape leaves. Hidden pages are skipped. */
 export function present(editor, canvas) {
+  editor.syncAllConnectors();
   const doc = editor.doc;
   const shown = doc.pages.map((p, k) => (p.hidden ? -1 : k)).filter((k) => k >= 0);
   if (!shown.length) return toast('Every page is hidden. Show a page to present it.');

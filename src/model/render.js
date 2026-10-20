@@ -142,6 +142,8 @@ function renderLine(ctx, el) {
 function renderImage(ctx, el) {
   const href = el.assetId ? ctx.href(el.assetId) : '';
   const outline = maskPath(el);
+  // A picture whose image is missing (damaged file) keeps a grey box everywhere.
+  if (el.assetId && !href) return `<path d="${outline}" fill="#e5e5ef"/>`;
   if (!href) {
     // An empty frame shows a soft placeholder while editing; downloads leave it out.
     if (!ctx.editor) return '';

@@ -490,6 +490,7 @@ export class Editor {
     this.change(() => {
       cmd.updateElements(this.doc, page, ids, props);
       for (const el of cmd.selectElements(this.doc.pages[page], ids)) if (el.type === 'text') this.fitText(el);
+      if (page !== this.page) updateConnectors(this.doc.pages[page]);
     }, { key: key ? `${key}:${ids.join(',')}` : null });
   }
 

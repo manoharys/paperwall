@@ -139,6 +139,8 @@ export class Canvas {
     const ed = this.ed;
     const z = ed.zoom;
     const parts = [];
+    // Grid, margins and guides go underneath, so selection handles stay on top.
+    this.drawViewAids(parts);
     const poly = (b, cls) => {
       const pts = boxCorners(b).map((p) => `${p.x * z},${p.y * z}`).join(' ');
       parts.push(`<polygon class="${cls}" points="${pts}"/>`);
@@ -183,7 +185,6 @@ export class Canvas {
         parts.push(`<rect class="handle" data-handle="${hd}" x="${p.x * z - 6}" y="${p.y * z - 6}" width="12" height="12" rx="3"/>`);
       }
     }
-    this.drawViewAids(parts);
     for (const g of ed.guides) {
       if (g.axis === 'x') parts.push(`<line class="guide" x1="${g.pos * z}" y1="-10000" x2="${g.pos * z}" y2="10000"/>`);
       else parts.push(`<line class="guide" x1="-10000" y1="${g.pos * z}" x2="10000" y2="${g.pos * z}"/>`);
@@ -254,15 +255,6 @@ export class Canvas {
       this.el.setPointerCapture(e.pointerId);
       return;
     }
-    const guide = e.target.closest?.('[data-guide]');
-    if (guide && !ed.drawTool) {
-      e.preventDefault();
-      const index = +guide.getAttribute('data-guide');
-      ed.history.record(ed.doc);
-      this.drag = { mode: 'guide', index, axis: ed.pageData.guides[index].axis, moved: false, orig: ed.pageData.guides[index].pos };
-      this.el.setPointerCapture(e.pointerId);
-      return;
-    }
     if (ed.drawTool) {
       // Drawing: every press on the page starts a new stroke.
       e.preventDefault();
@@ -276,6 +268,15 @@ export class Canvas {
     if (handle) {
       e.preventDefault();
       this.startTransform(handle, p, e);
+      return;
+    }
+    const guide = e.target.closest?.('[data-guide]');
+    if (guide && !ed.drawTool) {
+      e.preventDefault();
+      const index = +guide.getAttribute('data-guide');
+      ed.history.record(ed.doc);
+      this.drag = { mode: 'guide', index, axis: ed.pageData.guides[index].axis, moved: false, orig: ed.pageData.guides[index].pos };
+      this.el.setPointerCapture(e.pointerId);
       return;
     }
     if (ed.cropId) {
@@ -381,7 +382,8 @@ export class Canvas {
       const moving = unionBounds(d.items.map(({ el, x, y }) => ({ ...el, x: x + dx, y: y + dy })));
       ed.guides = [];
       if (!e.altKey) {
-        const others = ed.pageData.elements.filter((el) => !el.hidden && !ed.selection.includes(el.id));
+        // Connectors follow what's being moved, so they aren't something to snap to.
+        const others = ed.pageData.elements.filter((el) => !el.hidden && el.type !== 'connector' && !ed.selection.includes(el.id));
         const snap = snapMove(moving, others, { w: ed.doc.width, h: ed.doc.height }, 6 / ed.zoom, ed.snapLines());
         dx += snap.dx;
         dy += snap.dy;
@@ -517,7 +519,7 @@ export class Canvas {
     const hit = this.hitTest(p);
     if (!hit || hit.locked) return;
     if (hit.type === 'text') this.startTextEdit(hit);
-    else if (hit.type === 'image' && !hit.assetId) this.pickPhotoFor(hit);
+    else if (hit.type === 'image' && !this.ed.doc.assets[hit.assetId]) this.pickPhotoFor(hit);
     else if (hit.type === 'image') this.startCrop(hit);
   }
 

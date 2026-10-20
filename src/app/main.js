@@ -163,6 +163,8 @@ async function openEditor(id) {
   const setSheet = (name) => {
     if (workspace.dataset.sheet === name) return;
     workspace.dataset.sheet = name;
+    // Hiding the Draw panel ends drawing, as on bigger screens.
+    if (name !== 'insert' && editor.drawTool) editor.emit('stop-drawing');
     // The canvas just changed size on phones; fit the page into it again.
     if (window.matchMedia('(max-width: 900px)').matches) requestAnimationFrame(() => canvas.zoomToFit());
   };

@@ -72,6 +72,19 @@ export async function put(store, key, value) {
   await tx(db, store, 'readwrite', (s) => s.put(value, key));
 }
 
+/** Several puts (value set) and deletes (value undefined) in one transaction. */
+async function batch(store, ops) {
+  if (!ops.length) return;
+  const db = await open();
+  if (!db) {
+    for (const [k, v] of ops) v === undefined ? memory[store].delete(k) : memory[store].set(k, v);
+    return;
+  }
+  await tx(db, store, 'readwrite', (s) => {
+    for (const [k, v] of ops) v === undefined ? s.delete(k) : s.put(v, k);
+  });
+}
+
 export async function get(store, key) {
   const db = await open();
   if (!db) return memory[store].get(key);
@@ -155,21 +168,21 @@ async function writeVersion(doc, { label = '' } = {}) {
   const { assets, ...meta } = doc;
   const rest = JSON.parse(JSON.stringify(meta)); // the images are stored separately, once
   const have = new Set(await keysIn(`${doc.id}|a|`));
-  for (const [id, a] of Object.entries(assets || {})) {
-    if (!have.has(aKey(doc.id, id))) await put('versions', aKey(doc.id, id), a);
-  }
-  await put('versions', dKey(doc.id, at), rest);
-  await put('versions', vKey(doc.id, at), { key: vKey(doc.id, at), designId: doc.id, at, label, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, assetIds: Object.keys(assets || {}) });
+  const meta2 = { key: vKey(doc.id, at), designId: doc.id, at, label, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, assetIds: Object.keys(assets || {}) };
+  // New images, the design and its details, all in one transaction.
+  await batch('versions', [
+    ...Object.entries(assets || {}).filter(([id]) => !have.has(aKey(doc.id, id))).map(([id, a]) => [aKey(doc.id, id), a]),
+    [dKey(doc.id, at), rest],
+    [vKey(doc.id, at), meta2],
+  ]);
   const keys = await keysIn(`${doc.id}|v|`);
   const drop = keys.slice(0, Math.max(0, keys.length - MAX_VERSIONS));
   if (drop.length) {
-    for (const old of drop) {
-      await del('versions', old);
-      await del('versions', old.replace('|v|', '|d|'));
-    }
-    // Images no longer used by any kept version go too.
-    const used = new Set((await valuesIn(`${doc.id}|v|`)).flatMap((v) => v.assetIds || []));
-    for (const k of await keysIn(`${doc.id}|a|`)) if (!used.has(k.slice(`${doc.id}|a|`.length))) await del('versions', k);
+    // Old versions, and images no kept version uses, go in one transaction too.
+    const kept = new Set(keys.slice(drop.length));
+    const used = new Set((await valuesIn(`${doc.id}|v|`)).filter((v) => kept.has(v.key)).flatMap((v) => v.assetIds || []));
+    const orphans = (await keysIn(`${doc.id}|a|`)).filter((k) => !used.has(k.slice(`${doc.id}|a|`.length)));
+    await batch('versions', [...drop.flatMap((k) => [[k, undefined], [k.replace('|v|', '|d|'), undefined]]), ...orphans.map((k) => [k, undefined])]);
   }
   return vKey(doc.id, at);
 }
@@ -197,7 +210,7 @@ export async function versionDoc(version) {
 }
 
 async function deleteVersions(designId) {
-  for (const k of await keysIn(`${designId}|`)) await del('versions', k);
+  await batch('versions', (await keysIn(`${designId}|`)).map((k) => [k, undefined]));
 }
 
 // ---------- uploads (reusable across designs) ----------

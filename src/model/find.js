@@ -11,23 +11,27 @@ function matcher(query, { matchCase = false, wholeWord = false } = {}) {
   return new RegExp(wholeWord ? `(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])` : body, `g${matchCase ? '' : 'i'}u`);
 }
 
-/** Every place with text, as { page, el, get(), set(v) }, in reading order. */
+/**
+ * Every place with text, as { page, el, owner, groups, get(), set(v) }, in
+ * reading order. `groups` are the groups around el, outermost first.
+ */
 function* textSlots(doc) {
   for (let page = 0; page < doc.pages.length; page++) {
-    const visit = function* (els, top) {
+    const visit = function* (els, groups) {
       for (const el of els) {
-        const owner = top || el;
+        const owner = groups[0] || el;
         // Locked and hidden things are left alone.
-        if (el.hidden || el.locked || owner.hidden || owner.locked) continue;
-        if (el.type === 'text') yield { page, el, owner, get: () => el.text, set: (v) => (el.text = v) };
+        if (el.hidden || el.locked || groups.some((g) => g.hidden || g.locked)) continue;
+        const slot = { page, el, owner, groups };
+        if (el.type === 'text') yield { ...slot, get: () => el.text, set: (v) => (el.text = v) };
         if (el.type === 'table') {
-          for (const row of el.rows) for (let c = 0; c < row.length; c++) yield { page, el, owner, get: () => row[c], set: (v) => (row[c] = v) };
+          for (const row of el.rows) for (let c = 0; c < row.length; c++) yield { ...slot, get: () => row[c], set: (v) => (row[c] = v) };
         }
-        if (el.type === 'chart') for (const d of el.data) yield { page, el, owner, get: () => d.label, set: (v) => (d.label = v) };
-        if (el.type === 'group') yield* visit(el.children, owner);
+        if (el.type === 'chart') for (const d of el.data) yield { ...slot, get: () => d.label, set: (v) => (d.label = v) };
+        if (el.type === 'group') yield* visit(el.children, [...groups, el]);
       }
     };
-    yield* visit(doc.pages[page].elements, null);
+    yield* visit(doc.pages[page].elements, []);
   }
 }
 
@@ -67,7 +71,7 @@ export function replaceText(doc, query, replacement, opts = {}) {
     // A function replacement keeps "$" in the new text literal.
     slot.set(before.replace(re, () => replacement));
     count += n;
-    changed.set(`${slot.page}:${slot.el.id}`, { page: slot.page, id: slot.el.id, el: slot.el, owner: slot.owner });
+    changed.set(`${slot.page}:${slot.el.id}`, { page: slot.page, id: slot.el.id, el: slot.el, owner: slot.owner, groups: slot.groups });
   }
   return { count, changed: [...changed.values()] };
 }

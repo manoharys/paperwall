@@ -33,7 +33,10 @@ export function findDialog(editor) {
   // Replacing changes text, so boxes are measured again for their new size.
   const refit = (changed) => {
     for (const c of changed) if (c.el.type === 'text') editor.fitText(c.el);
-    for (const g of new Set(changed.map((c) => c.owner).filter((o) => o.type === 'group'))) refitGroup(g);
+    // Then every group around changed text, innermost first, so boxes nest again.
+    const depth = new Map();
+    for (const c of changed) c.groups.forEach((g, d) => depth.set(g, Math.max(d, depth.get(g) ?? 0)));
+    for (const g of [...depth.keys()].sort((a, b) => depth.get(b) - depth.get(a))) refitGroup(g);
   };
   const replaceOne = () => {
     if (!hits.length) return;
