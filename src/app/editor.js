@@ -11,9 +11,9 @@ import { fitHeight } from '../model/text-layout.js';
 import { curveGeometry } from '../model/render.js';
 import { unionBounds, pointInBox, toLocal, refitGroup } from '../model/geometry.js';
 import { gridBoxes } from '../model/grids.js';
-import { createConnector, updateConnectors, connectorHit } from '../model/connectors.js';
+import { createConnector, updateConnectors, isLine, lineHit } from '../model/connectors.js';
 import { gridLines, marginSize } from '../model/view.js';
-import { maskPath, drawHit } from '../model/shapes.js';
+import { maskPath } from '../model/shapes.js';
 
 import { measure, ensureFont } from './fonts.js';
 import { removePlainBackground } from '../model/bgremove.js';
@@ -184,8 +184,8 @@ export class Editor {
       // Every few minutes of work, keep a version to go back to.
       // Not awaited: saving the design itself shouldn't wait on history.
       // (versionAt is set once we know whether the design has versions yet.)
-      // Not mid-drag: the design is half-moved then (the next save tries again).
-      if (this.changedSinceVersion && this.versionAt && !this.isDragging?.() && Date.now() - this.versionAt > VERSION_EVERY) this.saveVersion();
+      // (Not mid-drag: the design is half-moved then; the next save tries again.)
+      this.maybeSaveVersion(VERSION_EVERY);
     } catch (e) {
       toast(`Couldn't save on this device: ${e.message}`, 'error');
     }
@@ -209,6 +209,16 @@ export class Editor {
   /** Save now. Resolves when the design is on disk. */
   flush() {
     return this.save.flush();
+  }
+
+  /**
+   * Keep a version if there's work since the last one, at least `gap` ms
+   * after it, the first check for versions is done and no drag is going.
+   * The one rule for timed, tab-hidden and closing versions.
+   */
+  maybeSaveVersion(gap, opts) {
+    if (!this.changedSinceVersion || !this.versionAt || this.isDragging?.() || Date.now() - this.versionAt <= gap) return null;
+    return this.saveVersion('', opts);
   }
 
   /**
@@ -457,12 +467,8 @@ export class Editor {
         // The point in this element's own (group) coordinates, so the element
         // itself is tested (and its cached outline reused).
         const q = { x: p.x - ox, y: p.y - oy };
-        if (!pointInBox(q.x, q.y, el)) continue;
-        // Lines you draw or connect only cover what's near the line (as for clicks).
-        if (el.type === 'connector' || el.type === 'draw') {
-          const tol = (el.strokeWidth || 0) / 2 + 8 / this.zoom;
-          if (!(el.type === 'connector' ? connectorHit(el, q, tol) : drawHit(el, q, tol))) continue;
-        }
+        // Lines you draw or connect only cover what's near the line, as for clicks.
+        if (isLine(el) ? !lineHit(el, q, this.zoom) : !pointInBox(q.x, q.y, el)) continue;
         if (el.type === 'group') {
           if (el.locked || el.rotation || el.flipX || el.flipY) return BLOCKED;
           const hit = find(el.children, ox + el.x, oy + el.y);

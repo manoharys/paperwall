@@ -3,6 +3,7 @@
 // follows the target when it moves. Routes: straight, elbow or curved.
 
 import { uid } from './doc.js';
+import { drawHit } from './shapes.js';
 import { boxCenter, rotatePoint, nearPolyline, round2, boxAround, refitGroup } from './geometry.js';
 
 const f = round2;
@@ -298,6 +299,17 @@ export function connectorPolyline(el) {
   const pts = connectorGeometry(el).pts.map(([x, y]) => [el.x + x, el.y + y]);
   polylines.set(el, { key, pts });
   return pts;
+}
+
+/** Connectors and drawings are picked (and block drops) near their line only, not anywhere in their box. */
+export function isLine(el) {
+  return el.type === 'connector' || el.type === 'draw';
+}
+
+/** Whether point p is on a connector's or drawing's line, at a zoom (the reach stays the same on screen). */
+export function lineHit(el, p, zoom) {
+  const tol = (el.strokeWidth || 0) / 2 + 8 / zoom;
+  return el.type === 'connector' ? connectorHit(el, p, tol) : drawHit(el, p, tol);
 }
 
 /** Whether point p is within `tol` px of the connector's line. */

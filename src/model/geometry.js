@@ -57,7 +57,6 @@ export function unionBounds(boxes) {
   return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
 }
 
-/** Is the point inside the rotated box (with an optional margin in px)? */
 /**
  * A page point as it falls on an element drawn plain: its turn undone, then
  * its mirroring (the renderer mirrors first, then turns).
@@ -69,6 +68,7 @@ export function toLocal(el, p) {
   return { x: el.flipX ? 2 * cx - r.x : r.x, y: el.flipY ? 2 * cy - r.y : r.y };
 }
 
+/** Is the point inside the rotated box (with an optional margin in px)? */
 export function pointInBox(px, py, b, margin = 0) {
   const c = boxCenter(b);
   const p = rotatePoint(px, py, c.x, c.y, -(b.rotation || 0));

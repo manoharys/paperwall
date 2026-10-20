@@ -75,7 +75,9 @@ async function closeEditor() {
   // version of it (reusing that thumbnail).
   await editor.flush();
   await editor.thumb.flush();
-  if (editor.changedSinceVersion) await editor.saveVersion();
+  // After the first check for versions (it may still be saving the Original).
+  await editor.versionsChecked;
+  await editor.maybeSaveVersion(-1);
 }
 
 async function showHome() {
@@ -125,7 +127,8 @@ async function openEditor(id) {
   // that, the next version comes after a few minutes of work. The original is
   // copied now (text measured), before any edit can land while storage answers.
   const original = versionSnapshot(doc);
-  store.hasVersions(doc.id).then((has) => (has ? (editor.versionAt = Date.now()) : (editor.closed ? null : editor.saveVersion('Original', { snapshot: original })))).catch(() => {
+  // (Closing waits for this, so the Original always comes first.)
+  editor.versionsChecked = store.hasVersions(doc.id).then((has) => (has ? (editor.versionAt = Date.now()) : editor.saveVersion('Original', { snapshot: original }))).catch(() => {
     editor.versionAt = Date.now(); // can't tell: carry on keeping versions every few minutes
   });
   const meta = (await store.listDesigns()).find((d) => d.id === doc.id);
@@ -231,11 +234,9 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'hidden' || !current) return;
   const { editor } = current;
   editor.flush();
-  // Not on every quick switch to another tab: at most once a minute.
-  // Not mid-drag either: the design is half-moved then.
-  // And not before the first check for versions is done (versionAt set), or
-  // this would be saved before the Original.
-  if (editor.changedSinceVersion && editor.versionAt && !editor.isDragging?.() && Date.now() - editor.versionAt > 60_000) editor.saveVersion('', { quick: true });
+  // Not on every quick switch to another tab (at most once a minute), not
+  // mid-drag, and not before the first check for versions is done.
+  editor.maybeSaveVersion(60_000, { quick: true });
 });
 
 async function boot() {

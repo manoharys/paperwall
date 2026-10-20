@@ -6,11 +6,10 @@ import {
   boundsOf, unionBounds, boxCorners, handlePosition, resizeBox, angleTo, snapAngle, snapMove,
   pointInBox, rectFromPoints, rectsIntersect, HANDLES,
 } from '../model/geometry.js';
-import { resizeElement, coverCrop, topmost } from '../model/commands.js';
+import { resizeElement, coverCrop, topmost, findElement } from '../model/commands.js';
 import { clone, DRAW_TOOLS, pxPerUnit } from '../model/doc.js';
 import { gridLines, marginSize, bleedSize } from '../model/view.js';
-import { endsOf, setEnds, connectorHit } from '../model/connectors.js';
-import { drawHit } from '../model/shapes.js';
+import { endsOf, setEnds, isLine, lineHit } from '../model/connectors.js';
 import { measure } from './fonts.js';
 import { h, dataUrlToBlob, toast, pickFile } from './ui.js';
 import * as store from './store.js';
@@ -308,10 +307,7 @@ export class Canvas {
     return topmost(this.ed.pageData, (el) => {
       if (el.hidden) return false;
       // Lines you draw or connect are picked near the line, not anywhere in their box.
-      if (el.type === 'connector' || el.type === 'draw') {
-        const tol = (el.strokeWidth || 0) / 2 + Math.max(margin, 8 / this.ed.zoom);
-        return el.type === 'connector' ? connectorHit(el, p, tol) : drawHit(el, p, tol);
-      }
+      if (isLine(el)) return lineHit(el, p, this.ed.zoom);
       return pointInBox(p.x, p.y, el, el.type === 'line' ? Math.max(margin, 10 / this.ed.zoom) : margin);
     });
   }
@@ -404,8 +400,7 @@ export class Canvas {
         return;
       }
       if (!ed.selection.includes(hit.id)) ed.select([hit.id]);
-      // A connector held at both ends goes wherever its elements go: dragging it alone does nothing.
-      const movable = ed.selected.filter((el) => !el.locked && !(el.type === 'connector' && el.start?.id && el.end?.id));
+      const movable = ed.movable.map((id) => findElement(ed.pageData, id)).filter((el) => !el.locked);
       if (!movable.length) return;
       ed.history.record(ed.doc);
       // A connector's box changes as its attached ends follow: keep its shape

@@ -303,6 +303,11 @@ export class Inspector {
     ];
   }
 
+  /** The duotone as it is now (the panel isn't redrawn while a picker is open). */
+  duotoneNow(f) {
+    return this.ed.single?.filters?.duotone || f.duotone;
+  }
+
   /** Effect styles shown as little "Ag" previews, plus the effect's own settings. */
   textEffects(el) {
     const fx = el.effect || { type: 'none' };
@@ -455,8 +460,8 @@ export class Inspector {
           h('button', { type: 'button', class: `duo${f.duotone ? '' : ' on'}`, 'data-testid': 'duotone-none', onClick: () => this.up({ filters: { duotone: null } }) }, 'None'),
           DUOTONES.map(([name, dark, light]) => h('button', { type: 'button', class: `duo${f.duotone?.dark === dark && f.duotone?.light === light ? ' on' : ''}`, title: name, 'aria-label': `Duotone ${name}`, 'data-testid': `duotone-${name}`, style: { background: `linear-gradient(135deg, ${dark} 50%, ${light} 50%)` }, onClick: () => this.up({ filters: { duotone: { dark, light } } }) }))),
         f.duotone ? h('div', { class: 'field inline' },
-          h('span', null, 'Shadows'), colorButton({ label: 'Duotone shadows', value: f.duotone.dark, getContext: this.colorContext, onChange: (c, l) => this.up({ filters: { duotone: { ...f.duotone, dark: c } } }, l ? 'duo' : null) }),
-          h('span', null, 'Highlights'), colorButton({ label: 'Duotone highlights', value: f.duotone.light, getContext: this.colorContext, onChange: (c, l) => this.up({ filters: { duotone: { ...f.duotone, light: c } } }, l ? 'duo' : null) })) : null),
+          h('span', null, 'Shadows'), colorButton({ label: 'Duotone shadows', value: f.duotone.dark, getContext: this.colorContext, onChange: (c, l) => this.up({ filters: { duotone: { ...this.duotoneNow(f), dark: c } } }, l ? 'duo' : null) }),
+          h('span', null, 'Highlights'), colorButton({ label: 'Duotone highlights', value: f.duotone.light, getContext: this.colorContext, onChange: (c, l) => this.up({ filters: { duotone: { ...this.duotoneNow(f), light: c } } }, l ? 'duo' : null) })) : null),
       shape,
     ];
   }
