@@ -884,6 +884,18 @@ export class Editor {
   }
 
   /** Hidden pages stay in the design but are skipped when presenting and downloading. */
+  /** Change a page's motion (anim, duration, transition); undefined clears one. */
+  setPageMotion(i, patch, key = null) {
+    const page = this.doc.pages[i];
+    if (!page) return;
+    this.change(() => {
+      for (const [k, v] of Object.entries(patch)) {
+        if (v === undefined) delete page[k];
+        else page[k] = v;
+      }
+    }, { key });
+  }
+
   setPageHidden(i, hidden) {
     this.change(() => (this.doc.pages[i].hidden = hidden || undefined));
     this.emit('page');

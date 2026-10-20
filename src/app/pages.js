@@ -1,7 +1,8 @@
 // The strip of pages along the bottom, and presenting pages full screen.
 
 import { h, icon, iconButton, clear, debounce, dialog, toast, lazily, forget, pressable } from './ui.js';
-import { renderPage } from '../model/render.js';
+import { renderPage, renderFrame } from '../model/render.js';
+import { ANIMATIONS, animationOf, animationsEnd, pageDuration, transitionOf } from '../model/motion.js';
 import { measure } from './fonts.js';
 import { visiblePages, pageName, pageLabel } from '../model/doc.js';
 
@@ -113,8 +114,12 @@ export function pageGrid(editor, canvas) {
   return d;
 }
 
-/** Show pages full screen, one at a time. Arrow keys move, Escape leaves. Hidden pages are skipped. */
-export function present(editor, canvas) {
+/**
+ * Show pages full screen, one at a time, playing their animations and the
+ * transitions between them. Arrow keys move, Escape leaves. Hidden pages are
+ * skipped. `autoplay` moves on by itself after each page's time (Play).
+ */
+export function present(editor, canvas, { autoplay = false } = {}) {
   const doc = editor.doc;
   const shown = visiblePages(doc);
   if (!shown.length) return toast('Every page is hidden. Show a page to present it.');
@@ -122,29 +127,57 @@ export function present(editor, canvas) {
   // visible one if none come after).
   const next = shown.findIndex((k) => k >= editor.page);
   let at = next >= 0 ? next : shown.length - 1;
-  const slide = h('div', { class: 'slide' });
+  const slide = h('div', { class: 'slide', 'data-testid': 'slide' });
   const counter = h('div', { class: 'slide-count' });
   const root = h('div', { class: 'presenter', 'data-testid': 'presenter', tabindex: '-1' }, slide, counter,
     h('button', { type: 'button', class: 'presenter-close', 'aria-label': 'Stop presenting', onClick: () => close() }, icon('close')));
-  const show = () => {
+  const opts = { measure, noSize: true, assetHref: canvas.assetHref };
+  let frame = 0;
+  let started = 0;
+  let from = null; // the page before, when moving forward (its transition plays)
+  const draw = (now) => {
+    frame = 0;
     const i = shown[at];
-    slide.innerHTML = renderPage(doc, i, { measure, noSize: true, idPrefix: `pr${i}`, assetHref: canvas.assetHref });
+    const page = doc.pages[i];
+    const local = (now - started) / 1000;
+    const tr = transitionOf(page);
+    if (from !== null && tr.type !== 'none' && local < tr.duration) {
+      const progress = Math.max(0, Math.min(1, local / tr.duration));
+      slide.innerHTML = renderFrame(doc, { index: i, local, from: { index: from, local: pageDuration(doc.pages[from]) }, transition: { type: tr.type, progress: 1 - (1 - progress) ** 3 } }, { ...opts, idPrefix: `pr${i}` });
+    } else slide.innerHTML = renderPage(doc, i, { ...opts, idPrefix: `pr${i}`, time: local });
+    root.dataset.time = local.toFixed(2);
+    if (autoplay && local >= pageDuration(page)) {
+      if (at < shown.length - 1) return go(at + 1, true);
+      return; // the end: the last page stays
+    }
+    // Keep drawing while anything moves (or until the page's time is up, when playing).
+    const moving = local < Math.max(animationsEnd(page), from !== null ? tr.duration : 0) || page.elements.some((el) => ANIMATIONS[animationOf(page, el)?.type]?.loop);
+    if (moving || autoplay) frame = requestAnimationFrame(draw);
+  };
+  const go = (to, forward) => {
+    cancelAnimationFrame(frame);
+    from = forward && to !== at ? shown[at] : null;
+    at = to;
+    started = performance.now();
     slide.style.aspectRatio = `${doc.width} / ${doc.height}`;
     counter.textContent = `${at + 1} / ${shown.length}`;
+    draw(started);
   };
   const last = shown.length - 1;
   const onKey = (e) => {
-    if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(e.key)) at = Math.min(last, at + 1);
-    else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(e.key)) at = Math.max(0, at - 1);
-    else if (e.key === 'Home') at = 0;
-    else if (e.key === 'End') at = last;
+    let to = at;
+    if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(e.key)) to = Math.min(last, at + 1);
+    else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(e.key)) to = Math.max(0, at - 1);
+    else if (e.key === 'Home') to = 0;
+    else if (e.key === 'End') to = last;
     else if (e.key === 'Escape') return close();
     else return;
     e.preventDefault();
     e.stopPropagation();
-    show();
+    go(to, to === at + 1);
   };
   const close = () => {
+    cancelAnimationFrame(frame);
     document.removeEventListener('keydown', onKey, true);
     if (document.fullscreenElement) document.exitFullscreen().catch(() => null);
     root.remove();
@@ -152,18 +185,12 @@ export function present(editor, canvas) {
   root.addEventListener('click', (e) => {
     if (e.target.closest('.presenter-close')) return;
     const left = e.clientX < window.innerWidth / 3;
-    at = left ? Math.max(0, at - 1) : Math.min(last, at + 1);
-    show();
+    const to = left ? Math.max(0, at - 1) : Math.min(last, at + 1);
+    go(to, to === at + 1);
   });
   document.addEventListener('keydown', onKey, true);
   document.body.append(root);
-  show();
+  go(at, false);
   root.focus();
   root.requestFullscreen?.().catch(() => null);
-  document.addEventListener('fullscreenchange', function onFs() {
-    if (!document.fullscreenElement && root.isConnected) {
-      document.removeEventListener('fullscreenchange', onFs);
-    }
-  });
-  return { close };
 }

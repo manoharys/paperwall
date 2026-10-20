@@ -1,14 +1,14 @@
 {
   "summary": {
     "date": "2026-10-20",
-    "total": 155,
-    "verified": 154,
+    "total": 163,
+    "verified": 158,
     "failing": 0,
-    "todo": 1,
-    "e2eTests": 134,
-    "e2ePassing": 134,
-    "unitTests": 105,
-    "unitPassing": 105
+    "todo": 5,
+    "e2eTests": 138,
+    "e2ePassing": 138,
+    "unitTests": 113,
+    "unitPassing": 113
   },
   "areas": [
     {
@@ -765,6 +765,52 @@
           "id": "TPL-09",
           "title": "Filter templates by size",
           "status": "verified"
+        }
+      ]
+    },
+    {
+      "id": "MOT",
+      "name": "Motion",
+      "features": [
+        {
+          "id": "MOT-01",
+          "title": "Animate an element as it comes in (fade, rise, drop, pan, pop, wipe, typewriter, tumble, breathe)",
+          "status": "verified"
+        },
+        {
+          "id": "MOT-02",
+          "title": "Animate a whole page: everything comes in one after another",
+          "status": "verified"
+        },
+        {
+          "id": "MOT-03",
+          "title": "Set how long each page shows, and the transition into it (fade, slide, push, zoom)",
+          "status": "verified"
+        },
+        {
+          "id": "MOT-04",
+          "title": "Play animations and page timing in the editor and when presenting",
+          "status": "verified"
+        },
+        {
+          "id": "MOT-05",
+          "title": "Download as an animated GIF",
+          "status": "todo"
+        },
+        {
+          "id": "MOT-06",
+          "title": "Download as a video (MP4 or WebM)",
+          "status": "todo"
+        },
+        {
+          "id": "MOT-07",
+          "title": "Add videos to a design",
+          "status": "todo"
+        },
+        {
+          "id": "MOT-08",
+          "title": "Add a soundtrack that plays in videos and when presenting",
+          "status": "todo"
         }
       ]
     },

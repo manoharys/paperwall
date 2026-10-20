@@ -94,6 +94,8 @@ const UI_ICONS = {
   ruler: '<path d="M3 8h18v8H3z"/><path d="M7 8v3M11 8v4M15 8v3M19 8v4"/>',
   connect: '<rect x="3" y="4" width="6" height="6" rx="1"/><rect x="15" y="14" width="6" height="6" rx="1"/><path d="M9 7h4v10h2"/>',
   grid: '<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>',
+  play: '<path d="M7 4.5v15l12.5-7.5z"/>',
+  motion: '<path d="M4 12h3M2.5 8h5M3.5 16h4"/><circle cx="14.5" cy="12" r="5.5"/>',
   history: '<path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4"/><path d="M12 8v4l3 2"/>',
   draw: '<path d="M4 20c2-1 3-4 5-4s2 3 4 3 3-5 7-8"/><path d="M15 4l5 5"/>',
   paint: '<rect x="4" y="3.5" width="14" height="6" rx="1"/><path d="M18 6.5h2v5h-8v3M11 14.5h2v6h-2z"/>',

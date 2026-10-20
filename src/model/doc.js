@@ -1,6 +1,7 @@
 // The design document: pages of elements, plus the images they use.
 
 import { boxAround } from './geometry.js';
+import { ANIMATIONS, TRANSITIONS } from './motion.js';
 
 export const FORMAT_VERSION = 1;
 export const DPI = 300;
@@ -369,6 +370,14 @@ export function isEmptyFrame(doc, el) {
 }
 
 /** Check that a parsed file looks like a Paperwall design. Throws a readable error if not. */
+/** An animation or transition from a file: a known type and numbers in range, else nothing. */
+function cleanMotion(m, kinds, ranges) {
+  if (!m || typeof m !== 'object' || !kinds[m.type] || m.type === 'none') return undefined;
+  const out = { type: m.type };
+  for (const [k, [lo, hi]] of Object.entries(ranges)) if (Number.isFinite(+m[k])) out[k] = Math.max(lo, Math.min(hi, +m[k]));
+  return out;
+}
+
 export function validateDesign(doc) {
   if (!doc || typeof doc !== 'object') throw new Error('This file is not a Paperwall design');
   doc.width = Number(doc.width);
@@ -388,6 +397,7 @@ export function validateDesign(doc) {
       if (el.points.length !== 2) el.points = [[0, 0], [1, 1]];
       for (const k of ['start', 'end']) el[k] = { id: typeof el[k]?.id === 'string' ? el[k].id : null, side: ['l', 'r', 't', 'b'].includes(el[k]?.side) ? el[k].side : undefined };
     }
+    if (el.anim !== undefined) el.anim = cleanMotion(el.anim, ANIMATIONS, { duration: [0.1, 10], delay: [0, 30] });
     return el;
   });
   for (const p of doc.pages) {
@@ -396,6 +406,9 @@ export function validateDesign(doc) {
     if (p.title !== undefined) p.title = typeof p.title === 'string' ? p.title.slice(0, 120) : undefined;
     if (p.hidden !== undefined) p.hidden = p.hidden === true || undefined;
     if (p.guides !== undefined) p.guides = (Array.isArray(p.guides) ? p.guides : []).filter((g) => g && (g.axis === 'x' || g.axis === 'y') && Number.isFinite(+g.pos)).map((g) => ({ axis: g.axis, pos: +g.pos }));
+    if (p.anim !== undefined) p.anim = cleanMotion(p.anim, ANIMATIONS, { duration: [0.1, 10], stagger: [0, 2] });
+    if (p.transition !== undefined) p.transition = cleanMotion(p.transition, TRANSITIONS, { duration: [0.1, 5] });
+    if (p.duration !== undefined) p.duration = Number.isFinite(+p.duration) ? Math.max(0.5, Math.min(60, +p.duration)) : undefined;
   }
   for (const [id, a] of Object.entries(doc.assets)) {
     if (!a || typeof a.dataUrl !== 'string' || !/^data:(image|font)\//.test(a.dataUrl)) delete doc.assets[id];

@@ -211,6 +211,20 @@
       ]
     },
     {
+      "id": "MOT",
+      "name": "Motion",
+      "features": [
+        { "id": "MOT-01", "title": "Animate an element as it comes in (fade, rise, drop, pan, pop, wipe, typewriter, tumble, breathe)" },
+        { "id": "MOT-02", "title": "Animate a whole page: everything comes in one after another" },
+        { "id": "MOT-03", "title": "Set how long each page shows, and the transition into it (fade, slide, push, zoom)" },
+        { "id": "MOT-04", "title": "Play animations and page timing in the editor and when presenting" },
+        { "id": "MOT-05", "title": "Download as an animated GIF" },
+        { "id": "MOT-06", "title": "Download as a video (MP4 or WebM)" },
+        { "id": "MOT-07", "title": "Add videos to a design" },
+        { "id": "MOT-08", "title": "Add a soundtrack that plays in videos and when presenting" }
+      ]
+    },
+    {
       "id": "EXP",
       "name": "Export",
       "features": [

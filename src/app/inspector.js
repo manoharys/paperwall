@@ -4,6 +4,7 @@
 import { h, icon, iconButton, clear, toast, pickFile, readFileAsDataUrl, dialog, mod } from './ui.js';
 import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover, popoverOpen, PALETTES, fontPicker, gradientEditor } from './widgets.js';
 import { FONTS, FONT_KINDS } from '../model/fonts.js';
+import { ANIMATIONS, TRANSITIONS, DEFAULT_ANIM_DURATION, DEFAULT_STAGGER, DEFAULT_TRANSITION_DURATION, pageDuration } from '../model/motion.js';
 import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, isEmptyFrame, parseChartData, chartDataText, parseTable, tableText } from '../model/doc.js';
 import { collectColors, cropZoom } from '../model/commands.js';
 import { renderElementOnly, TEXT_EFFECTS } from '../model/render.js';
@@ -47,10 +48,11 @@ const FILTER_PRESETS = {
 };
 
 export class Inspector {
-  constructor(editor, canvas, { onResizeDesign }) {
+  constructor(editor, canvas, { onResizeDesign, onPlay }) {
     this.ed = editor;
     this.canvas = canvas;
     this.onResizeDesign = onResizeDesign;
+    this.onPlay = onPlay;
     this.tab = 'edit';
     this.brand = { colors: [] };
     this.body = h('div', { class: 'inspector-body' });
@@ -234,8 +236,43 @@ export class Inspector {
       table: () => this.tablePanel(el),
     }[el.type];
     if (specific) out.push(...specific());
-    out.push(this.arrange(1), this.geometry(el), this.effects());
+    out.push(this.arrange(1), this.geometry(el), this.effects(), this.animatePanel(el));
     return out;
+  }
+
+  /** How the element comes in when the page plays (presenting, GIF, video). */
+  animatePanel(el) {
+    const ed = this.ed;
+    const a = el.anim || { type: 'none' };
+    const now = () => this.ed.single?.anim || a;
+    const pageAnim = ed.pageData.anim?.type;
+    return section('Animate',
+      h('div', { class: 'anim-grid', role: 'group', 'aria-label': 'Animation', 'data-testid': 'anim-types' }, Object.entries(ANIMATIONS).map(([type, { name }]) => h('button', {
+        type: 'button', class: `anim${a.type === type ? ' on' : ''}`, 'aria-pressed': String(a.type === type), 'data-testid': `anim-${type}`,
+        // A whole replacement (updates merge into objects).
+        onClick: () => this.up({ anim: type === 'none' ? null : { type, duration: now().duration ?? DEFAULT_ANIM_DURATION, delay: now().delay ?? 0 } }),
+      }, name))),
+      a.type === 'none' && pageAnim && pageAnim !== 'none' ? h('p', { class: 'hint' }, `Comes in with the page's ${ANIMATIONS[pageAnim].name.toLowerCase()} animation.`) : null,
+      a.type !== 'none' ? h('div', { class: 'sub' },
+        slider({ label: 'Duration', value: a.duration ?? DEFAULT_ANIM_DURATION, min: 0.2, max: 3, step: 0.1, unit: 's', testid: 'anim-duration', onChange: (v, l) => this.up({ anim: { ...now(), duration: v } }, l ? 'anim' : null) }),
+        slider({ label: 'Delay', value: a.delay ?? 0, min: 0, max: 10, step: 0.1, unit: 's', testid: 'anim-delay', onChange: (v, l) => this.up({ anim: { ...now(), delay: v } }, l ? 'anim' : null) })) : null,
+      h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'anim-play', onClick: () => this.onPlay?.() }, icon('play'), 'Play this page'));
+  }
+
+  /** The page's own motion: an animation for everything on it, how long it shows, and how it comes in. */
+  motionPanel() {
+    const ed = this.ed;
+    const page = ed.pageData;
+    const at = ed.page;
+    const pa = page.anim || { type: 'none' };
+    const tr = page.transition || { type: 'none' };
+    const set = (patch, key) => ed.setPageMotion(at, patch, key);
+    return section('Motion',
+      selectField({ label: 'Animate the page', value: pa.type, testid: 'page-anim', options: Object.entries(ANIMATIONS).filter(([, v]) => !v.loop).map(([value, { name }]) => ({ value, label: name })), onChange: (type) => set({ anim: type === 'none' ? undefined : { type, stagger: pa.stagger ?? DEFAULT_STAGGER } }) }),
+      slider({ label: 'Show for', value: pageDuration(page), min: 1, max: 30, step: 0.5, unit: 's', testid: 'page-duration', onChange: (v, l) => set({ duration: v }, l ? `duration:${at}` : null) }),
+      selectField({ label: 'Transition into this page', value: tr.type, testid: 'page-transition', options: Object.entries(TRANSITIONS).map(([value, { name }]) => ({ value, label: name })), onChange: (type) => set({ transition: type === 'none' ? undefined : { type, duration: tr.duration ?? DEFAULT_TRANSITION_DURATION } }) }),
+      at === 0 && tr.type !== 'none' ? h('p', { class: 'hint' }, 'Shows when this page follows another, as when pages are moved.') : null,
+      h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'page-play', onClick: () => this.onPlay?.() }, icon('play'), 'Play from this page'));
   }
 
   multiPanel(sel) {
@@ -569,6 +606,7 @@ export class Inspector {
         bg.type === 'color' ? h('div', { class: 'field inline' }, h('span', null, 'Color'), colorButton({ label: 'Background color', testid: 'bg-color', value: bg.color, getContext: this.colorContext, onChange: (c, l) => ed.setBackground({ type: 'color', color: c }, l ? 'color' : null) })) : null,
         grad ? h('div', { class: 'sub' }, gradientEditor({ label: 'Background gradient', value: grad, getContext: this.colorContext, testid: 'bg-gradient', current: () => ed.pageData.background?.gradient, onChange: (g, l) => ed.setBackground({ type: 'gradient', gradient: g }, l ? 'grad' : null) })) : null,
         bg.type === 'image' ? h('button', { type: 'button', class: 'btn small wide', onClick: () => ed.setBackground({ type: 'color', color: '#ffffff' }) }, 'Remove background image') : null),
+      this.motionPanel(),
       section('Design',
         h('p', { class: 'meta', 'data-testid': 'design-size' }, size),
         h('button', { type: 'button', class: 'btn wide', 'data-testid': 'resize-design', onClick: () => this.onResizeDesign() }, icon('resize'), 'Resize to another format')),

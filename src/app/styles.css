@@ -367,6 +367,9 @@ kbd { font: 12px ui-monospace, monospace; background: var(--panel-2); border: 1p
 .grad-preset:hover { outline: 2px solid var(--accent); }
 
 /* Duotone */
+.anim-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
+.anim { padding: 7px 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font: 12px var(--font); cursor: pointer; }
+.anim.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .duo-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .duo { aspect-ratio: 1; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--muted); font-size: 11px; cursor: pointer; padding: 0; }
 .duo.on { outline: 2px solid var(--accent); outline-offset: 1px; }

@@ -7,6 +7,8 @@ import { hexToRgb, mixHex, sortedStops } from './color.js';
 import { layoutText, displayText, approxMeasure } from './text-layout.js';
 import { iconById, stickerById } from './graphics.js';
 import { qrMatrix, qrPath } from './qr.js';
+import { animationOf, motionAt, readingOrder, transitionAt } from './motion.js';
+import { boundsOf } from './geometry.js';
 
 const f = (n) => Math.round(n * 100) / 100;
 const num = (v, fallback) => (Number.isFinite(+v) ? +v : fallback);
@@ -310,13 +312,26 @@ function renderText(ctx, el) {
   const deco = [];
   const marks = [];
   const tspans = [];
-  lines.forEach((line, i) => {
+  // Typing it out (an animation): only the first letters show. Lines are
+  // laid out in full first, so letters never move as more appear.
+  let left = el._typed === undefined ? Infinity : Math.round(lines.reduce((n, l) => n + (l.text || '').length, 0) * el._typed);
+  lines.forEach((line0, i) => {
+    let line = line0;
+    if (left !== Infinity) {
+      const all = line.text || '';
+      const shown = all.slice(0, Math.max(0, left));
+      left -= all.length;
+      if (!shown) return;
+      // Same place as the whole line; underlines and boxes only under what's typed.
+      line = { ...line, text: shown, width: line.width * (shown.length / (all.length || 1)), fullWidth: line.width };
+    }
     const top = pad + i * lineHeight;
     const baseline = top + (lineHeight - el.size) / 2 + ascent;
     const avail = el.w - line.indent;
+    const placed = line.fullWidth ?? line.width;
     let x = line.indent;
-    if (el.align === 'center') x = line.indent + (avail - line.width) / 2;
-    else if (el.align === 'right') x = el.w - line.width;
+    if (el.align === 'center') x = line.indent + (avail - placed) / 2;
+    else if (el.align === 'right') x = el.w - placed;
     if (el.highlight && line.width > 0) {
       const hp = Math.max(pad, el.size * 0.15);
       marks.push(`<rect x="${f(x - hp)}" y="${f(top)}" width="${f(line.width + hp * 2)}" height="${f(lineHeight)}" rx="${f(el.highlight.radius ?? 0)}" fill="${esc(el.highlight.color)}"/>`);
@@ -488,13 +503,80 @@ export function renderPage(doc, pageIndex, opts = {}) {
   const ctx = makeCtx(doc, opts);
   const w = num(doc.width, 1);
   const h = num(doc.height, 1);
-  const bg = opts.transparent ? '' : renderBackground(ctx, page.background, w, h);
-  const body = page.elements.map((el) => renderElement(ctx, el)).join('');
+  const body = pageBody(ctx, page, w, h, opts);
   const style = opts.fontCss ? `<style>${opts.fontCss}</style>` : '';
   const scale = opts.scale || 1;
   const size = opts.noSize ? '' : ` width="${f(w * scale)}" height="${f(h * scale)}"`;
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"${size} viewBox="0 0 ${w} ${h}">` +
-    `<defs>${style}${ctx.defs.join('')}</defs>${bg}${body}</svg>`;
+    `<defs>${style}${ctx.defs.join('')}</defs>${body}</svg>`;
+}
+
+/**
+ * A page's background and elements. With `opts.time` (seconds since the page
+ * began), animated elements are drawn where they are at that moment.
+ */
+function pageBody(ctx, page, w, h, opts) {
+  const bg = opts.transparent ? '' : renderBackground(ctx, page.background, w, h);
+  if (opts.time === undefined) return bg + page.elements.map((el) => renderElement(ctx, el)).join('');
+  const order = readingOrder(page);
+  const size = Math.min(w, h);
+  return bg + page.elements.map((el) => renderMoving(ctx, page, el, order, opts.time, size)).join('');
+}
+
+/** One element at a moment of its page's animations. */
+function renderMoving(ctx, page, el, order, time, size) {
+  const anim = animationOf(page, el, order);
+  if (!anim || el.hidden) return renderElement(ctx, el);
+  const m = motionAt(anim, time, size);
+  const typing = anim.type === 'typewriter';
+  // Only text types out; anything else given Typewriter fades in at the same pace.
+  const opacity = typing && el.type !== 'text' ? m.typed : m.opacity;
+  if (opacity <= 0.001 || m.reveal <= 0.001) return '';
+  const body = renderElement(ctx, typing && el.type === 'text' && m.typed < 1 ? { ...el, _typed: m.typed } : el);
+  const b = boundsOf(el);
+  const cx = b.x + b.w / 2;
+  const cy = b.y + b.h / 2;
+  const attrs = [];
+  if (m.dx || m.dy || m.scale !== 1 || m.rotate) {
+    attrs.push(`transform="translate(${f(m.dx)} ${f(m.dy)}) translate(${f(cx)} ${f(cy)}) rotate(${f(m.rotate)}) scale(${m.scale}) translate(${f(-cx)} ${f(-cy)})"`);
+  }
+  if (opacity < 1) attrs.push(`opacity="${f(opacity)}"`);
+  if (m.reveal < 1) {
+    // A wipe: shown from the left edge across.
+    const id = ctx.id('wipe');
+    ctx.defs.push(`<clipPath id="${id}"><rect x="${f(b.x)}" y="${f(b.y - 1)}" width="${f(b.w * m.reveal)}" height="${f(b.h + 2)}"/></clipPath>`);
+    attrs.push(`clip-path="url(#${id})"`);
+  }
+  return attrs.length ? `<g ${attrs.join(' ')}>${body}</g>` : body;
+}
+
+/**
+ * One frame of a design playing (see motion.frameAt): the page at its moment,
+ * and during a transition the page before it too, placed by the transition.
+ */
+export function renderFrame(doc, frame, opts = {}) {
+  const ctx = makeCtx(doc, opts);
+  const w = num(doc.width, 1);
+  const h = num(doc.height, 1);
+  const layer = (index, local, place) => {
+    const body = pageBody(ctx, doc.pages[index], w, h, { ...opts, time: local });
+    if (!place) return body;
+    if (place.opacity <= 0.001) return '';
+    const attrs = [];
+    if (place.dx || place.scale !== 1) attrs.push(`transform="translate(${f(place.dx * w)} 0) translate(${f(w / 2)} ${f(h / 2)}) scale(${place.scale}) translate(${f(-w / 2)} ${f(-h / 2)})"`);
+    if (place.opacity < 1) attrs.push(`opacity="${f(place.opacity)}"`);
+    return attrs.length ? `<g ${attrs.join(' ')}>${body}</g>` : body;
+  };
+  let body;
+  if (frame.transition) {
+    const tr = transitionAt(frame.transition.type, frame.transition.progress);
+    body = layer(frame.from.index, frame.from.local, tr.from) + layer(frame.index, frame.local, tr.to);
+  } else body = layer(frame.index, frame.local, null);
+  const style = opts.fontCss ? `<style>${opts.fontCss}</style>` : '';
+  const scale = opts.scale || 1;
+  const size = opts.noSize ? '' : ` width="${f(w * scale)}" height="${f(h * scale)}"`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"${size} viewBox="0 0 ${w} ${h}" overflow="hidden">` +
+    `<defs>${style}${ctx.defs.join('')}</defs>${body}</svg>`;
 }
 
 /** Render a single element on its own, for previews (layers list, thumbnails). */
