@@ -4,10 +4,7 @@
 
 import { layoutText } from './text-layout.js';
 import { boundsOf, rectsIntersect } from './geometry.js';
-import { hexToRgb, mixHex, contrast } from './color.js';
-
-// Color maths lives in color.js; these are passed on for the checks' callers.
-export { hexToRgb, mixHex, contrast };
+import { hexToRgb, contrast } from './color.js';
 
 /** A representative color for a fill: the color itself, or the average of a gradient. */
 export function paintColor(p) {

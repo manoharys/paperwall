@@ -1,6 +1,6 @@
 // SVG path data for shapes, drawn to fill a w × h box.
 
-import { nearPolyline } from './geometry.js';
+import { nearPolyline, rotatePoint } from './geometry.js';
 
 const f = (n) => Math.round(n * 100) / 100;
 
@@ -109,12 +109,16 @@ export function drawPath(el) {
   return `${d} L${f(z[0])} ${f(z[1])}`;
 }
 
-/** Whether point p (page px) is within `tol` px of a drawing's stroke (unrotated drawings). */
+/** Whether point p (page px) is within `tol` px of a drawing's stroke. */
 const drawLines = new WeakMap(); // hover hit tests ask on every mouse move
 
 export function drawHit(el, p, tol) {
-  // A flipped drawing is drawn mirrored about its centre; mirror the point to match.
-  const q = { x: el.flipX ? 2 * el.x + el.w - p.x : p.x, y: el.flipY ? 2 * el.y + el.h - p.y : p.y };
+  // A turned drawing: turn the point back first. A flipped one is drawn
+  // mirrored about its centre: mirror the point to match.
+  const cx = el.x + el.w / 2;
+  const cy = el.y + el.h / 2;
+  const r = el.rotation ? rotatePoint(p.x, p.y, cx, cy, -el.rotation) : p;
+  const q = { x: el.flipX ? 2 * cx - r.x : r.x, y: el.flipY ? 2 * cy - r.y : r.y };
   // The stroke in page px, worked out again only when the drawing changes.
   const key = `${el.x},${el.y},${el.w},${el.h}`;
   let line = drawLines.get(el);

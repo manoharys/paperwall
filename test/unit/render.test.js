@@ -583,3 +583,20 @@ test('[ELM-10] freeing the ends of deleted elements counts as a change', async (
   assert.equal(updateConnectors({ elements: [c] }), true);
   assert.equal(c.start.id, null);
 });
+
+test('[ELM-10] a connector leaves a turned shape the way it faces on the page', async () => {
+  const { anchorOn } = await import('../../src/model/connectors.js');
+  const box = { x: 0, y: 0, w: 100, h: 100, rotation: 90 };
+  const { side } = anchorOn(box, [400, 50]);
+  assert.equal(side, 'r', 'toward the right on the page, whichever of its own sides that is');
+});
+
+test('[ELM-09] a turned drawing is hit only near its stroke', async () => {
+  const { createDrawing } = await import('../../src/model/doc.js');
+  const { drawHit } = await import('../../src/model/shapes.js');
+  const d = createDrawing([[0, 0], [400, 400]], { strokeWidth: 6 });
+  d.rotation = 10;
+  const c = { x: d.x + d.w / 2, y: d.y + d.h / 2 };
+  assert.ok(drawHit(d, c, 8), 'on the line (its middle stays put)');
+  assert.ok(!drawHit(d, { x: d.x + 10, y: d.y + d.h - 10 }, 8), 'a far corner of its box is not');
+});

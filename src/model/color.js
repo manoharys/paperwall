@@ -28,3 +28,8 @@ export function contrast(a, b) {
   const lb = luminance(b);
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
+
+/** A gradient's stops in order along it (stops without an offset count as 0). */
+export function sortedStops(g) {
+  return [...(g?.stops || [])].sort((a, b) => (a.offset ?? 0) - (b.offset ?? 0));
+}

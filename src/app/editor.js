@@ -9,7 +9,7 @@ import {
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
 import { curveGeometry } from '../model/render.js';
-import { unionBounds, pointInBox, rotatePoint, boxCenter } from '../model/geometry.js';
+import { unionBounds, pointInBox, rotatePoint, boxCenter, refitGroup } from '../model/geometry.js';
 import { gridBoxes } from '../model/grids.js';
 import { createConnector, updateConnectors, connectorHit } from '../model/connectors.js';
 import { gridLines, marginSize } from '../model/view.js';
@@ -148,7 +148,8 @@ export class Editor {
         result = fn();
       } catch (e) {
         // Put back whatever fn changed before it failed, and leave no step.
-        const back = this.history.revert(this.doc);
+        // (Merged into the step before, there's only that step to go back to.)
+        const back = this.history.revert(this.doc) || (key ? this.history.rewind(this.doc) : null);
         if (back) this.doc = back;
         this.emit('doc');
         throw e;
@@ -457,7 +458,7 @@ export class Editor {
         const at = { ...el, x: el.x + ox, y: el.y + oy };
         if (!pointInBox(p.x, p.y, at)) continue;
         // Lines you draw or connect only cover what's near the line (as for clicks).
-        if (el.type === 'connector' || (el.type === 'draw' && !el.rotation)) {
+        if (el.type === 'connector' || el.type === 'draw') {
           const tol = (el.strokeWidth || 0) / 2 + 8 / this.zoom;
           if (!(el.type === 'connector' ? connectorHit(at, p, tol) : drawHit(at, p, tol))) continue;
         }
@@ -667,15 +668,23 @@ export class Editor {
   /** Measure text again (all of it, or the boxes `which` picks). Returns whether any height changed. */
   refitAllText(which = () => true) {
     let changed = false;
+    // Returns whether anything inside changed, so groups around it are
+    // refitted too (innermost first: each group's children are done first).
     const visit = (els) => {
+      let here = false;
       for (const el of els) {
         if (el.type === 'text' && which(el)) {
           const before = [el.w, el.h];
           this.fitText(el);
-          if (el.w !== before[0] || el.h !== before[1]) changed = true;
+          if (el.w !== before[0] || el.h !== before[1]) here = true;
         }
-        if (el.type === 'group') visit(el.children);
+        if (el.type === 'group' && visit(el.children)) {
+          refitGroup(el);
+          here = true;
+        }
       }
+      changed ||= here;
+      return here;
     };
     this.doc.pages.forEach((p) => visit(p.elements));
     return changed;

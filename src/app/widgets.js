@@ -1,7 +1,7 @@
 // Form controls used by the panels: color picker, sliders, number fields.
 
 import { h, icon, iconButton } from './ui.js';
-import { mixHex } from '../model/color.js';
+import { mixHex, sortedStops } from '../model/color.js';
 
 export const PALETTES = [
   { name: 'Ink', colors: ['#16161d', '#3d3d4e', '#8a8a9e', '#d9d9e3', '#ffffff'] },
@@ -275,7 +275,7 @@ export const GRADIENT_PRESETS = [
 ].map(([name, ...colors]) => ({ name, stops: colors.map((color, i) => ({ offset: i / (colors.length - 1), color })) }));
 
 function cssGradient(g, angle = 90) {
-  const stops = [...g.stops].sort((a, b) => a.offset - b.offset).map((s) => `${s.color} ${Math.round(s.offset * 100)}%`).join(', ');
+  const stops = sortedStops(g).map((s) => `${s.color} ${Math.round(s.offset * 100)}%`).join(', ');
   return `linear-gradient(${angle}deg, ${stops})`;
 }
 
@@ -286,11 +286,11 @@ function cssGradient(g, angle = 90) {
  */
 export function gradientEditor({ label, value, onChange, getContext, testid, current }) {
   const g = value;
-  const stops = [...g.stops].sort((a, b) => a.offset - b.offset);
+  const stops = sortedStops(g);
   // Each change starts from the gradient as it is now (`current()`), not as it
   // was when the panel was drawn: the panel isn't redrawn while a slider is in use.
   const now = () => current?.() || g;
-  const nowStops = () => [...now().stops].sort((a, b) => a.offset - b.offset);
+  const nowStops = () => sortedStops(now());
   const emit = (patch, live = false) => onChange({ ...now(), ...patch }, live);
   // Where each row's stop is now: re-sorting moves stops around, and the
   // panel isn't redrawn mid-drag, so rows follow their own stop.

@@ -66,6 +66,19 @@ export class History {
     return restore(snap, doc.assets);
   }
 
+  /**
+   * Go back to the newest step and drop it, without keeping a redo: for a
+   * change merged into that step that failed halfway. The step's whole run
+   * goes with it (its earlier edits too), since there's no finer point to go back to.
+   */
+  rewind(doc) {
+    if (!this.past.length) return null;
+    const snap = this.past.pop();
+    this.settle();
+    this.lastKey = null;
+    return restore(snap, doc.assets);
+  }
+
   /** The newest step stays: let go of what was kept in case it was discarded. */
   settle() {
     this.pending = false;

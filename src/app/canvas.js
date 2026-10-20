@@ -303,7 +303,7 @@ export class Canvas {
     return topmost(this.ed.pageData, (el) => {
       if (el.hidden) return false;
       // Lines you draw or connect are picked near the line, not anywhere in their box.
-      if (el.type === 'connector' || (el.type === 'draw' && !el.rotation)) {
+      if (el.type === 'connector' || el.type === 'draw') {
         const tol = (el.strokeWidth || 0) / 2 + Math.max(margin, 8 / this.ed.zoom);
         return el.type === 'connector' ? connectorHit(el, p, tol) : drawHit(el, p, tol);
       }

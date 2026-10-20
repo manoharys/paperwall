@@ -50,7 +50,13 @@ export function anchorOn(box, toward) {
     : [cx, dy >= 0 ? box.y + box.h : box.y, dy >= 0 ? 'b' : 't'];
   if (!rot) return { point: [px, py], side };
   const p = rotatePoint(px, py, cx, cy, rot);
-  return { point: [p.x, p.y], side };
+  // The side as the line sees it on the page: the turned side's outward direction.
+  const a = (rot * Math.PI) / 180;
+  const [nx, ny] = { r: [1, 0], l: [-1, 0], b: [0, 1], t: [0, -1] }[side];
+  const ox = nx * Math.cos(a) - ny * Math.sin(a);
+  const oy = nx * Math.sin(a) + ny * Math.cos(a);
+  const pageSide = Math.abs(ox) >= Math.abs(oy) ? (ox >= 0 ? 'r' : 'l') : oy >= 0 ? 'b' : 't';
+  return { point: [p.x, p.y], side: pageSide };
 }
 
 function hasConnector(els) {

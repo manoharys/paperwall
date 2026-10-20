@@ -3,7 +3,7 @@
 
 import { shapePath, dashArray, maskPath, drawPath } from './shapes.js';
 import { connectorGeometry, arrowHead } from './connectors.js';
-import { hexToRgb, mixHex } from './color.js';
+import { hexToRgb, mixHex, sortedStops } from './color.js';
 import { layoutText, displayText, approxMeasure } from './text-layout.js';
 import { iconById, stickerById } from './graphics.js';
 import { qrMatrix, qrPath } from './qr.js';
@@ -37,8 +37,7 @@ function paint(ctx, p) {
   if (typeof p === 'string') return esc(p);
   if (p.type === 'linear' || p.type === 'radial') {
     const id = ctx.id('grad');
-    const stops = [...(p.stops || [])]
-      .sort((a, b) => (a.offset ?? 0) - (b.offset ?? 0))
+    const stops = sortedStops(p)
       .map((s) => `<stop offset="${f(s.offset)}" stop-color="${esc(s.color)}"${s.opacity !== undefined ? ` stop-opacity="${f(s.opacity)}"` : ''}/>`)
       .join('');
     if (p.type === 'radial') {
