@@ -203,18 +203,36 @@ export function nearPolyline(pts, p, tol) {
 
 /**
  * Make a group's box fit its children again (after their sizes changed),
- * keeping them where they are on the page. Unrotated groups only.
+ * keeping everything where it is on the page, turned or mirrored groups too.
  */
 export function refitGroup(group) {
-  // Moving the box of a turned or mirrored group would move what's inside it.
-  if (group.type !== 'group' || group.rotation || group.flipX || group.flipY || !group.children.length) return;
-  const b = unionBounds(group.children);
+  if (group.type !== 'group' || !group.children.length) return;
+  const b = unionBounds(group.children); // in the group's own (unturned) space
   for (const c of group.children) {
     c.x -= b.x;
     c.y -= b.y;
   }
-  group.x += b.x;
-  group.y += b.y;
-  group.w = b.w;
-  group.h = b.h;
+  // How far the centre moves, in the group's space, then turned onto the page.
+  let dx = b.x + b.w / 2 - group.w / 2;
+  let dy = b.y + b.h / 2 - group.h / 2;
+  if (group.flipX) dx = -dx;
+  if (group.flipY) dy = -dy;
+  const r = ((group.rotation || 0) * Math.PI) / 180;
+  const cx = group.x + group.w / 2 + dx * Math.cos(r) - dy * Math.sin(r);
+  const cy = group.y + group.h / 2 + dx * Math.sin(r) + dy * Math.cos(r);
+  Object.assign(group, { x: cx - b.w / 2, y: cy - b.h / 2, w: b.w, h: b.h });
+}
+
+/**
+ * A box around points (padded by `pad`), with each point stored as a share
+ * of the box (0..1), so the shape stretches when the box is resized.
+ */
+export function boxAround(points, pad = 0) {
+  const xs = points.map((p) => p[0]);
+  const ys = points.map((p) => p[1]);
+  const x = Math.min(...xs) - pad;
+  const y = Math.min(...ys) - pad;
+  const w = Math.max(1, Math.max(...xs) + pad - x);
+  const h = Math.max(1, Math.max(...ys) + pad - y);
+  return { x, y, w, h, shares: points.map(([px, py]) => [round4((px - x) / w), round4((py - y) / h)]) };
 }

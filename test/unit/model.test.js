@@ -540,3 +540,14 @@ test('[TPL-04] adding the same template page twice gives every element its own i
   assert.notEqual(one.id, two.id);
   assert.deepEqual([two.elements[2].start.id, two.elements[2].end.id], [two.elements[0].id, two.elements[1].id]);
 });
+
+test('[EDIT-07] a turned group is refitted without moving its contents on the page', async () => {
+  const { refitGroup, rotatePoint } = await import('../../src/model/geometry.js');
+  const g = { type: 'group', x: 100, y: 100, w: 200, h: 100, rotation: 90, children: [{ x: 0, y: 0, w: 300, h: 100 }] };
+  // Where the child's far corner is on the page before.
+  const before = rotatePoint(g.x + 300, g.y + 100, g.x + g.w / 2, g.y + g.h / 2, 90);
+  refitGroup(g);
+  assert.deepEqual([g.w, g.h], [300, 100]);
+  const after = rotatePoint(g.x + g.children[0].x + 300, g.y + g.children[0].y + 100, g.x + g.w / 2, g.y + g.h / 2, 90);
+  assert.ok(Math.abs(before.x - after.x) < 1e-6 && Math.abs(before.y - after.y) < 1e-6, 'the child stays put');
+});

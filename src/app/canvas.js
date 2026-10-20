@@ -6,7 +6,7 @@ import {
   boundsOf, unionBounds, boxCorners, handlePosition, resizeBox, angleTo, snapAngle, snapMove,
   pointInBox, rectFromPoints, rectsIntersect, HANDLES,
 } from '../model/geometry.js';
-import { resizeElement, coverCrop } from '../model/commands.js';
+import { resizeElement, coverCrop, topmost } from '../model/commands.js';
 import { clone, DRAW_TOOLS, DPI } from '../model/doc.js';
 import { gridLines, marginSize, BLEED } from '../model/view.js';
 import { endsOf, setEnds, connectorHit } from '../model/connectors.js';
@@ -229,21 +229,18 @@ export class Canvas {
   }
 
   hitTest(p) {
-    const els = this.ed.pageData.elements;
     const margin = 4 / this.ed.zoom;
-    for (let i = els.length - 1; i >= 0; i--) {
-      const el = els[i];
-      if (el.hidden) continue;
+    return topmost(this.ed.pageData, (el) => {
+      if (el.hidden) return false;
       // Lines you draw or connect are picked near the line, not anywhere in their box.
       if (el.type === 'connector' || (el.type === 'draw' && !el.rotation)) {
         const tol = (el.strokeWidth || 0) / 2 + Math.max(margin, 8 / this.ed.zoom);
-        if (el.type === 'connector' ? connectorHit(el, p, tol) : drawHit(el, p, tol)) return el;
-        continue;
+        return el.type === 'connector' ? connectorHit(el, p, tol) : drawHit(el, p, tol);
       }
-      if (pointInBox(p.x, p.y, el, el.type === 'line' ? Math.max(margin, 10 / this.ed.zoom) : margin)) return el;
-    }
-    return null;
+      return pointInBox(p.x, p.y, el, el.type === 'line' ? Math.max(margin, 10 / this.ed.zoom) : margin);
+    });
   }
+
 
   // ---------- pointer ----------
 
@@ -747,14 +744,9 @@ export class Canvas {
    */
   attachTarget(p, connector, which) {
     const other = (which ? connector.start : connector.end)?.id;
-    const els = this.ed.pageData.elements;
-    for (let i = els.length - 1; i >= 0; i--) {
-      const el = els[i];
-      if (el.hidden || el.type === 'connector' || el === connector || el.id === other) continue;
-      if (pointInBox(p.x, p.y, el)) return el;
-    }
-    return null;
+    return topmost(this.ed.pageData, (el) => !el.hidden && el.type !== 'connector' && el !== connector && el.id !== other && pointInBox(p.x, p.y, el));
   }
+
 
   /** Show the stroke being drawn, on top of the page. */
   drawStroke() {
@@ -765,10 +757,19 @@ export class Canvas {
     if (!this.stroke?.isConnected) {
       this.stroke = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
       this.stroke.setAttribute('class', 'live-stroke');
+      Object.entries({ fill: 'none', stroke: t.color, 'stroke-width': t.size * z, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: DRAW_TOOLS[t.tool].opacity })
+        .forEach(([k, v]) => this.stroke.setAttribute(k, v));
       this.overlay.append(this.stroke);
+      d.shown = 0;
     }
-    Object.entries({ points: d.points.map(([x, y]) => `${x * z},${y * z}`).join(' '), fill: 'none', stroke: t.color, 'stroke-width': t.size * z, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: DRAW_TOOLS[t.tool].opacity })
-      .forEach(([k, v]) => this.stroke.setAttribute(k, v));
+    // Only the new points are added, so a long stroke stays quick to draw.
+    const list = this.stroke.points;
+    for (; d.shown < d.points.length; d.shown++) {
+      const pt = this.overlay.createSVGPoint();
+      pt.x = d.points[d.shown][0] * z;
+      pt.y = d.points[d.shown][1] * z;
+      list.appendItem(pt);
+    }
   }
 
   /** Choose a photo from the device for an empty frame. */
@@ -777,7 +778,9 @@ export class Canvas {
     const [file] = await pickFile('image/*');
     if (!file) return;
     try {
-      this.ed.fillFrame(frame.id, await this.ed.importImageFile(file), pageId);
+      const upload = await this.ed.importImageFile(file);
+      if (this.ed.closed) return; // the design was closed while the photo loaded
+      this.ed.fillFrame(frame.id, upload, pageId);
     } catch (err) {
       toast(err.message, 'error');
     }

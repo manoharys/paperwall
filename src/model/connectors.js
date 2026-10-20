@@ -3,7 +3,7 @@
 // follows the target when it moves. Routes: straight, elbow or curved.
 
 import { uid } from './doc.js';
-import { boundsOf, boxCenter, rotatePoint, nearPolyline, round2, round4, refitGroup } from './geometry.js';
+import { boundsOf, boxCenter, rotatePoint, nearPolyline, round2, boxAround, refitGroup } from './geometry.js';
 
 const f = round2;
 
@@ -29,13 +29,9 @@ export function endsOf(el) {
 
 /** Move the ends: the box wraps them, and the ends are stored as shares of it. */
 export function setEnds(el, a, b) {
-  const x = Math.min(a[0], b[0]);
-  const y = Math.min(a[1], b[1]);
-  const w = Math.max(1, Math.abs(a[0] - b[0]));
-  const h = Math.max(1, Math.abs(a[1] - b[1]));
+  const { x, y, w, h, shares } = boxAround([a, b]);
   // A connector is defined by its ends alone: never rotated or flipped.
-  Object.assign(el, { x, y, w, h, rotation: 0, flipX: false, flipY: false });
-  el.points = [a, b].map(([px, py]) => [round4((px - x) / w), round4((py - y) / h)]);
+  Object.assign(el, { x, y, w, h, rotation: 0, flipX: false, flipY: false, points: shares });
 }
 
 /** Where a connector meets a box: the middle of the side facing `toward`. */

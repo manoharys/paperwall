@@ -11,6 +11,13 @@ export function getPage(doc, index) {
   return p;
 }
 
+/** The topmost element on a page that `accept` says yes to (front to back). */
+export function topmost(page, accept) {
+  const els = page.elements;
+  for (let i = els.length - 1; i >= 0; i--) if (accept(els[i])) return els[i];
+  return null;
+}
+
 export function findElement(page, id) {
   return page.elements.find((e) => e.id === id) || null;
 }
@@ -168,7 +175,7 @@ export function scaleElement(el, sx, sy) {
     el.size = Math.max(1, round(el.size * s));
     if (el.letterSpacing) el.letterSpacing = round(el.letterSpacing * s);
     if (el.outline) el.outline = { ...el.outline, width: el.outline.width * s };
-    if (el.highlight) el.highlight = { ...el.highlight, padding: (el.highlight.padding ?? 0) * s };
+    if (el.highlight) el.highlight = { ...el.highlight, padding: (el.highlight.padding ?? 0) * s, radius: (el.highlight.radius ?? 0) * s };
   }
   if (el.type === 'table') el.size = Math.max(1, round(el.size * s));
   if (el.strokeWidth) el.strokeWidth *= s;
@@ -475,6 +482,7 @@ export function applyBrand(doc, brand) {
       if (el.stroke) el.stroke = swap(el.stroke);
       if (el.color) el.color = swap(el.color);
       if (el.highlight) el.highlight = { ...el.highlight, color: swap(el.highlight.color) };
+      if (el.outline) el.outline = { ...el.outline, color: swap(el.outline.color) };
       if (el.effect) el.effect = { ...el.effect, color: swap(el.effect.color), color2: swap(el.effect.color2) };
       if (el.filters?.duotone) el.filters = { ...el.filters, duotone: { dark: swap(el.filters.duotone.dark), light: swap(el.filters.duotone.light) } };
       if (el.type === 'text') texts.push(el);

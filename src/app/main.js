@@ -72,11 +72,11 @@ async function closeEditor() {
   editor.closed = true;
   unbind();
   window.paperwall = null;
-  // Save the design first; then, if it changed, keep a version of it.
+  // Save the design and its thumbnail first; then, if it changed, keep a
+  // version of it (reusing that thumbnail).
   await editor.flush();
-  if (editor.changedSinceVersion) await editor.saveVersion();
-  // Make sure the home screen has a preview, even for a design opened and left unchanged.
   await editor.thumb.flush();
+  if (editor.changedSinceVersion) await editor.saveVersion();
 }
 
 async function showHome() {

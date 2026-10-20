@@ -303,16 +303,17 @@ export class Editor {
   async replaceImage(upload) {
     const el = this.single;
     if (!el || el.type !== 'image') return;
-    this.fillFrame(el.id, upload);
+    // An explicit Replace works on locked pictures too, as it always has.
+    this.fillFrame(el.id, upload, this.pageData.id, { evenLocked: true });
   }
 
   /** Put a picture in an image or frame, keeping its place and shape: it's cropped to fill. */
-  fillFrame(id, upload, pageId = this.pageData.id) {
+  fillFrame(id, upload, pageId = this.pageData.id, { evenLocked = false } = {}) {
     // The frame's own page (it may not be in view any more: the page can change
     // while a photo is being picked), else wherever it is now.
     const page = this.doc.pages.find((p) => p.id === pageId && cmd.findElement(p, id)) || this.doc.pages.find((p) => cmd.findElement(p, id));
     const el = page && cmd.findElement(page, id);
-    if (!el || el.type !== 'image' || el.locked) return null;
+    if (!el || el.type !== 'image' || (el.locked && !evenLocked)) return null;
     this.change(() => {
       el.assetId = addAsset(this.doc, upload);
       const frame = el.w / el.h;
@@ -325,13 +326,7 @@ export class Editor {
 
   /** The frame at a point on the page, if any: an empty one, or a photo in a shape. */
   frameAt(p) {
-    const els = this.pageData.elements;
-    for (let i = els.length - 1; i >= 0; i--) {
-      const el = els[i];
-      if (el.type !== 'image' || el.locked || el.hidden) continue;
-      if ((!el.assetId || (el.mask && el.mask !== 'none')) && pointInBox(p.x, p.y, el)) return el;
-    }
-    return null;
+    return cmd.topmost(this.pageData, (el) => el.type === 'image' && !el.locked && !el.hidden && (!el.assetId || (el.mask && el.mask !== 'none')) && pointInBox(p.x, p.y, el));
   }
 
   // ---------- view: rulers, guides, grid, margins, bleed ----------
