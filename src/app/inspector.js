@@ -257,7 +257,7 @@ export class Inspector {
       a.type !== 'none' ? h('div', { class: 'sub' },
         slider({ label: 'Duration', value: a.duration ?? DEFAULT_ANIM_DURATION, min: 0.2, max: 3, step: 0.1, unit: 's', testid: 'anim-duration', onChange: (v, l) => this.up({ anim: { ...now(), duration: v } }, l ? 'anim' : null) }),
         slider({ label: 'Delay', value: a.delay ?? 0, min: 0, max: 10, step: 0.1, unit: 's', testid: 'anim-delay', onChange: (v, l) => this.up({ anim: { ...now(), delay: v } }, l ? 'anim' : null) })) : null,
-      h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'anim-play', onClick: () => this.onPlay?.() }, icon('play'), 'Play this page'));
+      h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'anim-play', onClick: () => this.onPlay?.({ only: true }) }, icon('play'), 'Play this page'));
   }
 
   /** The design's soundtrack: what it is, how loud, and taking it away. */

@@ -88,7 +88,12 @@ function trak(t, id, offsets, duration) {
     else runs.push([1, d]);
   }
   const stts = full('stts', 0, 0, u32(runs.length), ...runs.map(([n, d]) => concat([u32(n), u32(d)])));
-  const shifts = pts.map((p, i) => p - dts[i]);
+  // Offsets are kept at zero or more (some players refuse a frame decoded
+  // after it's shown): every frame is shown `lead` later, and an edit list
+  // starts the track `lead` in, so it still plays from its first frame.
+  const raw = pts.map((p, i) => p - dts[i]);
+  const lead = raw.reduce((m, o) => Math.max(m, -o), 0);
+  const shifts = raw.map((o) => o + lead);
   let ctts = null;
   if (shifts.some((o) => o !== 0)) {
     const oruns = [];
@@ -97,16 +102,16 @@ function trak(t, id, offsets, duration) {
       if (last && last[1] === o) last[0]++;
       else oruns.push([1, o]);
     }
-    // Version 1: offsets may be negative.
-    ctts = full('ctts', 1, 0, u32(oruns.length), ...oruns.map(([n, o]) => concat([u32(n), u32(o >>> 0)])));
+    ctts = full('ctts', 0, 0, u32(oruns.length), ...oruns.map(([n, o]) => concat([u32(n), u32(o)])));
   }
+  const edts = lead ? box('edts', full('elst', 0, 0, u32(1), u32(Math.round(duration * 1000)), u32(lead), u16(1), u16(0))) : null;
   const keys = t.chunks.map((c, i) => (c.key ? i + 1 : 0)).filter(Boolean);
   const stss = video ? full('stss', 0, 0, u32(keys.length), ...keys.map(u32)) : null;
   const stsc = full('stsc', 0, 0, u32(1), u32(1), u32(1), u32(1)); // a chunk per sample
   const stsz = full('stsz', 0, 0, u32(0), u32(t.chunks.length), ...t.chunks.map((c) => u32(c.data.length)));
   const stco = full('stco', 0, 0, u32(offsets.length), ...offsets.map(u32));
   const stbl = box('stbl', full('stsd', 0, 0, u32(1), video ? videoEntry(t) : audioEntry(t)), stts, ...(ctts ? [ctts] : []), ...(stss ? [stss] : []), stsc, stsz, stco);
-  return box('trak', tkhd, box('mdia', mdhd, hdlr, box('minf', header, dinf, stbl)));
+  return box('trak', tkhd, ...(edts ? [edts] : []), box('mdia', mdhd, hdlr, box('minf', header, dinf, stbl)));
 }
 
 function videoEntry(t) {

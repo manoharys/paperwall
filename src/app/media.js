@@ -38,6 +38,21 @@ function once(target, ok, bad = 'error', ms = 15000) {
   });
 }
 
+/**
+ * Wait for a video's first picture. iPhones and iPads load nothing until a
+ * video plays: a muted one may play by itself, so it's asked to, and stopped
+ * as soon as there's a picture.
+ */
+async function firstPicture(v) {
+  v.autoplay = true;
+  try {
+    await once(v, 'loadeddata');
+  } finally {
+    v.autoplay = false;
+    v.pause();
+  }
+}
+
 /** A video's size, length and a poster (a small JPEG of an early frame). */
 export async function videoInfo(file) {
   const url = URL.createObjectURL(file);
@@ -47,7 +62,7 @@ export async function videoInfo(file) {
   v.preload = 'auto';
   try {
     v.src = url;
-    await once(v, 'loadeddata');
+    await firstPicture(v);
     // Some recordings (from a browser's recorder, say) don't say how long they
     // are until the player has been to the end: send it there to find out.
     if (!Number.isFinite(v.duration)) {
@@ -138,7 +153,7 @@ export class VideoFrames {
       ready: this.urlFor(el.assetId).then((url) => {
         if (!url || this.disposed) return false;
         video.src = url;
-        return once(video, 'loadeddata').then(() => true, () => false);
+        return firstPicture(video).then(() => true, () => false);
       }).catch(() => false),
     };
     this.players.set(el.id, p);

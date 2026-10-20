@@ -119,10 +119,11 @@ export function pageGrid(editor, canvas) {
  * Show pages full screen, one at a time, playing their animations and the
  * transitions between them. Arrow keys move, Escape leaves. Hidden pages are
  * skipped. `autoplay` moves on by itself after each page's time (Play).
+ * `only`: just the page in view, once (a preview of its motion, no soundtrack).
  */
-export function present(editor, canvas, { autoplay = false } = {}) {
+export function present(editor, canvas, { autoplay = false, only = false } = {}) {
   const doc = editor.doc;
-  const shown = visiblePages(doc);
+  const shown = only ? [editor.page] : visiblePages(doc);
   if (!shown.length) return toast('Every page is hidden. Show a page to present it.');
   // Start on the page in view, or the next visible one after it (the last
   // visible one if none come after).
@@ -137,7 +138,7 @@ export function present(editor, canvas, { autoplay = false } = {}) {
   const videos = new VideoFrames(doc);
   const tl = timeline(doc, shown);
   // The soundtrack plays with Play (as the panel says), not plain presenting.
-  const sound = autoplay ? soundtrackPlayer(doc) : null;
+  const sound = autoplay && !only ? soundtrackPlayer(doc) : null;
   // Videos are taken at the size they show on screen (the slide fits the
   // screen both ways), and at most 30 times a second, however fast the screen.
   const shownScale = () => Math.min(window.innerWidth / doc.width, window.innerHeight / doc.height);
@@ -166,7 +167,7 @@ export function present(editor, canvas, { autoplay = false } = {}) {
     const tr = transitionOf(page);
     // Once only videos or looping animations move, 30 frames a second is plenty.
     const settled = local >= Math.max(info.end, from !== null ? tr.duration : 0);
-    if (settled && info.keeps && !info.loops && !live) {
+    if (LIVE_VIDEO && settled && info.keeps && !info.loops && !live) {
       // Only videos move now: drawn once more, with each live video in its
       // own place in the slide (layered and clipped as designed), so no
       // picture is taken of them frame by frame.
@@ -261,6 +262,10 @@ export function present(editor, canvas, { autoplay = false } = {}) {
   root.focus();
   root.requestFullscreen?.().catch(() => null);
 }
+
+// Safari draws HTML inside SVG (the live video's place) without the page's
+// moves, turns and clipping, so there videos are shown as pictures throughout.
+const LIVE_VIDEO = typeof navigator === 'undefined' || !/^((?!chrome|chromium|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent);
 
 /** The design's soundtrack as something to play from a point, or null if it has none. */
 function soundtrackPlayer(doc) {

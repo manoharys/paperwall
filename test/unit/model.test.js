@@ -635,3 +635,14 @@ test('[EDIT-19] whole words without look-behind: a query starting with an emoji 
   assert.deepEqual('a 😀😀 b'.match(m()), ['😀', '😀']);
   assert.equal('😀'.replace(m(), () => 'X'), 'X');
 });
+
+test('[EDIT-12] align with a locked element: the others line up with it, it stays', () => {
+  const doc = design();
+  const a = rect({ x: 10, y: 10, w: 100, h: 50 });
+  const locked = rect({ x: 300, y: 200, w: 100, h: 50, locked: true });
+  addElement(doc, 0, a);
+  addElement(doc, 0, locked);
+  alignElements(doc, 0, [a.id], 'right', { toPage: false, within: [a.id, locked.id] });
+  assert.equal(a.x, 300);
+  assert.equal(locked.x, 300);
+});

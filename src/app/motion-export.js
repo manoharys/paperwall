@@ -45,6 +45,11 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal },
   // Videos on the pages are shown frame by frame, each at its exact moment.
   const videos = videosOn(doc, pages).length ? new VideoFrames(doc) : null;
   let last = null; // the last frame's picture, as SVG: a still moment isn't drawn again
+  const onPage = new Map(); // page index → its videos (worked out once)
+  const videosOf = (index) => {
+    if (!onPage.has(index)) onPage.set(index, videosOn(doc, [index]));
+    return onPage.get(index);
+  };
   try {
     for (let i = 0; i < count; i++) {
       if (signal?.aborted) throw new Error('Stopped');
@@ -54,7 +59,7 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal },
       if (videos) {
         // Each video has its own player: they all seek at once.
         const wanted = [[frame.index, frame.local], ...(frame.from ? [[frame.from.index, frame.from.local]] : [])]
-          .flatMap(([index, local]) => videosOn(doc, [index]).map((el) => [el, local]));
+          .flatMap(([index, local]) => videosOf(index).map((el) => [el, local]));
         const got = await Promise.all(wanted.map(([el, local]) => videos.seek(el, local)));
         wanted.forEach(([el], k) => pictures.set(el.id, got[k]));
       }

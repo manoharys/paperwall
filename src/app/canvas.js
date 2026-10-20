@@ -173,13 +173,17 @@ export class Canvas {
     });
   }
 
-  assetHref = (assetId) => {
+  // A blob: URL for an asset (or a video's poster: `part` 'poster'), made
+  // once, so redrawing doesn't copy the picture's data each time.
+  assetHref = (assetId, part) => {
     const a = this.ed.doc.assets[assetId];
-    if (!a) return '';
-    let entry = this.urls.get(assetId);
-    if (!entry || entry.dataUrl !== a.dataUrl) {
-      entry = { dataUrl: a.dataUrl, url: URL.createObjectURL(dataUrlToBlob(a.dataUrl)) };
-      this.urls.set(assetId, entry);
+    const dataUrl = part === 'poster' ? a?.poster : a?.dataUrl;
+    if (!dataUrl) return '';
+    const key = part === 'poster' ? `${assetId}|poster` : assetId;
+    let entry = this.urls.get(key);
+    if (!entry || entry.dataUrl !== dataUrl) {
+      entry = { dataUrl, url: URL.createObjectURL(dataUrlToBlob(dataUrl)) };
+      this.urls.set(key, entry);
     }
     return entry.url;
   };

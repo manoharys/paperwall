@@ -447,7 +447,7 @@ export class Editor {
   }
 
   /** Use a sound from Uploads as the design's soundtrack (null takes it away). */
-  setSoundtrack(upload, volume = 1) {
+  setSoundtrack(upload, volume = this.doc.audio?.volume ?? 1) {
     this.change(() => {
       if (!upload) delete this.doc.audio;
       else this.doc.audio = { assetId: addAsset(this.doc, { ...upload, kind: 'audio' }), volume };
@@ -879,10 +879,10 @@ export class Editor {
   // selection (its bounds include held connectors, which then follow their
   // elements). A selection of nothing but held connectors is left alone.
   align(how) {
-    // Only what can move; to the page only when one thing is selected (with a
-    // held connector, the element lines up with the selection: it stays).
+    // Only what can move, along the edges of the whole selection (locked
+    // elements and held connectors included); to the page when one thing is selected.
     const ids = this.movable;
-    if (ids.length) this.change(() => cmd.alignElements(this.doc, this.page, ids, how, { toPage: this.selection.length === 1 }));
+    if (ids.length) this.change(() => cmd.alignElements(this.doc, this.page, ids, how, { toPage: this.selection.length === 1, within: this.selection }));
   }
 
   distribute(axis) {

@@ -203,11 +203,14 @@ export function buildPalette(datas, max = 256) {
   });
 }
 
-/** Nearest palette color for an RGB color, remembered per 5-bit-per-channel cell. */
+/**
+ * Nearest palette color for an RGB color, remembered per 6-bit-per-channel
+ * cell: fine enough that close tints (a #fafafa card on white) stay apart.
+ */
 function paletteMapper(palette) {
-  const cache = new Int16Array(32768).fill(-1);
+  const cache = new Int16Array(262144).fill(-1);
   return (r, g, b) => {
-    const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+    const key = ((r >> 2) << 12) | ((g >> 2) << 6) | (b >> 2);
     let hit = cache[key];
     if (hit >= 0) return hit;
     let best = 0;

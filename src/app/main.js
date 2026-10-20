@@ -136,7 +136,7 @@ async function openEditor(id) {
   const meta = (await store.listDesigns()).find((d) => d.id === doc.id);
   if (!meta?.thumb) editor.thumb();
   const canvas = new Canvas(editor);
-  const inspector = new Inspector(editor, canvas, { onResizeDesign: () => resizeDialog(editor), onPlay: () => present(editor, canvas, { autoplay: true }) });
+  const inspector = new Inspector(editor, canvas, { onResizeDesign: () => resizeDialog(editor), onPlay: (how) => present(editor, canvas, { autoplay: true, ...how }) });
   const insert = new InsertPanel(editor);
   const strip = new PageStrip(editor, canvas);
   const nameInput = h('input', { class: 'doc-name', value: doc.name, 'aria-label': 'Design name', 'data-testid': 'doc-name', maxlength: '120' });

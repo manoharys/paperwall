@@ -93,6 +93,15 @@ test('[MOT-04] presenting plays a page\'s animations too (without moving on by i
   await page.waitForTimeout(1500);
   assert.ok((await page.textContent('.slide-count')).startsWith('1 /'), 'still on the first page');
   await page.keyboard.press('Escape');
+  // "Play this page" (in an element's Animate panel) plays just that page.
+  await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    ed.select([ed.pageData.elements.find((e) => e.anim).id]);
+  });
+  await page.click('[data-testid="anim-play"]');
+  await page.waitForSelector('[data-testid="presenter"]');
+  assert.equal(await page.textContent('.slide-count'), '1 / 1');
+  await page.keyboard.press('Escape');
   await context.close();
 });
 

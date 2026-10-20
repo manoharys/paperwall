@@ -361,3 +361,40 @@ test('[MOT-06] MP4: the last sample lasts as long as the frame shown last', asyn
   const last = entries[entries.length - 1];
   assert.equal(last[1], 4500, '50 ms at 90 kHz');
 });
+
+test('[MOT-05] GIF: close tints stay apart (a #fafafa card on white)', async () => {
+  const { encodeGif } = await import('../../src/model/gif.js');
+  const W = 20;
+  const H = 10;
+  const d = new Uint8ClampedArray(W * H * 4);
+  for (let i = 0; i < W * H; i++) d.set(i % W < 10 ? [255, 255, 255, 255] : [250, 250, 250, 255], i * 4);
+  const gif = readGif(encodeGif([{ data: d, delay: 100 }], { width: W, height: H, dither: false }));
+  const img = gif.frames[0].image;
+  assert.deepEqual(img[0], [255, 255, 255]);
+  assert.deepEqual(img[15], [250, 250, 250]);
+});
+
+test('[MOT-06] MP4: reordered frames get offsets of zero or more, and an edit list', async () => {
+  const { buildMp4, readBoxes } = await import('../../src/model/mp4.js');
+  const chunk = (timestamp, key = false) => ({ data: new Uint8Array(4), timestamp, duration: 33333, key });
+  // Decode order I P B B: shown at 0, 99, 33, 66 ms.
+  const bytes = buildMp4({ video: { codec: 'vp9', width: 2, height: 2, chunks: [chunk(0, true), chunk(99999), chunk(33333), chunk(66666)] }, duration: 0.13 });
+  const inside = (b, type) => readBoxes(bytes, b.start, b.end).find((x) => x.type === type);
+  const moov = readBoxes(bytes).find((b) => b.type === 'moov');
+  const trak = inside(moov, 'trak');
+  const edts = inside(trak, 'edts');
+  assert.ok(edts, 'an edit list');
+  const stbl = inside(inside(inside(trak, 'mdia'), 'minf'), 'stbl');
+  const ctts = inside(stbl, 'ctts');
+  const view = new DataView(bytes.buffer, bytes.byteOffset);
+  assert.equal(bytes[ctts.start], 0, 'version 0');
+  const n = view.getUint32(ctts.start + 4);
+  for (let i = 0, k = 0; k < n; k++) {
+    const count = view.getUint32(ctts.start + 8 + k * 8);
+    const offset = view.getInt32(ctts.start + 12 + k * 8);
+    assert.ok(offset >= 0, `sample ${i}: offset ${offset}`);
+    i += count;
+  }
+  const elst = inside(edts, 'elst');
+  assert.equal(view.getUint32(elst.start + 12), 3000, 'starts a frame in (33 ms at 90 kHz)');
+});

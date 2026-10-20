@@ -24,7 +24,8 @@ function makeCtx(doc, opts) {
     defs: [],
     id: (kind) => `${opts.idPrefix || 'pl'}-${kind}-${n++}`,
     measure: opts.measure || approxMeasure,
-    href: opts.assetHref || ((assetId) => doc.assets[assetId]?.dataUrl || ''),
+    // `part`: 'poster' for a video's poster picture, else the file itself.
+    href: opts.assetHref || ((assetId, part) => doc.assets[assetId]?.[part === 'poster' ? 'poster' : 'dataUrl'] || ''),
     editor: !!opts.editor,
     // Empty-frame placeholders: while editing and in page previews, never in downloads.
     placeholders: !!(opts.editor || opts.placeholders),
@@ -156,7 +157,7 @@ function renderImage(ctx, el) {
  */
 function renderVideo(ctx, el) {
   const asset = ctx.doc.assets[el.assetId];
-  const href = ctx.videoFrame?.(el) || asset?.poster || '';
+  const href = ctx.videoFrame?.(el) || (asset ? ctx.href(el.assetId, 'poster') : '');
   // Presenting a page whose videos play live: a place for the playing video
   // itself (put in after drawing), framed and clipped like a picture.
   const pic = renderPicture(ctx, el, href, ctx.videoSlots && asset ? 'slot' : 'image'); // no picture at all: the grey box of a missing image
