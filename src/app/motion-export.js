@@ -84,8 +84,11 @@ export async function exportGif(doc, pages, { size = null, onProgress, signal } 
   const { width, height } = frameSize(doc, 'gif', size);
   const fps = FPS.gif;
   const gif = new GifEncoder({ width, height });
-  await eachFrame(doc, pages, { fps, width, height, onProgress, signal }, (canvas, ctx) => {
-    gif.add(ctx.getImageData(0, 0, width, height).data, 1000 / fps);
+  // GIF delays are whole hundredths of a second: each frame gets its share of
+  // the clock, rounded, so the whole GIF keeps time (no drift).
+  const at = (i) => Math.round((i * 100) / fps) * 10;
+  await eachFrame(doc, pages, { fps, width, height, onProgress, signal }, (canvas, ctx, i) => {
+    gif.add(ctx.getImageData(0, 0, width, height).data, at(i + 1) - at(i));
   });
   return new Blob([gif.finish()], { type: 'image/gif' });
 }
@@ -98,7 +101,8 @@ export function canMakeVideo() {
 /** The best video encoding this browser offers for a container, or null. */
 async function pickVideoCodec(container, width, height) {
   const tries = container === 'mp4'
-    ? [['avc', 'avc1.640028'], ['avc', 'avc1.4d0028'], ['avc', 'avc1.42001f'], ['vp9', 'vp09.00.40.08']]
+    // H.264 at level 5.1 first (big frames, up to 4K), then 4.0 and 3.1 for smaller encoders.
+    ? [['avc', 'avc1.640033'], ['avc', 'avc1.640028'], ['avc', 'avc1.4d0028'], ['avc', 'avc1.42001f'], ['vp9', 'vp09.00.40.08']]
     : [['vp9', 'vp09.00.40.08'], ['vp8', 'vp8']];
   for (const [codec, codecString] of tries) {
     const config = { codec: codecString, width, height, bitrate: Math.round(width * height * 30 * 0.12), framerate: FPS.video, ...(codec === 'avc' ? { avc: { format: 'avc' } } : {}) };

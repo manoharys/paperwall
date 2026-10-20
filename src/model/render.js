@@ -548,10 +548,12 @@ function renderMoving(ctx, page, el, order, time, size) {
   if (!anim || el.hidden) return renderElement(ctx, el);
   const m = motionAt(anim, time, size);
   const typing = anim.type === 'typewriter';
-  // Only text types out; anything else given Typewriter fades in at the same pace.
-  const opacity = typing && el.type !== 'text' ? m.typed : m.opacity;
+  // Only straight text types out; anything else given Typewriter (curved
+  // text too) fades in at the same pace.
+  const types = el.type === 'text' && !el.curve;
+  const opacity = typing && !types ? m.typed : m.opacity;
   if (opacity <= 0.001 || m.reveal <= 0.001) return '';
-  const body = renderElement(ctx, typing && el.type === 'text' && m.typed < 1 ? { ...el, _typed: m.typed } : el);
+  const body = renderElement(ctx, typing && types && m.typed < 1 ? { ...el, _typed: m.typed } : el);
   const b = boundsOf(el);
   const cx = b.x + b.w / 2;
   const cy = b.y + b.h / 2;

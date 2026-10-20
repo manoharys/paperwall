@@ -91,29 +91,31 @@ export function blobUrl(dataUrl) {
 export class VideoFrames {
   constructor(doc) {
     this.doc = doc;
-    this.players = new Map(); // assetId → { video, url, ready }
+    // One player per element (two elements may show the same file from
+    // different points): element id → { video, url, ready (resolves to whether it loaded) }.
+    this.players = new Map();
     this.canvas = document.createElement('canvas');
   }
 
-  player(assetId) {
-    let p = this.players.get(assetId);
+  player(el) {
+    let p = this.players.get(el.id);
     if (p) return p;
-    const asset = this.doc.assets[assetId];
+    const asset = this.doc.assets[el.assetId];
     const video = document.createElement('video');
     video.muted = true;
     video.playsInline = true;
     video.preload = 'auto';
     const url = asset ? blobUrl(asset.dataUrl) : '';
     video.src = url;
-    p = { video, url, ready: url ? once(video, 'loadeddata').catch(() => null) : Promise.resolve() };
-    this.players.set(assetId, p);
+    p = { video, url, ready: url ? once(video, 'loadeddata').then(() => true, () => false) : Promise.resolve(false) };
+    this.players.set(el.id, p);
     return p;
   }
 
-  /** The picture of `el` at `local` seconds into its page, exactly (waits for the seek). */
+  /** The picture of `el` at `local` seconds into its page, exactly (waits for the seek). Null if it can't be played here. */
   async seek(el, local) {
-    const p = this.player(el.assetId);
-    await p.ready;
+    const p = this.player(el);
+    if (!(await p.ready)) return null; // the poster shows instead
     const v = p.video;
     const t = videoTime(el, local, v.duration);
     if (Math.abs(v.currentTime - t) > 0.001) {
@@ -127,10 +129,16 @@ export class VideoFrames {
   /** Start the videos of a page playing, from where the page begins. */
   start(els) {
     for (const el of els) {
-      const p = this.player(el.assetId);
-      p.ready.then(() => {
+      const p = this.player(el);
+      p.ready.then((ok) => {
+        if (!ok) return;
         const v = p.video;
-        v.loop = el.loop !== false;
+        // Looping goes back to the start point (as downloads do), not to 0.
+        v.loop = false;
+        v.onended = el.loop === false ? null : () => {
+          v.currentTime = videoTime(el, 0, v.duration);
+          v.play().catch(() => null);
+        };
         v.currentTime = videoTime(el, 0, v.duration);
         v.play().catch(() => null);
       });
@@ -139,7 +147,7 @@ export class VideoFrames {
 
   /** Whatever `el`'s video is showing now. */
   capture(el) {
-    const p = this.players.get(el.assetId);
+    const p = this.players.get(el.id);
     return p && p.video.readyState >= 2 ? this.grab(p.video, el) : null;
   }
 

@@ -137,7 +137,7 @@ class ByteWriter {
 /** Up to `max` colors that stand for the frames well (median cut over a sample of pixels). */
 export function buildPalette(datas, max = 256) {
   const total = datas.reduce((n, d) => n + d.length / 4, 0);
-  const step = Math.max(1, Math.floor(total / 120000));
+  const step = Math.max(1, Math.floor(total / 60000));
   const px = [];
   let k = 0;
   for (const d of datas) {
@@ -146,42 +146,48 @@ export function buildPalette(datas, max = 256) {
   // Few colors (a flat design): use them as they are.
   const distinct = [...new Set(px)];
   if (distinct.length <= max) return distinct.map((c) => [(c >> 16) & 255, (c >> 8) & 255, c & 255]);
-  let boxes = [px];
-  const channel = (c, ch) => (c >> (16 - ch * 8)) & 255;
+  // A box knows its widest channel and how much it would gain from a split,
+  // worked out once when the box is made.
+  const makeBox = (list) => {
+    const lo = [255, 255, 255];
+    const hi = [0, 0, 0];
+    for (const c of list) {
+      const r = (c >> 16) & 255;
+      const g = (c >> 8) & 255;
+      const b = c & 255;
+      if (r < lo[0]) lo[0] = r;
+      if (r > hi[0]) hi[0] = r;
+      if (g < lo[1]) lo[1] = g;
+      if (g > hi[1]) hi[1] = g;
+      if (b < lo[2]) lo[2] = b;
+      if (b > hi[2]) hi[2] = b;
+    }
+    const spans = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
+    const ch = spans.indexOf(Math.max(...spans));
+    return { list, ch, score: list.length < 2 ? 0 : spans[ch] * Math.sqrt(list.length) };
+  };
+  const boxes = [makeBox(px)];
   while (boxes.length < max) {
-    // Split the box with the most spread (times its size) along its widest channel.
-    let best = -1;
-    let bestScore = 0;
-    let bestCh = 0;
-    boxes.forEach((b, i) => {
-      if (b.length < 2) return;
-      for (let ch = 0; ch < 3; ch++) {
-        let lo = 255;
-        let hi = 0;
-        for (const c of b) {
-          const v = channel(c, ch);
-          if (v < lo) lo = v;
-          if (v > hi) hi = v;
-        }
-        const score = (hi - lo) * Math.sqrt(b.length);
-        if (score > bestScore) [best, bestScore, bestCh] = [i, score, ch];
-      }
-    });
-    if (best < 0) break;
-    const b = boxes[best].sort((x, y) => channel(x, bestCh) - channel(y, bestCh));
-    const mid = b.length >> 1;
-    boxes = [...boxes.slice(0, best), b.slice(0, mid), b.slice(mid), ...boxes.slice(best + 1)];
+    // Split the box with the most spread (for its size) along its widest channel.
+    let best = 0;
+    for (let i = 1; i < boxes.length; i++) if (boxes[i].score > boxes[best].score) best = i;
+    const box = boxes[best];
+    if (box.score <= 0) break;
+    const shift = 16 - box.ch * 8;
+    const sorted = box.list.sort((x, y) => ((x >> shift) & 255) - ((y >> shift) & 255));
+    const mid = sorted.length >> 1;
+    boxes.splice(best, 1, makeBox(sorted.slice(0, mid)), makeBox(sorted.slice(mid)));
   }
-  return boxes.filter((b) => b.length).map((b) => {
+  return boxes.filter((b) => b.list.length).map(({ list }) => {
     let r = 0;
     let g = 0;
     let bl = 0;
-    for (const c of b) {
+    for (const c of list) {
       r += (c >> 16) & 255;
       g += (c >> 8) & 255;
       bl += c & 255;
     }
-    return [Math.round(r / b.length), Math.round(g / b.length), Math.round(bl / b.length)];
+    return [Math.round(r / list.length), Math.round(g / list.length), Math.round(bl / list.length)];
   });
 }
 

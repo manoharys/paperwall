@@ -621,3 +621,10 @@ test('[EDIT-19] whole words without look-behind: any letter counts, no match is 
   assert.equal('über über'.replace(m('über'), () => 'X'), 'X X');
   assert.equal('abc'.match(m('b')), null);
 });
+
+test('[EDIT-19] whole words without look-behind keep every non-overlapping match', async () => {
+  const { wordMatcher } = await import('../../src/model/find.js');
+  const m = () => wordMatcher(/--(?![\p{L}\p{N}])/gu);
+  assert.deepEqual('----'.match(m()), ['--', '--']);
+  assert.equal('----'.replace(m(), () => 'X'), 'XX');
+});

@@ -255,3 +255,20 @@ test('[MOT-07] a video plays from its start point, looping or holding its last f
   validateDesign(doc);
   assert.equal(doc.audio, undefined, 'a soundtrack whose sound is gone is dropped');
 });
+
+test('[MOT-05] GIF palette: many colors are reduced quickly to at most 256', async () => {
+  const { buildPalette } = await import('../../src/model/gif.js');
+  const d = new Uint8ClampedArray(720 * 720 * 4);
+  for (let i = 0; i < 720 * 720; i++) d.set([(i * 7) & 255, (i >> 3) & 255, (i * 13) & 255, 255], i * 4);
+  const t0 = performance.now();
+  const p = buildPalette([d], 256);
+  const ms = performance.now() - t0;
+  assert.ok(p.length <= 256 && p.length > 200, `${p.length} colors`);
+  assert.ok(ms < 1500, `took ${Math.round(ms)} ms`);
+});
+
+test('[MOT-03] a transition never runs longer than half its page', async () => {
+  const { transitionOf } = await import('../../src/model/motion.js');
+  assert.equal(transitionOf({ duration: 0.5, transition: { type: 'fade' } }).duration, 0.25);
+  assert.equal(transitionOf({ duration: 5, transition: { type: 'fade' } }).duration, 0.6);
+});

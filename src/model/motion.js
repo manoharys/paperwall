@@ -50,8 +50,9 @@ export function pageDuration(page) {
 export function transitionOf(page) {
   const t = page?.transition;
   if (!t || !TRANSITIONS[t.type] || t.type === 'none') return { type: 'none', duration: 0 };
+  // Never longer than half the page's time, so it always finishes on the page.
   const d = Number(t.duration);
-  return { type: t.type, duration: Number.isFinite(d) && d > 0 ? Math.min(d, pageDuration(page) / 2) : DEFAULT_TRANSITION_DURATION };
+  return { type: t.type, duration: Math.min(Number.isFinite(d) && d > 0 ? d : DEFAULT_TRANSITION_DURATION, pageDuration(page) / 2) };
 }
 
 /**

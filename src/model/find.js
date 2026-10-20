@@ -34,8 +34,14 @@ function wordMatcher(re) {
       if (m.index === 0 || !WORD_CHAR.test(text[m.index - 1])) out.push(m);
       re.lastIndex = m.index + 1;
     }
-    // Overlapping matches (a query like "--" in "---") count once, left first.
-    return out.filter((m, i) => i === 0 || m.index >= out[i - 1].index + out[i - 1][0].length);
+    // Overlapping matches (a query like "--" in "---") count once, left first:
+    // each is checked against the last one kept.
+    const kept = [];
+    for (const m of out) {
+      const last = kept[kept.length - 1];
+      if (!last || m.index >= last.index + last[0].length) kept.push(m);
+    }
+    return kept;
   };
   return {
     [Symbol.match]: (text) => {

@@ -154,7 +154,10 @@ export function present(editor, canvas, { autoplay = false } = {}) {
     root.dataset.time = local.toFixed(2);
     if (autoplay && local >= pageDuration(page)) {
       if (at < shown.length - 1) return go(at + 1, true);
-      return; // the end: the last page stays
+      // The end: the last page stays, and sound and videos stop with it (as in a download).
+      videos.pauseAll();
+      sound?.pause();
+      return;
     }
     // Keep drawing while anything moves (or until the page's time is up, when playing).
     const moving = local < Math.max(animationsEnd(page), from !== null ? tr.duration : 0) || page.elements.some((el) => ANIMATIONS[animationOf(page, el)?.type]?.loop) || videosOn(doc, [i]).length > 0;
@@ -221,6 +224,9 @@ function soundtrackPlayer(doc) {
       };
       if (audio.readyState >= 1) go();
       else audio.addEventListener('loadedmetadata', go, { once: true });
+    },
+    pause() {
+      audio.pause();
     },
     stop() {
       audio.pause();
