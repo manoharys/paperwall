@@ -61,7 +61,7 @@ export function popoverOpen() {
 
 document.addEventListener('pointerdown', (e) => {
   // A popover's own button toggles it on click, so leave those clicks to it.
-  if (openPopover && !openPopover.contains(e.target) && !e.target.closest?.('.swatch-btn, .font-btn')) closePopover();
+  if (openPopover && !openPopover.contains(e.target) && !e.target.closest?.('.swatch-btn, .font-btn, .menu-btn')) closePopover();
 });
 
 /**
@@ -314,4 +314,18 @@ export function gradientEditor({ label, value, onChange, getContext, testid }) {
       type: 'button', class: 'grad-preset', title: p.name, 'aria-label': p.name, 'data-testid': `grad-preset-${p.name}`, style: { background: cssGradient(p, 135) },
       onClick: () => emit({ stops: p.stops.map((s) => ({ ...s })) }),
     }))));
+}
+
+/**
+ * A small menu that opens under a button, built by `content()` each time it
+ * opens. Clicking the button again closes it.
+ */
+export function menuButton({ iconName, label, testid, content }) {
+  const btn = iconButton(iconName, label, () => {
+    if (openPopover?.dataset.for === label) return closePopover();
+    closePopover();
+    const pop = h('div', { class: 'popover menu-pop', 'data-for': label, 'data-testid': `${testid}-menu` }, content());
+    showPopover(pop, btn, { alignRight: true });
+  }, { 'data-testid': testid, class: 'icon-btn menu-btn' });
+  return btn;
 }

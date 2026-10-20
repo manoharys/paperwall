@@ -40,7 +40,9 @@
         { "id": "VIEW-02", "title": "Zoom to fit the page" },
         { "id": "VIEW-03", "title": "Scroll around a zoomed-in page" },
         { "id": "VIEW-04", "title": "Dark mode" },
-        { "id": "VIEW-05", "title": "Present pages full screen and move with the arrow keys" }
+        { "id": "VIEW-05", "title": "Present pages full screen and move with the arrow keys" },
+        { "id": "VIEW-06", "title": "Rulers and guides you drag out, which elements snap to" },
+        { "id": "VIEW-07", "title": "Grid with snapping, safe margins and print bleed" }
       ]
     },
     {

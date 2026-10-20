@@ -359,3 +359,63 @@ test('[EDIT-18] keyboard shortcuts cheat sheet', async () => {
   assert.deepEqual((await elements(page)).map((e) => e.type), ['text', 'shape', 'shape', 'line']);
   await context.close();
 });
+
+// ---------- rulers, guides, grid ----------
+
+test('[VIEW-06] rulers and guides you drag out, which elements snap to', async () => {
+  const { page, context } = await newDesign('square');
+  await page.keyboard.press('Shift+R');
+  assert.ok(await page.locator('[data-testid="ruler-x"]').isVisible());
+  // Pull a vertical guide out of the left ruler to x = 300.
+  const ruler = await page.locator('[data-testid="ruler-y"]').boundingBox();
+  const to = await screenPoint(page, 300, 500);
+  await drag(page, { x: ruler.x + 10, y: to.y }, to, { steps: 10 });
+  let guides = await state(page, (ed) => ed.pageData.guides || []);
+  assert.equal(guides.length, 1);
+  assert.equal(guides[0].axis, 'x');
+  assert.ok(Math.abs(guides[0].pos - 300) <= 2, `guide at ${guides[0].pos}`);
+  assert.equal(await page.locator('[data-testid="guide"]').count(), 1);
+  // A shape dragged near the guide snaps its left edge to it.
+  const s = await addShape(page, 'Square');
+  const c = await elementCenter(page, s.id);
+  const target = await screenPoint(page, 300 + s.w / 2 + 3, 400);
+  await drag(page, c, target, { steps: 12 });
+  const moved = (await elements(page)).find((e) => e.id === s.id);
+  assert.equal(Math.round(moved.x), Math.round(guides[0].pos), 'snapped to the guide');
+  // Guides are part of the design: undo removes them; dragging one off the page deletes it.
+  for (let i = 0; i < 3; i++) await page.keyboard.press(`${mod}+z`); // move, add shape, add guide
+  assert.equal((await state(page, (ed) => ed.pageData.guides || [])).length, 0);
+  await page.keyboard.press(`${mod}+Shift+z`);
+  guides = await state(page, (ed) => ed.pageData.guides || []);
+  assert.equal(guides.length, 1);
+  const g = await screenPoint(page, guides[0].pos, 900);
+  await page.mouse.click(10, 10);
+  await drag(page, g, { x: g.x - 2000, y: g.y }, { steps: 6 });
+  assert.equal((await state(page, (ed) => ed.pageData.guides || [])).length, 0);
+  await context.close();
+});
+
+test('[VIEW-07] grid with snapping, safe margins and print bleed', async () => {
+  const { page, context } = await newDesign('square');
+  await page.click('[data-testid="view"]');
+  await page.click('[data-testid="view-grid"]');
+  await page.click('[data-testid="view-margins"]');
+  await page.click('[data-testid="view-bleed"]');
+  assert.equal(await page.locator('[data-testid="grid-lines"]').count(), 1);
+  assert.equal(await page.locator('[data-testid="margin-box"]').count(), 1);
+  assert.equal(await page.locator('[data-testid="bleed-zone"]').count(), 1);
+  await page.keyboard.press('Escape');
+  // Settings are remembered after a reload; none of it shows in exports.
+  await page.reload();
+  await page.waitForFunction(() => window.paperwall?.editor);
+  assert.equal(await page.locator('[data-testid="grid-lines"]').count(), 1);
+  const svg = await page.evaluate(async () => (await window.paperwall.export.exportSvg(window.paperwall.editor.doc, 0)).text());
+  assert.ok(!/grid-lines|margin-box|bleed/.test(svg));
+  // Elements snap to grid lines (every 54 px on a 1080 px page).
+  const s = await addShape(page, 'Square');
+  const c = await elementCenter(page, s.id);
+  await drag(page, c, await screenPoint(page, 220 + s.w / 2, 300 + s.h / 2), { steps: 12 });
+  const moved = (await elements(page)).find((e) => e.id === s.id);
+  assert.equal(Math.round(moved.x) % 54, 0, `x ${moved.x} is on the grid`);
+  await context.close();
+});

@@ -90,6 +90,7 @@ const UI_ICONS = {
   open: '<path d="M3.5 7.5V18.5h17v-9h-9l-2-2z"/>',
   save: '<path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/>',
   crop: '<path d="M7 3v14h14M3 7h14v14"/>',
+  ruler: '<path d="M3 8h18v8H3z"/><path d="M7 8v3M11 8v4M15 8v3M19 8v4"/>',
   draw: '<path d="M4 20c2-1 3-4 5-4s2 3 4 3 3-5 7-8"/><path d="M15 4l5 5"/>',
   paint: '<rect x="4" y="3.5" width="14" height="6" rx="1"/><path d="M18 6.5h2v5h-8v3M11 14.5h2v6h-2z"/>',
   pasteStyle: '<rect x="3.5" y="3.5" width="11" height="5" rx="1"/><path d="M14.5 6h2v4h-6.5v2.5M9 12.5h2v5H9z"/><path d="M16 15.5h5M18.5 13v5"/>',

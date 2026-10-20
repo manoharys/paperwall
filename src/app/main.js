@@ -14,6 +14,7 @@ import { loadFonts, registerDesignFonts, ensureDesignFonts, clearMeasureCache } 
 import * as store from './store.js';
 import { validateDesign } from '../model/doc.js';
 import { fontsUsed } from '../model/fonts.js';
+import { menuButton, toggle, segmented } from './widgets.js';
 
 const root = document.getElementById('app');
 let current = null; // { editor, unbind }
@@ -142,6 +143,7 @@ async function openEditor(id) {
     h('div', { class: 'top-group right' },
       iconButton('present', 'Present', () => present(editor, canvas), { 'data-testid': 'present' }),
       iconButton('save', 'Save to file', () => saveProjectFile(editor.doc), { 'data-testid': 'save-file' }),
+      menuButton({ iconName: 'ruler', label: 'View: rulers, guides, grid', testid: 'view', content: () => viewMenu(editor) }),
       iconButton('keyboard', 'Keyboard shortcuts (?)', () => cheatSheet(), { 'data-testid': 'shortcuts-btn' }),
       iconButton('moon', 'Dark mode', toggleTheme, { 'data-testid': 'theme-toggle' }),
       h('button', { type: 'button', class: 'btn primary', 'data-testid': 'download', onClick: () => exportDialog(editor) }, icon('download'), h('span', null, 'Download'))));
@@ -217,3 +219,26 @@ async function boot() {
 }
 
 boot();
+
+/** Rulers, guides, grid, margins and bleed: how the page is shown, not part of the design. */
+function viewMenu(editor) {
+  const v = editor.view;
+  const set = (patch) => {
+    editor.setView(patch);
+    // Rebuild the menu so dependent settings appear and disappear.
+    const pop = document.querySelector('[data-testid="view-menu"]');
+    pop?.replaceChildren(viewMenu(editor));
+  };
+  return h('div', { class: 'stack' },
+    toggle({ label: 'Rulers (Shift+R)', checked: v.rulers, testid: 'view-rulers', onChange: (rulers) => set({ rulers }) }),
+    h('p', { class: 'hint' }, 'Drag from a ruler to add a guide. Drag a guide off the page to remove it.'),
+    h('button', { type: 'button', class: 'btn small', 'data-testid': 'view-clear-guides', onClick: () => editor.clearGuides() }, 'Clear guides on this page'),
+    toggle({ label: 'Grid', checked: v.grid, testid: 'view-grid', onChange: (grid) => set({ grid }) }),
+    v.grid ? segmented({ label: 'Grid size', value: v.gridSize, testid: 'view-grid-size', onChange: (gridSize) => set({ gridSize }), options: [
+      { value: 'small', label: 'Small grid', text: 'Small' }, { value: 'medium', label: 'Medium grid', text: 'Medium' }, { value: 'large', label: 'Large grid', text: 'Large' },
+    ] }) : null,
+    v.grid ? toggle({ label: 'Snap to grid', checked: v.snapGrid, testid: 'view-snap-grid', onChange: (snapGrid) => set({ snapGrid }) }) : null,
+    toggle({ label: 'Safe margins', checked: v.margins, testid: 'view-margins', onChange: (margins) => set({ margins }) }),
+    toggle({ label: 'Print bleed (3 mm)', checked: v.bleed, testid: 'view-bleed', onChange: (bleed) => set({ bleed }) }),
+    v.bleed ? h('p', { class: 'hint' }, 'Anything past the dashed red line may be trimmed when printed; let backgrounds run to the edge.') : null);
+}

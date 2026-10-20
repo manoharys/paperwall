@@ -347,6 +347,7 @@ export function validateDesign(doc) {
   for (const p of doc.pages) {
     if (!p || !Array.isArray(p.elements)) throw new Error('A page in this design is damaged');
     p.elements = clean(p.elements);
+    if (p.guides !== undefined) p.guides = (Array.isArray(p.guides) ? p.guides : []).filter((g) => g && (g.axis === 'x' || g.axis === 'y') && Number.isFinite(+g.pos)).map((g) => ({ axis: g.axis, pos: +g.pos }));
   }
   for (const [id, a] of Object.entries(doc.assets)) {
     if (!a || typeof a.dataUrl !== 'string' || !/^data:(image|font)\//.test(a.dataUrl)) delete doc.assets[id];

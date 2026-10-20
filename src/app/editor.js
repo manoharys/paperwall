@@ -11,6 +11,31 @@ import { fitHeight } from '../model/text-layout.js';
 import { curveGeometry } from '../model/render.js';
 import { unionBounds, pointInBox } from '../model/geometry.js';
 import { gridBoxes } from '../model/grids.js';
+
+const VIEW_KEY = 'paperwall-view';
+const DEFAULT_VIEW = { rulers: false, grid: false, gridSize: 'medium', snapGrid: true, margins: false, bleed: false };
+
+function loadView() {
+  try {
+    return { ...DEFAULT_VIEW, ...JSON.parse(localStorage.getItem(VIEW_KEY) || '{}') };
+  } catch {
+    return { ...DEFAULT_VIEW };
+  }
+}
+
+/** Grid spacing in page px: a share of the page's shorter side. */
+export function gridStep(doc, size = 'medium') {
+  const share = { small: 1 / 40, medium: 1 / 20, large: 1 / 10 }[size] || 1 / 20;
+  return Math.max(4, Math.round(Math.min(doc.width, doc.height) * share));
+}
+
+/** Safe margin: keep important things inside it. */
+export function marginSize(doc) {
+  return Math.round(Math.min(doc.width, doc.height) * 0.05);
+}
+
+/** Print bleed: 3 mm at 300 dpi, the strip that may be trimmed off. */
+export const BLEED = 35;
 import { measure, ensureFont } from './fonts.js';
 import { removePlainBackground } from '../model/bgremove.js';
 import { readFileAsDataUrl, loadImage, toast, debounce } from './ui.js';
@@ -30,6 +55,7 @@ export class Editor {
     this.editingTextId = null;
     this.cropId = null;
     this.drawTool = null; // { tool, color, size } while drawing
+    this.view = loadView();
     this.guides = [];
     this.listeners = new Set();
     this.onOpenDesign = onOpenDesign;
@@ -271,6 +297,64 @@ export class Editor {
       if ((!el.assetId || (el.mask && el.mask !== 'none')) && pointInBox(p.x, p.y, el)) return el;
     }
     return null;
+  }
+
+  // ---------- view: rulers, guides, grid, margins, bleed ----------
+
+  /** Change how the page is shown (not part of the design). Remembered in this browser. */
+  setView(patch) {
+    this.view = { ...this.view, ...patch };
+    try {
+      localStorage.setItem(VIEW_KEY, JSON.stringify(this.view));
+    } catch {
+      /* private mode: fine for this session */
+    }
+    this.emit('view');
+  }
+
+  /** Lines to snap to besides elements: your guides, and the grid when snapping to it. */
+  snapLines() {
+    const x = [];
+    const y = [];
+    for (const g of this.pageData.guides || []) (g.axis === 'x' ? x : y).push(g.pos);
+    const v = this.view;
+    if (v.grid && v.snapGrid) {
+      const step = gridStep(this.doc, v.gridSize);
+      for (let p = step; p < this.doc.width; p += step) x.push(p);
+      for (let p = step; p < this.doc.height; p += step) y.push(p);
+    }
+    if (v.margins) {
+      const m = marginSize(this.doc);
+      x.push(m, this.doc.width - m);
+      y.push(m, this.doc.height - m);
+    }
+    return { x, y };
+  }
+
+  /** Guides are part of the page, so they're saved and can be undone. */
+  addGuide(axis, pos) {
+    this.change(() => (this.pageData.guides = [...(this.pageData.guides || []), { axis, pos: Math.round(pos) }]));
+    return this.pageData.guides.length - 1;
+  }
+
+  moveGuide(i, pos, live = false) {
+    const g = this.pageData.guides?.[i];
+    if (!g) return;
+    if (live) {
+      g.pos = Math.round(pos);
+      return this.emit('view');
+    }
+    this.change(() => (g.pos = Math.round(pos)));
+  }
+
+  removeGuide(i) {
+    if (!this.pageData.guides?.[i]) return;
+    this.change(() => this.pageData.guides.splice(i, 1));
+  }
+
+  clearGuides() {
+    if (!this.pageData.guides?.length) return;
+    this.change(() => (this.pageData.guides = []));
   }
 
   /** Turn a freehand stroke (page points) into a drawing with the current tool. */

@@ -7,7 +7,8 @@ import {
   pointInBox, rectFromPoints, rectsIntersect, HANDLES,
 } from '../model/geometry.js';
 import { resizeElement, coverCrop } from '../model/commands.js';
-import { clone, DRAW_TOOLS } from '../model/doc.js';
+import { clone, DRAW_TOOLS, fromPx } from '../model/doc.js';
+import { gridStep, marginSize, BLEED } from './editor.js';
 import { measure } from './fonts.js';
 import { h, dataUrlToBlob, toast, pickFile } from './ui.js';
 import * as store from './store.js';
@@ -26,7 +27,10 @@ export class Canvas {
     this.svgHost = h('div', { class: 'page-svg' });
     this.overlay = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     this.overlay.setAttribute('class', 'overlay');
-    this.wrap = h('div', { class: 'page-wrap', 'data-testid': 'page' }, this.svgHost, this.overlay);
+    // Rulers sit just outside the page's top and left edges and scroll with it.
+    this.rulerX = h('div', { class: 'ruler x', 'data-testid': 'ruler-x', title: 'Drag down to add a guide' });
+    this.rulerY = h('div', { class: 'ruler y', 'data-testid': 'ruler-y', title: 'Drag right to add a guide' });
+    this.wrap = h('div', { class: 'page-wrap', 'data-testid': 'page' }, this.svgHost, this.overlay, this.rulerX, this.rulerY);
     this.board = h('div', { class: 'board' }, this.wrap);
     this.el = h('div', { class: 'stage', 'data-testid': 'stage', tabindex: '-1' }, this.board);
     this.textarea = null;
@@ -53,6 +57,7 @@ export class Canvas {
     editor.on((what) => {
       if (what === 'live') return this.schedule();
       if (what === 'tool') return void this.el.classList.toggle('drawing', !!editor.drawTool);
+      if (what === 'view') return void this.drawOverlay();
       // Discrete changes draw right away; drags are batched per frame.
       if (this.frame) cancelAnimationFrame(this.frame);
       this.frame = 0;
@@ -169,6 +174,7 @@ export class Canvas {
         parts.push(`<rect class="handle" data-handle="${hd}" x="${p.x * z - 6}" y="${p.y * z - 6}" width="12" height="12" rx="3"/>`);
       }
     }
+    this.drawViewAids(parts);
     for (const g of ed.guides) {
       if (g.axis === 'x') parts.push(`<line class="guide" x1="${g.pos * z}" y1="-10000" x2="${g.pos * z}" y2="10000"/>`);
       else parts.push(`<line class="guide" x1="-10000" y1="${g.pos * z}" x2="10000" y2="${g.pos * z}"/>`);
@@ -223,6 +229,24 @@ export class Canvas {
       return;
     }
     const p = this.toPage(e);
+    const ruler = e.target.closest?.('.ruler');
+    if (ruler) {
+      // Pull a new guide out of a ruler.
+      e.preventDefault();
+      const axis = ruler === this.rulerX ? 'y' : 'x';
+      this.drag = { mode: 'guide', index: ed.addGuide(axis, axis === 'x' ? p.x : p.y), axis, isNew: true };
+      this.el.setPointerCapture(e.pointerId);
+      return;
+    }
+    const guide = e.target.closest?.('[data-guide]');
+    if (guide && !ed.drawTool) {
+      e.preventDefault();
+      const index = +guide.getAttribute('data-guide');
+      ed.history.record(ed.doc);
+      this.drag = { mode: 'guide', index, axis: ed.pageData.guides[index].axis };
+      this.el.setPointerCapture(e.pointerId);
+      return;
+    }
     if (ed.drawTool) {
       // Drawing: every press on the page starts a new stroke.
       e.preventDefault();
@@ -295,6 +319,10 @@ export class Canvas {
       }
       return;
     }
+    if (d.mode === 'guide') {
+      ed.moveGuide(d.index, d.axis === 'x' ? p.x : p.y, true);
+      return;
+    }
     if (d.mode === 'draw') {
       for (const ev of e.getCoalescedEvents?.() || [e]) {
         const q = this.toPage(ev);
@@ -324,7 +352,7 @@ export class Canvas {
       ed.guides = [];
       if (!e.altKey) {
         const others = ed.pageData.elements.filter((el) => !el.hidden && !ed.selection.includes(el.id));
-        const snap = snapMove(moving, others, { w: ed.doc.width, h: ed.doc.height }, 6 / ed.zoom);
+        const snap = snapMove(moving, others, { w: ed.doc.width, h: ed.doc.height }, 6 / ed.zoom, ed.snapLines());
         dx += snap.dx;
         dy += snap.dy;
         ed.guides = snap.guides;
@@ -400,6 +428,14 @@ export class Canvas {
       return;
     }
     if (d.mode === 'pan') return;
+    if (d.mode === 'guide') {
+      // A guide dragged off the page is removed.
+      const g = ed.pageData.guides[d.index];
+      const size = d.axis === 'x' ? ed.doc.width : ed.doc.height;
+      if (g && (g.pos < 0 || g.pos > size)) ed.removeGuide(d.index);
+      else ed.afterChange();
+      return;
+    }
     if (d.mode === 'draw') {
       this.stroke?.remove();
       this.stroke = null;
@@ -532,6 +568,61 @@ export class Canvas {
       ed.afterChange();
     }
     this.el.focus({ preventScroll: true });
+  }
+
+  /** Grid, margins, bleed and your guides, plus the rulers. None of it is exported. */
+  drawViewAids(parts) {
+    const ed = this.ed;
+    const v = ed.view;
+    const z = ed.zoom;
+    const W = ed.doc.width;
+    const H = ed.doc.height;
+    if (v.grid) {
+      const step = gridStep(ed.doc, v.gridSize);
+      const d = [];
+      for (let x = step; x < W; x += step) d.push(`M${x * z} 0V${H * z}`);
+      for (let y = step; y < H; y += step) d.push(`M0 ${y * z}H${W * z}`);
+      parts.push(`<path class="grid-lines" data-testid="grid-lines" d="${d.join('')}"/>`);
+    }
+    if (v.margins) {
+      const m = marginSize(ed.doc) * z;
+      parts.push(`<rect class="margin-box" data-testid="margin-box" x="${m}" y="${m}" width="${W * z - m * 2}" height="${H * z - m * 2}"/>`);
+    }
+    if (v.bleed) {
+      const b = BLEED * z;
+      parts.push(`<path class="bleed-zone" data-testid="bleed-zone" fill-rule="evenodd" d="M0 0H${W * z}V${H * z}H0Z M${b} ${b}V${H * z - b}H${W * z - b}V${b}Z"/>`);
+      parts.push(`<rect class="bleed-line" x="${b}" y="${b}" width="${W * z - b * 2}" height="${H * z - b * 2}"/>`);
+    }
+    (ed.pageData.guides || []).forEach((g, i) => {
+      const line = g.axis === 'x' ? `x1="${g.pos * z}" y1="0" x2="${g.pos * z}" y2="${H * z}"` : `x1="0" y1="${g.pos * z}" x2="${W * z}" y2="${g.pos * z}"`;
+      parts.push(`<g class="user-guide ${g.axis}" data-guide="${i}" data-testid="guide"><line class="hit" ${line}/><line ${line}/></g>`);
+    });
+    this.drawRulers();
+  }
+
+  drawRulers() {
+    const ed = this.ed;
+    const on = ed.view.rulers;
+    this.rulerX.hidden = this.rulerY.hidden = !on;
+    if (!on) return;
+    const z = ed.zoom;
+    // A tick step that stays readable at any zoom: 1, 2 or 5 × a power of ten.
+    const raw = 60 / z;
+    const pow = 10 ** Math.floor(Math.log10(raw));
+    const step = [1, 2, 5, 10].map((k) => k * pow).find((s) => s >= raw);
+    const ticks = (len, vertical) => {
+      const out = [];
+      for (let v = 0; v <= len; v += step / 5) {
+        const major = Math.abs(v / step - Math.round(v / step)) < 1e-6;
+        const p = v * z;
+        out.push(vertical ? `<line x1="${major ? 0 : 14}" y1="${p}" x2="20" y2="${p}"/>` : `<line x1="${p}" y1="${major ? 0 : 14}" x2="${p}" y2="20"/>`);
+        const label = ed.doc.unit && ed.doc.unit !== 'px' ? fromPx(v, ed.doc.unit) : Math.round(v);
+        if (major) out.push(vertical ? `<text x="2" y="${p + 10}">${label}</text>` : `<text x="${p + 3}" y="10">${label}</text>`);
+      }
+      return out.join('');
+    };
+    this.rulerX.innerHTML = `<svg width="${ed.doc.width * z}" height="20">${ticks(ed.doc.width, false)}</svg>`;
+    this.rulerY.innerHTML = `<svg width="20" height="${ed.doc.height * z}">${ticks(ed.doc.height, true)}</svg>`;
   }
 
   /** Show the stroke being drawn, on top of the page. */

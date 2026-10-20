@@ -103,6 +103,7 @@ export function bindShortcuts(editor, canvas, actions) {
     }
     if (e.key === '?') return done(), cheatSheet();
     if (k === 't') return done(), editor.addText('body');
+    if (k === 'r' && e.shiftKey) return done(), editor.setView({ rulers: !editor.view.rulers });
     if (k === 'r') return done(), editor.addShape('rect');
     if (k === 'o') return done(), editor.addShape('ellipse');
     if (k === 'l') return done(), editor.addLine();

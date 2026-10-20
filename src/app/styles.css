@@ -382,3 +382,21 @@ kbd { font: 12px ui-monospace, monospace; background: var(--panel-2); border: 1p
 .draw-colors { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
 .draw-colors .swatch.on { outline: 2px solid var(--accent); outline-offset: 2px; }
 .live-stroke { pointer-events: none; }
+
+/* Rulers, guides, grid, margins, bleed (shown while editing, never exported) */
+.ruler { position: absolute; background: var(--panel); color: var(--muted); font: 9px var(--font); cursor: copy; touch-action: none; z-index: 2; }
+.ruler.x { left: 0; right: 0; top: -22px; height: 20px; border-bottom: 1px solid var(--line); cursor: row-resize; }
+.ruler.y { top: 0; bottom: 0; left: -22px; width: 20px; border-right: 1px solid var(--line); cursor: col-resize; }
+.ruler[hidden] { display: none; }
+.ruler svg { display: block; overflow: visible; }
+.ruler line { stroke: currentColor; stroke-width: 1; }
+.ruler text { fill: currentColor; }
+.overlay .grid-lines { fill: none; stroke: rgba(47, 111, 237, .22); stroke-width: 1; }
+.overlay .margin-box { fill: none; stroke: #8e44ad; stroke-width: 1; stroke-dasharray: 6 4; }
+.overlay .bleed-zone { fill: rgba(217, 45, 32, .08); }
+.overlay .bleed-line { fill: none; stroke: var(--danger); stroke-width: 1; stroke-dasharray: 4 4; }
+.overlay .user-guide line { stroke: #ff2d95; stroke-width: 1; }
+.overlay .user-guide .hit { stroke: transparent; stroke-width: 9; pointer-events: stroke; }
+.overlay .user-guide.x { cursor: col-resize; }
+.overlay .user-guide.y { cursor: row-resize; }
+.menu-pop { width: 280px; }
