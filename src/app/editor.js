@@ -884,7 +884,7 @@ export class Editor {
     // (they stay), held connectors don't (they follow, so they'd shift the
     // edges with every press). To the page when that's one thing.
     const ids = this.movable;
-    if (ids.length) this.change(() => cmd.alignElements(this.doc, this.page, ids, how, { toPage: ids.length === 1, within: ids }));
+    if (ids.length) this.change(() => cmd.alignElements(this.doc, this.page, ids, how));
   }
 
   distribute(axis) {

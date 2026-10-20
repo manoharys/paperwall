@@ -2,7 +2,7 @@
 // VP9 where H.264 isn't on offer) and audio (AAC or Opus); this lays the
 // pieces out as an MP4 with the index first, so it starts playing at once.
 
-import { opusPreSkip } from './webm.js';
+import { opusPreSkip } from './opus.js';
 
 import { concat } from './bytes.js';
 

@@ -262,16 +262,15 @@ export function ungroup(doc, pageIndex, groupId) {
 
 /**
  * Align elements. With one element, or toPage, they line up with the page;
- * with several, they line up with the edges of the selection (`within`: the
- * ids that make it up, locked ones too; by default, `ids`). Locked ones stay.
+ * with several, they line up with the edges of the selection (locked ones
+ * count, but stay where they are).
  */
-export function alignElements(doc, pageIndex, ids, how, { toPage, within = ids } = {}) {
-  const page = getPage(doc, pageIndex);
-  const els = selectElements(page, ids).filter((e) => !e.locked);
+export function alignElements(doc, pageIndex, ids, how, { toPage } = {}) {
+  const all = selectElements(getPage(doc, pageIndex), ids);
+  const els = all.filter((e) => !e.locked);
   if (!els.length) return;
-  const around = selectElements(page, within);
-  const usePage = toPage ?? around.length === 1;
-  const ref = usePage ? { x: 0, y: 0, w: doc.width, h: doc.height } : unionBounds(around.length ? around : els);
+  const usePage = toPage ?? all.length === 1;
+  const ref = usePage ? { x: 0, y: 0, w: doc.width, h: doc.height } : unionBounds(all);
   for (const el of els) {
     const b = boundsOf(el);
     let dx = 0;

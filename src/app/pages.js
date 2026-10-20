@@ -299,6 +299,7 @@ function soundtrackPlayer(doc) {
     const gain = mixer.createGain();
     gain.gain.value = volume;
     mixer.createMediaElementSource(audio).connect(gain).connect(mixer.destination);
+    mixer.resume?.().catch(() => null); // in case it starts held
   } catch {
     mixer?.close?.().catch(() => null);
     mixer = null;

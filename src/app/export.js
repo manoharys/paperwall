@@ -159,14 +159,10 @@ function motionNote(doc, pages) {
 export async function soundtrackBuffer(doc) {
   const a = soundtrackOf(doc);
   if (!a) return null;
-  const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
+  // Offline: decoding needs no speakers (and Safari allows only a few live contexts).
+  const Ctx = globalThis.OfflineAudioContext || globalThis.webkitOfflineAudioContext;
   if (!Ctx) return null;
-  const ctx = new Ctx();
-  try {
-    return await ctx.decodeAudioData(dataUrlToBytes(a.dataUrl).bytes.buffer);
-  } finally {
-    ctx.close?.();
-  }
+  return new Ctx(1, 1, 48000).decodeAudioData(dataUrlToBytes(a.dataUrl).bytes.buffer);
 }
 
 export function exportDialog(editor) {

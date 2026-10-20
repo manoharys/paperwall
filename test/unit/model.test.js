@@ -642,7 +642,7 @@ test('[EDIT-12] align with a locked element: the others line up with it, it stay
   const locked = rect({ x: 300, y: 200, w: 100, h: 50, locked: true });
   addElement(doc, 0, a);
   addElement(doc, 0, locked);
-  alignElements(doc, 0, [a.id], 'right', { toPage: false, within: [a.id, locked.id] });
+  alignElements(doc, 0, [a.id, locked.id], 'right');
   assert.equal(a.x, 300);
   assert.equal(locked.x, 300);
 });
