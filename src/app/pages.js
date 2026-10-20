@@ -1,6 +1,6 @@
 // The strip of pages along the bottom, and presenting pages full screen.
 
-import { h, icon, iconButton, clear, debounce, dialog, toast } from './ui.js';
+import { h, icon, iconButton, clear, debounce, dialog, toast, lazily, forget } from './ui.js';
 import { renderPage } from '../model/render.js';
 import { measure } from './fonts.js';
 import { visiblePages } from '../model/doc.js';
@@ -67,13 +67,17 @@ export function pageName(page, i) {
 export function pageGrid(editor, canvas) {
   const grid = h('ol', { class: 'page-grid', 'data-testid': 'page-grid' });
   const fill = () => {
+    forget(grid);
     clear(grid);
     editor.doc.pages.forEach((p, i) => {
+      // Each page is drawn once it scrolls into view: a long design opens at once.
+      const img = h('span', { class: 'page-img', style: { aspectRatio: `${editor.doc.width} / ${editor.doc.height}` } });
+      lazily(img, () => (img.innerHTML = renderPage(editor.doc, i, { measure, noSize: true, placeholders: true, idPrefix: `pg${i}`, assetHref: canvas.assetHref })));
       const card = h('li', { class: `pg-card${i === editor.page ? ' on' : ''}${p.hidden ? ' hidden-page' : ''}`, draggable: 'true', 'data-testid': 'page-grid-card' },
         h('button', { type: 'button', class: 'pg-open', 'aria-label': `Open ${pageName(p, i)}`, onClick: () => {
           editor.setPage(i);
           d.close();
-        } }, h('span', { class: 'page-img', style: { aspectRatio: `${editor.doc.width} / ${editor.doc.height}` }, html: renderPage(editor.doc, i, { measure, noSize: true, placeholders: true, idPrefix: `pg${i}`, assetHref: canvas.assetHref }) })),
+        } }, img),
         h('div', { class: 'pg-meta' },
           h('b', null, String(i + 1)),
           h('span', null, p.title || ''),
@@ -90,7 +94,7 @@ export function pageGrid(editor, canvas) {
     });
   };
   fill();
-  const d = dialog(`All pages (${editor.doc.pages.length})`, grid, { wide: true, testid: 'page-grid-dialog' });
+  const d = dialog(`All pages (${editor.doc.pages.length})`, grid, { wide: true, testid: 'page-grid-dialog', onClose: () => forget(grid) });
   return d;
 }
 

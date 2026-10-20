@@ -288,9 +288,13 @@ export class Canvas {
     if (guide) {
       // Next to an element lined up on the guide, the element wins unless the
       // press is right on the line.
-      const g = ed.pageData.guides[+guide.getAttribute('data-guide')];
-      const off = Math.abs((g.axis === 'x' ? p.x : p.y) - g.pos) * ed.zoom;
-      if (off > 1.5 && this.hitTest(p)) guide = null;
+      const g = ed.pageData.guides?.[+guide.getAttribute('data-guide')];
+      // The overlay can be a frame behind (a guide just went away).
+      if (!g) guide = null;
+      else {
+        const off = Math.abs((g.axis === 'x' ? p.x : p.y) - g.pos) * ed.zoom;
+        if (off > 1.5 && this.hitTest(p)) guide = null;
+      }
     }
     if (guide) {
       e.preventDefault();

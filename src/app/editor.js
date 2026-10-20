@@ -5,7 +5,7 @@ import { History } from '../model/history.js';
 import * as cmd from '../model/commands.js';
 import {
   createText, createShape, createLine, createImage, createFrame, createDrawing, thinPoints, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
-  TEXT_STYLES, clone,
+  TEXT_STYLES, clone, versionSnapshot,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
 import { curveGeometry } from '../model/render.js';
@@ -159,14 +159,15 @@ export class Editor {
   async saveVersion(label = '', { snapshot = null, quick = false } = {}) {
     this.versionAt = Date.now();
     this.changedSinceVersion = false;
-    // The design as it is right now, before anything below waits. Images
-    // never change once added, so they're shared rather than copied.
-    snapshot ||= { ...clone({ ...this.doc, assets: undefined }), assets: { ...this.doc.assets } };
+    // The design as it is right now, before anything below waits.
+    snapshot ||= versionSnapshot(this.doc);
     try {
       // A small picture of the first page, so the history list needn't load
       // whole designs: the home-screen one if it's up to date, else a new one.
-      const fresh = this.lastThumb?.at >= snapshot.updatedAt ? this.lastThumb.url : null;
-      const thumb = fresh || (quick || !this.makeThumb ? null : await this.makeThumb(snapshot).catch(() => null));
+      const fresh = () => (this.lastThumb?.at >= snapshot.updatedAt ? this.lastThumb.url : null);
+      // A home-screen thumbnail is usually on its way: draw it now and use it for both.
+      if (!fresh() && !quick) await this.thumb.flush();
+      const thumb = fresh() || (quick || !this.makeThumb ? null : await this.makeThumb(snapshot).catch(() => null));
       await store.saveVersion(snapshot, { label, thumb });
     } catch {
       /* history is a convenience; saving the design itself matters more */

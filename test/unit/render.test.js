@@ -459,3 +459,13 @@ test('[ELM-09] pasting a thicker line style onto a drawing grows its box too', a
   assert.equal(thin.strokeWidth, 40);
   assert.deepEqual([thin.x, thin.y, thin.w, thin.h].map((n) => Math.round(n)), [80, 80, 240, 40]);
 });
+
+test('[ELM-10] an elbow with a short first or last leg never runs backwards under its arrow', async () => {
+  const { createConnector, connectorGeometry } = await import('../../src/model/connectors.js');
+  const el = createConnector({ from: [0, 0], to: [10, 200], route: 'elbow', strokeWidth: 6 });
+  el.start.side = 'r';
+  const g = connectorGeometry(el, { start: 0, end: 15.4 });
+  const xs = g.pts.map(([x]) => x);
+  assert.ok(xs.every((x, i) => i === 0 || x >= xs[i - 1]), `heads right all the way: ${g.d}`);
+  assert.ok(xs.at(-1) <= 10);
+});

@@ -160,6 +160,13 @@ export function connectorGeometry(el, trim = { start: 0, end: 0 }) {
     const k = room / (trim.start + trim.end);
     trim = { start: trim.start * k, end: trim.end * k };
   }
+  // An elbow's first and last legs can be shorter than the trim: trim no more
+  // than each, so the line never doubles back past its own end.
+  if (el.route === 'elbow') {
+    const leg = (p, q) => Math.hypot(q[0] - p[0], q[1] - p[1]) * 0.9;
+    const n = g.pts.length;
+    trim = { start: Math.min(trim.start, leg(g.pts[0], g.pts[1])), end: Math.min(trim.end, leg(g.pts[n - 2], g.pts[n - 1])) };
+  }
   const unit = ([x, y]) => {
     const l = Math.hypot(x, y) || 1;
     return [x / l, y / l];

@@ -200,6 +200,7 @@ export function createDrawing(points, { tool = 'pen', stroke = '#1a1a2e', stroke
  * the thicker (or thinner) line still fits inside it, with the line in place.
  */
 export function restroke(el, width) {
+  if (!el.points?.length) return { strokeWidth: width }; // nothing drawn: no box to fit
   const abs = el.points.map(([x, y]) => [el.x + x * el.w, el.y + y * el.h]);
   const { x, y, w, h, points } = createDrawing(abs, { strokeWidth: width });
   return { x, y, w, h, points, strokeWidth: width };
@@ -374,4 +375,9 @@ export function validateDesign(doc) {
 
 export function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+/** A copy of a design for its version history. Images never change once added, so they're shared, not copied. */
+export function versionSnapshot(doc) {
+  return { ...clone({ ...doc, assets: undefined }), assets: { ...doc.assets } };
 }

@@ -12,7 +12,7 @@ import { exportDialog, saveProjectFile, thumbnail, api as exportApi } from './ex
 import { renderHome } from './home.js';
 import { loadFonts, registerDesignFonts, ensureDesignFonts, clearMeasureCache } from './fonts.js';
 import * as store from './store.js';
-import { validateDesign, clone } from '../model/doc.js';
+import { validateDesign, versionSnapshot } from '../model/doc.js';
 import { fontsUsed } from '../model/fonts.js';
 import { menuButton, toggle, segmented } from './widgets.js';
 import { findDialog } from './find.js';
@@ -118,15 +118,15 @@ async function openEditor(id) {
     onOpenDesign: (newId) => (location.hash = `#/d/${newId}`),
     makeThumb: thumbnail,
   });
-  // The first time a design is opened, keep its original as a version; after
-  // that, the next version comes after a few minutes of work.
-  // The original is copied now, before any edit can land while storage answers.
-  const original = { ...clone({ ...doc, assets: undefined }), assets: { ...doc.assets } };
-  hasVersions(doc.id).then((has) => (has ? (editor.versionAt = Date.now()) : editor.saveVersion('Original', { snapshot: original }))).catch(() => null);
   if (pendingFit) {
     editor.refitAllText();
     pendingFit = false;
   }
+  // The first time a design is opened, keep its original as a version; after
+  // that, the next version comes after a few minutes of work. The original is
+  // copied now (text measured), before any edit can land while storage answers.
+  const original = versionSnapshot(doc);
+  hasVersions(doc.id).then((has) => (has ? (editor.versionAt = Date.now()) : editor.saveVersion('Original', { snapshot: original }))).catch(() => null);
   const meta = (await store.listDesigns()).find((d) => d.id === doc.id);
   if (!meta?.thumb) editor.thumb();
   const canvas = new Canvas(editor);
