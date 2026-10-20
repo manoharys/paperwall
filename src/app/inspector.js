@@ -80,15 +80,16 @@ export class Inspector {
 
   // ---------- helpers ----------
 
-  up(props, key, ids) {
-    this.ed.update(props, key, ids);
+  up(props, key, ids, pageId) {
+    this.ed.update(props, key, ids, pageId);
   }
 
   /** Charts and tables draw labels in two weights; load both first. */
   async setFont(font) {
     const ids = this.ed.selection;
+    const pageId = this.ed.pageData.id;
     await Promise.all([ensureFont(font, 400), ensureFont(font, 700)]);
-    this.up({ font }, null, ids);
+    this.up({ font }, null, ids, pageId);
   }
 
   live(prop, transform = (v) => v) {

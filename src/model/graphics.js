@@ -109,6 +109,14 @@ export const ALL_ICONS = [
 
 const byId = new Map(ALL_ICONS.map((i) => [i.id, i]));
 
+// Lower-case text to search in, worked out once per graphic.
+const haystack = new Map();
+const hay = (g) => {
+  let s = haystack.get(g.id);
+  if (s === undefined) haystack.set(g.id, (s = `${g.name} ${g.tags} ${g.id}`.toLowerCase()));
+  return s;
+};
+
 export function iconById(id) {
   return byId.get(id) || null;
 }
@@ -128,10 +136,12 @@ export function stickerById(id) {
  */
 export function searchGraphics(query, { limit = Infinity } = {}) {
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const hay = (g) => `${g.name.toLowerCase()} ${g.tags} ${g.id}`;
   const match = (g) => words.every((w) => hay(g).includes(w));
-  const rank = (g) => (words.length && g.name.toLowerCase().startsWith(words[0]) ? 0 : 1);
-  const icons = ALL_ICONS.filter(match);
-  if (words.length) icons.sort((a, b) => rank(a) - rank(b));
+  let icons = ALL_ICONS.filter(match);
+  if (words.length) {
+    // Names that start with the first word come first; otherwise keep the order.
+    const first = icons.filter((g) => hay(g).startsWith(words[0]));
+    icons = [...first, ...icons.filter((g) => !hay(g).startsWith(words[0]))];
+  }
   return { icons: icons.slice(0, limit), stickers: ALL_STICKERS.filter(match), total: icons.length };
 }

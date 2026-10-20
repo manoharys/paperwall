@@ -124,6 +124,7 @@ export class InsertPanel {
   async useTemplate(t) {
     const ed = this.ed;
     const doc = await readyTemplate(t);
+    if (ed.closed) return; // the design was closed while the template loaded
     // Decide only now, after the wait: the design may have changed meanwhile.
     const blank = ed.doc.pages.length === 1 && !ed.pageData.elements.length ? ed.pageData.id : null;
     ed.addTemplatePage(doc);
@@ -356,8 +357,13 @@ export class InsertPanel {
 export function templateCard(t, onClick) {
   const img = h('span', { class: 'tpl-img', style: { aspectRatio: `${t.width} / ${t.height}` } });
   lazily(img, async () => {
-    const doc = await readyTemplate(t);
-    img.innerHTML = renderPage(doc, 0, { measure, noSize: true, idPrefix: `tp-${t.id}` });
+    try {
+      const doc = await readyTemplate(t);
+      img.innerHTML = renderPage(doc, 0, { measure, noSize: true, idPrefix: `tp-${t.id}` });
+    } catch (e) {
+      img.classList.add('broken');
+      console.warn(`Couldn't draw template ${t.id}`, e);
+    }
   });
   const meta = t.pages > 1 ? `${templateFormatLabel(t)} · ${t.pages} pages` : templateFormatLabel(t);
   // Previews sit in same-sized frames so rows line up, whatever the format.

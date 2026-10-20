@@ -284,20 +284,23 @@ export class Editor {
 
   /** Switch the selected text to another font, once it has loaded. */
   async setFont(font) {
-    // Remember what was selected: the selection can change while the font loads.
+    // Remember what was selected, and where: either can change while the font loads.
     const ids = this.selection;
+    const pageId = this.pageData.id;
     const weights = new Set(this.selected.map((el) => el.weight || 400));
     await Promise.all([...weights].map((w) => ensureFont(font, w)));
-    this.update({ font }, null, ids);
+    this.update({ font }, null, ids, pageId);
   }
 
-  /** Change elements (the selection by default) on the current page. */
-  update(props, key = null, ids = this.selection) {
-    ids = ids.filter((id) => cmd.findElement(this.pageData, id));
+  /** Change elements (the selection by default) on a page (the current one by default). */
+  update(props, key = null, ids = this.selection, pageId = this.pageData.id) {
+    const page = this.doc.pages.findIndex((p) => p.id === pageId);
+    if (page < 0) return;
+    ids = ids.filter((id) => cmd.findElement(this.doc.pages[page], id));
     if (!ids.length) return;
     this.change(() => {
-      cmd.updateElements(this.doc, this.page, ids, props);
-      for (const el of cmd.selectElements(this.pageData, ids)) if (el.type === 'text') this.fitText(el);
+      cmd.updateElements(this.doc, page, ids, props);
+      for (const el of cmd.selectElements(this.doc.pages[page], ids)) if (el.type === 'text') this.fitText(el);
     }, { key: key ? `${key}:${ids.join(',')}` : null });
   }
 
@@ -314,14 +317,21 @@ export class Editor {
     el.h = fitHeight(el, measure);
   }
 
+  /** Measure text again (all of it, or the boxes `which` picks). Returns whether any height changed. */
   refitAllText(which = () => true) {
+    let changed = false;
     const visit = (els) => {
       for (const el of els) {
-        if (el.type === 'text' && which(el)) this.fitText(el);
+        if (el.type === 'text' && which(el)) {
+          const before = [el.w, el.h];
+          this.fitText(el);
+          if (el.w !== before[0] || el.h !== before[1]) changed = true;
+        }
         if (el.type === 'group') visit(el.children);
       }
     };
     this.doc.pages.forEach((p) => visit(p.elements));
+    return changed;
   }
 
   deleteSelection() {

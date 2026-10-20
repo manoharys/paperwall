@@ -287,8 +287,7 @@ export function searchTemplates({ query = '', category = 'All', format = 'All' }
 }
 
 /** The fonts a template uses, without laying it out. */
-export function templateFonts(t) {
-  const spec = t.build();
+export function templateFonts(t, spec = t.build()) {
   return fontsUsed({ pages: spec.pages || [{ elements: spec.elements }] });
 }
 
@@ -296,9 +295,9 @@ export function templateFonts(t) {
  * A fresh, editable design made from a template. Text is fitted with
  * `measure`; pass the real font measurer once the template's fonts are
  * loaded (the rough default is fine for working out which fonts it uses).
+ * `spec` lets a caller reuse a fresh t.build() result.
  */
-export function templateDoc(t, measure = approxMeasure) {
-  const spec = t.build();
+export function templateDoc(t, measure = approxMeasure, spec = t.build()) {
   const pages = spec.pages || [{ background: spec.background, elements: spec.elements }];
   const doc = createDesign({ width: spec.width, height: spec.height, name: t.name });
   doc.pages = pages.map((p) => ({ ...createPage(clone(p.background)), elements: p.elements, flows: p.flows, after: p.after }));

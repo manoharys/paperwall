@@ -248,3 +248,11 @@ test('a hostile design file cannot inject markup into the page', async () => {
   assert.ok(!svg.includes('<img'), 'no raw tags');
   assert.ok(!/onerror=/.test(svg.replace(/&quot;&gt;&lt;img src=x onerror=alert\(1\)&gt;/g, '')), 'only escaped copies remain');
 });
+
+test('[ELM-07] icon parts drawn in currentColor follow the icon color', () => {
+  const doc = createDesign({ width: 200, height: 200 });
+  const filled = ALL_ICONS.find((i) => i.body.includes('currentColor'));
+  assert.ok(filled, 'some icons use currentColor');
+  addElement(doc, 0, createIcon(filled.id, { x: 0, y: 0, w: 100, h: 100, color: '#ff006e' }));
+  assert.match(renderPage(doc, 0, { measure: approxMeasure }), /<g [^>]*color="#ff006e"[^>]*stroke="#ff006e"/);
+});

@@ -2,12 +2,13 @@
 
 import { h, icon, iconButton, clear, toast, pickFile, dialog } from './ui.js';
 import { PRESETS, createDesign, createDesignFromPreset, toPx, uid, clone } from '../model/doc.js';
-import { templateBrowser } from './insert.js';
+import { templateBrowser, forget } from './insert.js';
 import { readyTemplate } from './templates.js';
 import * as store from './store.js';
 import { readProjectFile } from './export.js';
 
 export function renderHome(root, { openDesign, newDesign, toggleTheme, installPrompt }) {
+  forget(root);
   clear(root);
   const designsGrid = h('div', { class: 'design-grid', 'data-testid': 'my-designs' });
   const templates = templateBrowser({

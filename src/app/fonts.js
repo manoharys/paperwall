@@ -42,6 +42,12 @@ export async function ensureFont(name, weight = 400) {
   await Promise.all(list.map((f) => (f.status === 'loaded' ? null : f.load().catch(() => null))));
 }
 
+/** Whether a font is downloaded and usable (false if it failed to load). */
+export function fontLoaded(name, weight = 400) {
+  const list = faces.get(`${name}|${nearestWeight(name, weight)}`);
+  return !list || list.every((f) => f.status === 'loaded');
+}
+
 /** Every font a design uses, ready before its text is measured. */
 export async function ensureDesignFonts(doc) {
   await Promise.all(fontsUsed(doc).map(({ font, weight }) => ensureFont(font.name, weight)));

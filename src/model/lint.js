@@ -60,7 +60,9 @@ function backdropFor(page, index, el) {
       if (dx * dx + dy * dy > 1) continue;
     }
     if (o.type === 'shape' && o.fill) return o.fill;
-    if (o.type === 'image' || o.type === 'sticker' || o.type === 'chart') return null; // can't judge pictures
+    if (o.type === 'text' && o.highlight) return o.highlight.color;
+    // Pictures, groups, tables and codes have many colors: can't judge, so don't guess.
+    if (['image', 'sticker', 'chart', 'group', 'table', 'qr'].includes(o.type)) return null;
   }
   const bg = page.background;
   if (bg?.type === 'color') return bg.color;

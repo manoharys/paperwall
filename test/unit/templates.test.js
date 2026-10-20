@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createDesign, createText, createShape } from '../../src/model/doc.js';
+import { createDesign, createText, createShape, createTable } from '../../src/model/doc.js';
 import { approxMeasure, layoutText } from '../../src/model/text-layout.js';
 import { shrinkToFit, layoutDesign } from '../../src/model/layout.js';
 import { lintPage, contrast, hexToRgb } from '../../src/model/lint.js';
@@ -62,6 +62,12 @@ test('[TPL-08] the quality check finds broken words, overflow, overlap and low c
     createText({ text: 'Dark on dark', x: 100, y: 100, w: 600, h: 60, size: 40, color: '#222222' }),
   ]);
   assert.deepEqual(lintPage(onShape, 0, approxMeasure).map((x) => x.kind), ['contrast']);
+  // A table or group behind the text can't be judged, so it isn't guessed at.
+  const onTable = design([
+    createTable({ x: 0, y: 0, w: 1000, h: 500 }),
+    createText({ text: 'Over a table', x: 100, y: 100, w: 600, h: 60, size: 40, color: '#eeeeee' }),
+  ]);
+  assert.deepEqual(lintPage(onTable, 0, approxMeasure), []);
 });
 
 test('[TPL-08] every palette has readable pairings', () => {

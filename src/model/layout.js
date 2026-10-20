@@ -8,8 +8,8 @@ import { layoutText, fitHeight } from './text-layout.js';
 /** Shrink text until it fits in `maxLines` lines without breaking a word. */
 export function shrinkToFit(el, measure, { maxLines = Infinity, minSize = 8, maxHeight = Infinity } = {}) {
   for (let i = 0; i < 80; i++) {
-    const { lines, brokeWord } = layoutText(el, measure);
-    el.h = fitHeight(el, measure);
+    const { lines, brokeWord, height } = layoutText(el, measure);
+    el.h = Math.ceil(height + (el.highlight ? (el.highlight.padding ?? 0) * 2 : 0)); // as fitHeight()
     if (!brokeWord && lines.length <= maxLines && el.h <= maxHeight) return true;
     if (el.size <= minSize) return false;
     shrink(el, 0.95, minSize);
