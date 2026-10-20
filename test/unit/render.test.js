@@ -341,3 +341,33 @@ test('[ELM-09] drawings keep their shape when resized', async () => {
   assert.notEqual(before, after2);
   assert.equal(after2.split(' ').length, before.split(' ').length, 'same points, twice the size');
 });
+
+test('[ELM-10] connectors attach to elements and follow them', async () => {
+  const { createConnector, updateConnectors, endsOf, connectorGeometry } = await import('../../src/model/connectors.js');
+  const doc = createDesign({ width: 1000, height: 1000 });
+  const a = createShape('rect', { x: 100, y: 100, w: 200, h: 100 });
+  const b = createShape('rect', { x: 600, y: 400, w: 200, h: 100 });
+  const c = createConnector({ from: [0, 0], to: [1, 1], start: a.id, end: b.id, route: 'elbow' });
+  doc.pages[0].elements.push(c, a, b);
+  assert.ok(updateConnectors(doc.pages[0]));
+  let [s, e] = endsOf(c);
+  assert.deepEqual(s.map(Math.round), [300, 150], 'leaves a from its right side');
+  assert.deepEqual(e.map(Math.round), [600, 450], 'enters b from its left side');
+  assert.match(connectorGeometry(c).d, /^M[\d.]+ [\d.]+ H[\d.]+ V[\d.]+ H[\d.]+$/, 'elbow goes across, down, across');
+  // Move b below a: the ends switch to the facing sides.
+  Object.assign(b, { x: 100, y: 700 });
+  updateConnectors(doc.pages[0]);
+  [s, e] = endsOf(c);
+  assert.deepEqual(s.map(Math.round), [200, 200], 'bottom of a');
+  assert.deepEqual(e.map(Math.round), [200, 700], 'top of b');
+  // Delete b: that end stays where it was, now free.
+  doc.pages[0].elements = doc.pages[0].elements.filter((x) => x !== b);
+  updateConnectors(doc.pages[0]);
+  assert.equal(c.end.id, null);
+  const svg = renderPage(doc, 0, { measure: approxMeasure });
+  assert.ok(!/NaN|undefined/.test(svg));
+  for (const route of ['straight', 'curved']) {
+    c.route = route;
+    assert.ok(!/NaN/.test(connectorGeometry(c).d), route);
+  }
+});

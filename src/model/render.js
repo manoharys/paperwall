@@ -2,6 +2,7 @@
 // renderer, so what you see is exactly what you download.
 
 import { shapePath, dashArray, maskPath, drawPath } from './shapes.js';
+import { connectorGeometry, arrowHead } from './connectors.js';
 import { layoutText, displayText, approxMeasure } from './text-layout.js';
 import { iconById, stickerById } from './graphics.js';
 import { qrMatrix, qrPath } from './qr.js';
@@ -161,6 +162,18 @@ function renderImage(ctx, el) {
     shade = `<rect width="${f(el.w)}" height="${f(el.h)}" fill="url(#${id})"/>`;
   }
   return `<g clip-path="url(#${clip})"><image href="${esc(href)}" x="${f(-crop.x * iw)}" y="${f(-crop.y * ih)}" width="${f(iw)}" height="${f(ih)}" preserveAspectRatio="none"${fx ? ` filter="url(#${fx})"` : ''}/>${shade}</g>`;
+}
+
+function renderConnector(ctx, el) {
+  const { d, startDir, endDir } = connectorGeometry(el);
+  const sw = el.strokeWidth || 4;
+  const dash = dashArray(el.dash, sw);
+  const color = esc(el.stroke || '#000000');
+  const [a, b] = el.points.map(([fx, fy]) => [fx * el.w, fy * el.h]);
+  let out = `<path d="${d}" fill="none" stroke="${color}" stroke-width="${f(sw)}" stroke-linejoin="round" stroke-linecap="${dash ? 'round' : 'butt'}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`;
+  if (el.endCap === 'arrow') out += `<path d="${arrowHead(b, endDir, sw * 3.2)}" fill="${color}"/>`;
+  if (el.startCap === 'arrow') out += `<path d="${arrowHead(a, [-startDir[0], -startDir[1]], sw * 3.2)}" fill="${color}"/>`;
+  return out;
 }
 
 function renderIcon(ctx, el) {
@@ -434,6 +447,7 @@ const RENDERERS = {
   sticker: renderSticker,
   qr: renderQr,
   text: renderText,
+  connector: renderConnector,
   draw: (ctx, el) => `<path d="${drawPath(el)}" fill="none" stroke="${esc(el.stroke)}" stroke-width="${f(el.strokeWidth)}" stroke-linecap="round" stroke-linejoin="round"/>`,
   group: (ctx, el) => el.children.map((c) => renderElement(ctx, c)).join(''),
 };

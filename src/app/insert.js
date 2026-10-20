@@ -259,6 +259,12 @@ export class InsertPanel {
         type: 'button', class: 'thumb', title: g.name, 'aria-label': g.name, 'data-testid': `grid-${g.id}`, onClick: () => ed.addGrid(g),
         html: `<svg viewBox="0 0 100 100">${gridBoxes(g, 100, 100, { margin: 6, gap: 4 }).map((b) => `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="2" fill="#dcdce6"/>`).join('')}</svg>`,
       })))),
+      section('Connectors', h('p', { class: 'hint' }, 'Or select two elements and choose "Connect with a line".'),
+        h('div', { class: 'thumb-grid', 'data-testid': 'connector-grid' }, [
+          ['straight', 'Straight connector', '<path d="M10 70 L90 30" stroke="currentColor" stroke-width="4" fill="none"/><path d="M90 30 l-14 2 6 12z" fill="currentColor"/>'],
+          ['elbow', 'Elbow connector', '<path d="M10 70 H50 V30 H90" stroke="currentColor" stroke-width="4" fill="none"/><path d="M92 30 l-12 -7 v14z" fill="currentColor"/>'],
+          ['curved', 'Curved connector', '<path d="M10 70 C50 70 50 30 90 30" stroke="currentColor" stroke-width="4" fill="none"/><path d="M92 30 l-12 -7 v14z" fill="currentColor"/>'],
+        ].map(([route, label, svg]) => h('button', { type: 'button', class: 'thumb', title: label, 'aria-label': label, 'data-testid': `connector-${route}`, onClick: () => ed.addConnector(route), html: `<svg viewBox="0 0 100 100">${svg}</svg>` })))),
       section('Lines', h('div', { class: 'thumb-grid', 'data-testid': 'line-grid' }, LINE_ITEMS.map((l) => h('button', {
         type: 'button', class: 'thumb', title: l.label, 'aria-label': l.label, 'data-testid': `line-${l.label}`, onClick: () => ed.addLine(l.props),
         html: `<svg viewBox="0 0 100 40"><line x1="8" y1="20" x2="92" y2="20" stroke="currentColor" stroke-width="4" ${l.props.dash === 'dashed' ? 'stroke-dasharray="12 8"' : l.props.dash === 'dotted' ? 'stroke-dasharray="0 9" stroke-linecap="round"' : ''}/>${l.props.endCap ? '<path d="M94 20 82 12v16z" fill="currentColor"/>' : ''}${l.props.startCap ? '<path d="M6 20 18 12v16z" fill="currentColor"/>' : ''}</svg>`,

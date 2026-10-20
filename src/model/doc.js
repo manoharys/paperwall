@@ -341,7 +341,11 @@ export function validateDesign(doc) {
   const clean = (els) => els.filter((el) => el && typeof el === 'object' && typeof el.type === 'string' && typeof el.id === 'string').map((el) => {
     for (const k of NUMERIC) if (k in el && el[k] !== null) el[k] = Number.isFinite(+el[k]) ? +el[k] : 0;
     if (el.type === 'group') el.children = Array.isArray(el.children) ? clean(el.children) : [];
-    if (el.type === 'draw') el.points = (Array.isArray(el.points) ? el.points : []).filter((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite));
+    if (el.type === 'draw' || el.type === 'connector') el.points = (Array.isArray(el.points) ? el.points : []).filter((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite));
+    if (el.type === 'connector') {
+      if (el.points.length !== 2) el.points = [[0, 0], [1, 1]];
+      for (const k of ['start', 'end']) el[k] = { id: typeof el[k]?.id === 'string' ? el[k].id : null };
+    }
     return el;
   });
   for (const p of doc.pages) {

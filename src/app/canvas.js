@@ -9,6 +9,7 @@ import {
 import { resizeElement, coverCrop } from '../model/commands.js';
 import { clone, DRAW_TOOLS, fromPx } from '../model/doc.js';
 import { gridStep, marginSize, BLEED } from './editor.js';
+import { endsOf, setEnds } from '../model/connectors.js';
 import { measure } from './fonts.js';
 import { h, dataUrlToBlob, toast, pickFile } from './ui.js';
 import * as store from './store.js';
@@ -100,6 +101,7 @@ export class Canvas {
 
   render() {
     const ed = this.ed;
+    ed.syncConnectors();
     this.layout();
     const skip = ed.editingTextId ? new Set([ed.editingTextId]) : null;
     this.svgHost.innerHTML = renderPage(ed.doc, ed.page, { measure, assetHref: this.assetHref, editor: true, scale: ed.zoom, skip, idPrefix: 'cv' });
@@ -150,6 +152,13 @@ export class Canvas {
     if (ed.cropId) {
       const el = sel.find((e) => e.id === ed.cropId);
       if (el) this.drawCrop(el, parts);
+    } else if (sel.length === 1 && sel[0].type === 'connector' && !sel[0].locked) {
+      // Connectors are reshaped by their two ends.
+      endsOf(sel[0]).forEach(([x, y], i) => {
+        const attached = !!(i ? sel[0].end : sel[0].start)?.id;
+        parts.push(`<circle class="handle end${attached ? ' attached' : ''}" data-handle="end${i}" data-testid="connector-end-${i}" cx="${x * z}" cy="${y * z}" r="7"/>`);
+      });
+      if (this.drag?.mode === 'end' && this.drag.target) poly(this.drag.target, 'drop-target');
     } else if (sel.length === 1 && !sel[0].locked && !ed.editingTextId) {
       const el = sel[0];
       const top = handlePosition(el, 'n');
@@ -211,7 +220,7 @@ export class Canvas {
     for (let i = els.length - 1; i >= 0; i--) {
       const el = els[i];
       if (el.hidden) continue;
-      if (pointInBox(p.x, p.y, el, el.type === 'line' ? Math.max(margin, 10 / this.ed.zoom) : margin)) return el;
+      if (pointInBox(p.x, p.y, el, el.type === 'line' || el.type === 'connector' ? Math.max(margin, 10 / this.ed.zoom) : margin)) return el;
     }
     return null;
   }
@@ -296,7 +305,9 @@ export class Canvas {
     const sel = ed.selected.filter((el) => !el.locked);
     if (!sel.length) return;
     ed.history.record(ed.doc);
-    if (handle === 'rotate') {
+    if (handle === 'end0' || handle === 'end1') {
+      this.drag = { mode: 'end', el: sel[0], which: +handle.slice(3), moved: false, target: null };
+    } else if (handle === 'rotate') {
       this.drag = { mode: 'rotate', el: sel[0], moved: false };
     } else if (sel.length === 1) {
       this.drag = { mode: 'resize', handle, start: p, el: sel[0], orig: clone(sel[0]), moved: false };
@@ -321,6 +332,17 @@ export class Canvas {
     }
     if (d.mode === 'guide') {
       ed.moveGuide(d.index, d.axis === 'x' ? p.x : p.y, true);
+      return;
+    }
+    if (d.mode === 'end') {
+      // Move one end; let go over an element to attach it there.
+      d.moved = true;
+      const ends = endsOf(d.el);
+      ends[d.which] = [p.x, p.y];
+      d.el[d.which ? 'end' : 'start'] = { id: null };
+      setEnds(d.el, ends[0], ends[1]);
+      d.target = this.attachTarget(p, d.el);
+      ed.emit('live');
       return;
     }
     if (d.mode === 'draw') {
@@ -428,6 +450,12 @@ export class Canvas {
       return;
     }
     if (d.mode === 'pan') return;
+    if (d.mode === 'end') {
+      if (d.target) d.el[d.which ? 'end' : 'start'] = { id: d.target.id };
+      if (d.moved) ed.afterChange();
+      else ed.history.discard();
+      return;
+    }
     if (d.mode === 'guide') {
       // A guide dragged off the page is removed.
       const g = ed.pageData.guides[d.index];
@@ -623,6 +651,17 @@ export class Canvas {
     };
     this.rulerX.innerHTML = `<svg width="${ed.doc.width * z}" height="20">${ticks(ed.doc.width, false)}</svg>`;
     this.rulerY.innerHTML = `<svg width="20" height="${ed.doc.height * z}">${ticks(ed.doc.height, true)}</svg>`;
+  }
+
+  /** The element a connector end would attach to at p (not connectors, not itself). */
+  attachTarget(p, connector) {
+    const els = this.ed.pageData.elements;
+    for (let i = els.length - 1; i >= 0; i--) {
+      const el = els[i];
+      if (el.hidden || el.type === 'connector' || el === connector) continue;
+      if (pointInBox(p.x, p.y, el)) return el;
+    }
+    return null;
   }
 
   /** Show the stroke being drawn, on top of the page. */

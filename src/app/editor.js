@@ -11,6 +11,7 @@ import { fitHeight } from '../model/text-layout.js';
 import { curveGeometry } from '../model/render.js';
 import { unionBounds, pointInBox } from '../model/geometry.js';
 import { gridBoxes } from '../model/grids.js';
+import { createConnector, updateConnectors } from '../model/connectors.js';
 
 const VIEW_KEY = 'paperwall-view';
 const DEFAULT_VIEW = { rulers: false, grid: false, gridSize: 'medium', snapGrid: true, margins: false, bleed: false };
@@ -355,6 +356,40 @@ export class Editor {
   clearGuides() {
     if (!this.pageData.guides?.length) return;
     this.change(() => (this.pageData.guides = []));
+  }
+
+  // ---------- connectors ----------
+
+  /** A free connector across the middle of the page. */
+  addConnector(route = 'straight') {
+    const { width: W, height: H } = this.doc;
+    const s = Math.min(W, H);
+    const el = createConnector({ from: [W / 2 - s * 0.2, H / 2], to: [W / 2 + s * 0.2, H / 2], route, strokeWidth: Math.max(2, Math.round(s * 0.006)) });
+    this.change(() => cmd.addElement(this.doc, this.page, el));
+    this.select([el.id]);
+    return el;
+  }
+
+  /** Connect two selected elements with a line that follows them when they move. */
+  connect(ids = this.selection, route = 'elbow') {
+    const [a, b] = ids.map((id) => cmd.findElement(this.pageData, id)).filter((e) => e && e.type !== 'connector');
+    if (!a || !b) return null;
+    const s = Math.min(this.doc.width, this.doc.height);
+    const el = createConnector({ from: [a.x + a.w / 2, a.y + a.h / 2], to: [b.x + b.w / 2, b.y + b.h / 2], start: a.id, end: b.id, route, strokeWidth: Math.max(2, Math.round(s * 0.004)) });
+    this.change(() => {
+      // Under the elements it joins, so its ends tuck neatly against them.
+      const page = this.pageData;
+      const at = Math.min(page.elements.indexOf(a), page.elements.indexOf(b));
+      page.elements.splice(at, 0, el);
+      updateConnectors(page);
+    });
+    this.select([el.id]);
+    return el;
+  }
+
+  /** Keep attached connector ends on their elements (called before every draw). */
+  syncConnectors() {
+    return updateConnectors(this.pageData);
   }
 
   /** Turn a freehand stroke (page points) into a drawing with the current tool. */

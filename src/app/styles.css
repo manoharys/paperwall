@@ -400,3 +400,8 @@ kbd { font: 12px ui-monospace, monospace; background: var(--panel-2); border: 1p
 .overlay .user-guide.x { cursor: col-resize; }
 .overlay .user-guide.y { cursor: row-resize; }
 .menu-pop { width: 280px; }
+
+/* Connector ends */
+.overlay .handle.end { cursor: move; }
+.overlay .handle.end.attached { fill: var(--sel); }
+.overlay .drop-target { fill: rgba(47, 111, 237, .08); stroke: var(--sel); stroke-width: 2; stroke-dasharray: 5 4; }

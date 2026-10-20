@@ -20,7 +20,7 @@ import { measure, addCustomFont, customFontNames, ensureFont } from './fonts.js'
 import { iconById, stickerById } from '../model/graphics.js';
 import { getSetting } from './store.js';
 
-const TYPE_NAMES = { text: 'Text', shape: 'Shape', line: 'Line', image: 'Image', icon: 'Icon', sticker: 'Sticker', qr: 'QR code', group: 'Group', chart: 'Chart', table: 'Table', draw: 'Drawing' };
+const TYPE_NAMES = { text: 'Text', shape: 'Shape', line: 'Line', image: 'Image', icon: 'Icon', sticker: 'Sticker', qr: 'QR code', group: 'Group', chart: 'Chart', table: 'Table', draw: 'Drawing', connector: 'Connector' };
 const SHAPE_NAMES = { rect: 'Rectangle', ellipse: 'Circle', triangle: 'Triangle', star: 'Star', polygon: 'Polygon', heart: 'Heart', arrow: 'Arrow', bubble: 'Speech bubble', diamond: 'Diamond', arch: 'Arch', blob: 'Blob' };
 
 const FILTER_PRESETS = {
@@ -202,6 +202,13 @@ export class Inspector {
       image: () => this.imagePanel(el),
       icon: () => [section('Color', h('div', { class: 'field inline' }, h('span', null, 'Icon color'), colorButton({ label: 'Icon color', testid: 'icon-color', value: el.color, getContext: this.colorContext, onChange: (c, l) => this.up({ color: c }, l ? 'color' : null) })),
         slider({ label: 'Line weight', value: el.strokeWidth || 1.8, min: 0.5, max: 4, step: 0.1, onChange: (v, l) => this.up({ strokeWidth: v }, l ? 'sw' : null) }))],
+      connector: () => [
+        section('Connector',
+          segmented({ label: 'Route', value: el.route, testid: 'connector-route', onChange: (route) => this.up({ route }), options: [
+            { value: 'straight', label: 'Straight', text: 'Straight' }, { value: 'elbow', label: 'Elbow', text: 'Elbow' }, { value: 'curved', label: 'Curved', text: 'Curved' },
+          ] }),
+          h('p', { class: 'hint' }, el.start?.id || el.end?.id ? 'Attached ends follow their elements. Drag an end away to free it.' : 'Drag an end onto an element to attach it.')),
+        ...this.linePanel(el)],
       draw: () => [section('Drawing',
         h('div', { class: 'field inline' }, h('span', null, 'Color'), colorButton({ label: 'Drawing color', testid: 'draw-color', value: el.stroke, getContext: this.colorContext, onChange: (c, l) => this.up({ stroke: c }, l ? 'stroke' : null) })),
         slider({ label: 'Thickness', value: Math.round(el.strokeWidth), min: 1, max: 120, testid: 'draw-width', onChange: this.live('strokeWidth') }))],
@@ -215,8 +222,10 @@ export class Inspector {
   }
 
   multiPanel(sel) {
+    const joinable = sel.length === 2 && sel.every((e) => e.type !== 'connector');
     return [
       h('div', { class: 'panel-head' }, h('h2', { 'data-testid': 'selection-title' }, `${sel.length} selected`), this.actions()),
+      joinable ? section('Connect', h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'connect', onClick: () => this.ed.connect() }, icon('connect'), 'Connect with a line')) : null,
       this.arrange(sel.length),
       this.effects(),
     ];
@@ -344,7 +353,7 @@ export class Inspector {
   linePanel(el) {
     return [section('Line',
       h('div', { class: 'field inline' }, h('span', null, 'Color'), colorButton({ label: 'Line color', testid: 'line-color', value: el.stroke, getContext: this.colorContext, onChange: (c, l) => this.up({ stroke: c }, l ? 'stroke' : null) })),
-      slider({ label: 'Thickness', value: el.strokeWidth, min: 1, max: 80, testid: 'line-width', onChange: (v, l) => this.up({ strokeWidth: v, h: Math.max(el.h, v * 6) }, l ? 'sw' : null) }),
+      slider({ label: 'Thickness', value: el.strokeWidth, min: 1, max: 80, testid: 'line-width', onChange: (v, l) => this.up(el.type === 'connector' ? { strokeWidth: v } : { strokeWidth: v, h: Math.max(el.h, v * 6) }, l ? 'sw' : null) }),
       segmented({ label: 'Line style', value: el.dash || 'solid', onChange: (dash) => this.up({ dash }), options: [
         { value: 'solid', label: 'Solid line', text: '———' },
         { value: 'dashed', label: 'Dashed line', text: '– – –' },

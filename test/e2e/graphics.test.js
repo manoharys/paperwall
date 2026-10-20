@@ -603,3 +603,39 @@ test('[ELM-09] freehand drawing with a pen, marker or highlighter', async () => 
   assert.equal((await elements(page))[0].stroke, '#ff006e');
   await context.close();
 });
+
+test('[ELM-10] connector lines that stay attached to elements', async () => {
+  const { page, context } = await newDesign('square');
+  const a = await addShape(page, 'Square');
+  await drag(page, await elementCenter(page, a.id), await screenPoint(page, 200, 200), { steps: 8 });
+  const b = await addShape(page, 'Circle');
+  await drag(page, await elementCenter(page, b.id), await screenPoint(page, 800, 800), { steps: 8 });
+  await clickElement(page, a.id);
+  await clickElement(page, b.id, ['Shift']);
+  await page.click('[data-testid="connect"]');
+  let c = (await elements(page)).find((e) => e.type === 'connector');
+  assert.ok(c, 'a connector was added');
+  assert.equal(c.start.id, a.id);
+  assert.equal(c.end.id, b.id);
+  assert.equal(c.route, 'elbow');
+  const before = c.points.map(([fx, fy]) => [c.x + fx * c.w, c.y + fy * c.h]);
+  // Move the circle: the connector follows.
+  await drag(page, await elementCenter(page, b.id), await screenPoint(page, 800, 500), { steps: 8 });
+  c = (await elements(page)).find((e) => e.type === 'connector');
+  const after2 = c.points.map(([fx, fy]) => [c.x + fx * c.w, c.y + fy * c.h]);
+  assert.notDeepEqual(after2[1], before[1], 'the end moved with the circle');
+  assert.deepEqual(after2[0].map(Math.round), before[0].map(Math.round), 'the other end stayed');
+  // Switch the route, then pull one end free and drop it on empty page.
+  await page.evaluate((id) => window.paperwall.editor.select([id]), c.id);
+  await page.click('[data-testid="connector-route"] [data-value="curved"]');
+  assert.equal((await elements(page)).find((e) => e.type === 'connector').route, 'curved');
+  const endHandle = await page.locator('[data-testid="connector-end-1"]').boundingBox();
+  await drag(page, { x: endHandle.x + 7, y: endHandle.y + 7 }, await screenPoint(page, 900, 100), { steps: 8 });
+  c = (await elements(page)).find((e) => e.type === 'connector');
+  assert.equal(c.end.id, null, 'freed');
+  // Adding one from the Shapes panel works too.
+  await openTab(page, 'shapes');
+  await page.click('[data-testid="connector-straight"]');
+  assert.equal((await elements(page)).filter((e) => e.type === 'connector').length, 2);
+  await context.close();
+});
