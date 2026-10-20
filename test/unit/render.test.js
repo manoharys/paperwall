@@ -535,3 +535,9 @@ test('[ELM-10] an end attached to a group follows the group when it is refitted 
   const box = { x: g.x, y: g.y, w: g.w, h: g.h };
   assert.ok(Math.abs(end[1] - (box.y + box.h / 2)) < 0.01, `on the grown group's side (${end[1]} vs ${box.y + box.h / 2})`);
 });
+
+test('[VIEW-07] print bleed is 3 mm at the size the design prints at', async () => {
+  const { bleedSize } = await import('../../src/model/view.js');
+  assert.ok(Math.abs(bleedSize({ unit: 'px' }) - (3 / 25.4) * 96) < 1e-9, 'px designs print at 96 per inch');
+  assert.ok(Math.abs(bleedSize({ unit: 'mm' }) - (3 / 25.4) * 300) < 0.5, 'mm designs at 300 per inch');
+});

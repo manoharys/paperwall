@@ -8,7 +8,7 @@ import {
 } from '../model/geometry.js';
 import { resizeElement, coverCrop, topmost } from '../model/commands.js';
 import { clone, DRAW_TOOLS, DPI } from '../model/doc.js';
-import { gridLines, marginSize, BLEED } from '../model/view.js';
+import { gridLines, marginSize, bleedSize } from '../model/view.js';
 import { endsOf, setEnds, connectorHit } from '../model/connectors.js';
 import { drawHit } from '../model/shapes.js';
 import { measure } from './fonts.js';
@@ -18,8 +18,6 @@ import * as store from './store.js';
 const PAD = 64;
 const RATIO_LOCKED = new Set(['image', 'icon', 'sticker', 'qr', 'group']);
 
-// Drags that record an undo step when they begin.
-const UNDOABLE_DRAGS = new Set(['guide', 'crop', 'move', 'end', 'rotate', 'resize', 'resize-many']);
 
 export class Canvas {
   constructor(editor) {
@@ -260,7 +258,7 @@ export class Canvas {
     if (this.textarea) this.finishTextEdit();
     if (this.spaceDown || e.button === 1) {
       this.drag = { mode: 'pan', sx: e.clientX, sy: e.clientY, left: this.el.scrollLeft, top: this.el.scrollTop };
-      this.el.setPointerCapture(e.pointerId);
+      this.capture(e);
       return;
     }
     const p = this.toPage(e);
@@ -272,16 +270,16 @@ export class Canvas {
       // One undo step for the whole drag, taken now; dropped again if the guide doesn't stay.
       ed.history.record(ed.doc);
       ed.pageData.guides = [...(ed.pageData.guides || []), { axis, pos: Math.round(axis === 'x' ? p.x : p.y) }];
-      this.drag = { mode: 'guide', index: ed.pageData.guides.length - 1, axis, isNew: true, moved: false };
-      this.el.setPointerCapture(e.pointerId);
+      this.drag = { recorded: true, mode: 'guide', index: ed.pageData.guides.length - 1, axis, isNew: true, moved: false };
+      this.capture(e);
       return;
     }
     if (ed.drawTool) {
       // Drawing: every press on the page starts a new stroke.
       e.preventDefault();
       ed.deselect();
-      this.drag = { mode: 'draw', points: [[p.x, p.y]], pointerId: e.pointerId, tool: { ...ed.drawTool } };
-      this.el.setPointerCapture(e.pointerId);
+      this.drag = { mode: 'draw', points: [[p.x, p.y]], tool: { ...ed.drawTool } };
+      this.capture(e);
       this.drawStroke();
       return;
     }
@@ -313,16 +311,16 @@ export class Canvas {
       e.preventDefault();
       const index = +guide.getAttribute('data-guide');
       ed.history.record(ed.doc);
-      this.drag = { mode: 'guide', index, axis: ed.pageData.guides[index].axis, moved: false, orig: ed.pageData.guides[index].pos };
-      this.el.setPointerCapture(e.pointerId);
+      this.drag = { recorded: true, mode: 'guide', index, axis: ed.pageData.guides[index].axis, moved: false, orig: ed.pageData.guides[index].pos };
+      this.capture(e);
       return;
     }
     if (ed.cropId) {
       const el = ed.single;
       if (el && el.id === ed.cropId && pointInBox(p.x, p.y, el)) {
         ed.history.record(ed.doc);
-        this.drag = { mode: 'crop', start: p, crop: { ...el.crop }, el, moved: false };
-        this.el.setPointerCapture(e.pointerId);
+        this.drag = { recorded: true, mode: 'crop', start: p, crop: { ...el.crop }, el, moved: false };
+        this.capture(e);
         return;
       }
       ed.cropId = null;
@@ -334,17 +332,18 @@ export class Canvas {
         return;
       }
       if (!ed.selection.includes(hit.id)) ed.select([hit.id]);
-      const movable = ed.selected.filter((el) => !el.locked);
+      // A connector held at both ends goes wherever its elements go: dragging it alone does nothing.
+      const movable = ed.selected.filter((el) => !el.locked && !(el.type === 'connector' && el.start?.id && el.end?.id));
       if (!movable.length) return;
       ed.history.record(ed.doc);
       // A connector's box changes as its attached ends follow: keep its shape
       // at the start, so each frame moves it from there (not from the last frame).
-      this.drag = { mode: 'move', start: p, items: movable.map((el) => ({ el, x: el.x, y: el.y, shape: el.type === 'connector' ? { w: el.w, h: el.h, points: clone(el.points) } : null })), moved: false };
-      this.el.setPointerCapture(e.pointerId);
+      this.drag = { recorded: true, mode: 'move', start: p, items: movable.map((el) => ({ el, x: el.x, y: el.y, shape: el.type === 'connector' ? { w: el.w, h: el.h, points: clone(el.points) } : null })), moved: false };
+      this.capture(e);
     } else {
       if (!e.shiftKey) ed.deselect();
       this.drag = { mode: 'marquee', start: p, base: e.shiftKey ? [...ed.selection] : [] };
-      this.el.setPointerCapture(e.pointerId);
+      this.capture(e);
     }
   }
 
@@ -355,20 +354,27 @@ export class Canvas {
     ed.history.record(ed.doc);
     if (handle === 'end0' || handle === 'end1') {
       const el = sel[0];
-      this.drag = { mode: 'end', el, which: +handle.slice(3), moved: false, target: null };
+      this.drag = { recorded: true, mode: 'end', el, which: +handle.slice(3), moved: false, target: null };
     } else if (handle === 'rotate') {
-      this.drag = { mode: 'rotate', el: sel[0], moved: false };
+      this.drag = { recorded: true, mode: 'rotate', el: sel[0], moved: false };
     } else if (sel.length === 1) {
-      this.drag = { mode: 'resize', handle, start: p, el: sel[0], orig: clone(sel[0]), moved: false };
+      this.drag = { recorded: true, mode: 'resize', handle, start: p, el: sel[0], orig: clone(sel[0]), moved: false };
     } else {
-      this.drag = { mode: 'resize-many', handle, start: p, box: unionBounds(sel), items: sel.map((el) => ({ el, orig: clone(el) })), moved: false };
+      this.drag = { recorded: true, mode: 'resize-many', handle, start: p, box: unionBounds(sel), items: sel.map((el) => ({ el, orig: clone(el) })), moved: false };
     }
+    this.capture(e);
+  }
+
+  /** The pointer that started a drag is the one that moves and ends it. */
+  capture(e) {
+    this.drag.pointerId = e.pointerId;
     this.el.setPointerCapture(e.pointerId);
   }
 
   onMove(e) {
     const ed = this.ed;
     const d = this.drag;
+    if (d && e.pointerId !== d.pointerId) return; // another finger
     const p = this.toPage(e);
     if (!d) {
       const hit = e.pointerType === 'mouse' ? this.hitTest(p) : null;
@@ -497,19 +503,19 @@ export class Canvas {
     ed.emit('live');
   }
 
-  /** The browser took the pointer away (palm rejection, a system gesture): throw away strokes and guide drags. */
+  /** The browser took the pointer away (palm rejection, a system gesture): the drag is called off. */
   onCancel(e) {
     const d = this.drag;
+    if (d && e.pointerId !== d.pointerId) return; // another finger's
     if (d?.mode === 'draw') {
-      if (e.pointerId !== d.pointerId) return;
       this.drag = null;
       this.stroke?.remove();
       this.stroke = null;
       return;
     }
-    // Drags that took an undo step when they began put the design back as it
-    // was then (a cancel is the system or a palm, not the person finishing).
-    if (d && UNDOABLE_DRAGS.has(d.mode)) {
+    // Drags that took an undo step when they began (`recorded`) put the design
+    // back as it was then (a cancel is the system or a palm, not the person finishing).
+    if (d?.recorded) {
       this.drag = null;
       this.ed.guides = [];
       this.ed.revertPending();
@@ -521,7 +527,7 @@ export class Canvas {
   onUp(e) {
     const ed = this.ed;
     const d = this.drag;
-    if (d?.mode === 'draw' && e && e.pointerId !== d.pointerId) return; // another finger lifting
+    if (d && e && e.pointerId !== d.pointerId) return; // another finger lifting
     this.drag = null;
     if (!d) return;
     if (d.mode === 'marquee') {
@@ -603,8 +609,12 @@ export class Canvas {
     };
     const uploadId = e.dataTransfer?.getData('application/x-paperwall-upload');
     if (uploadId) {
-      const upload = await store.getUpload(uploadId);
-      if (upload) await place(upload);
+      try {
+        const upload = await store.getUpload(uploadId);
+        if (upload && !this.ed.closed) await place(upload);
+      } catch (err) {
+        toast(err.message, 'error');
+      }
       return;
     }
     const files = [...(e.dataTransfer?.files || [])].filter((f) => f.type.startsWith('image/'));
@@ -717,7 +727,7 @@ export class Canvas {
       parts.push(`<rect class="margin-box" data-testid="margin-box" x="${m}" y="${m}" width="${W * z - m * 2}" height="${H * z - m * 2}"/>`);
     }
     if (v.bleed) {
-      const b = BLEED * z;
+      const b = bleedSize(ed.doc) * z;
       parts.push(`<path class="bleed-zone" data-testid="bleed-zone" fill-rule="evenodd" d="M0 0H${W * z}V${H * z}H0Z M${b} ${b}V${H * z - b}H${W * z - b}V${b}Z"/>`);
       parts.push(`<rect class="bleed-line" x="${b}" y="${b}" width="${W * z - b * 2}" height="${H * z - b * 2}"/>`);
     }

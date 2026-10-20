@@ -89,7 +89,9 @@ async function withDb(fn) {
   } catch (e) {
     if (e?.name !== 'InvalidStateError') throw e;
     dbPromise = null;
-    return fn(await open());
+    const db = await open();
+    if (!db) throw e; // storage went away altogether: say what really happened
+    return fn(db);
   }
 }
 
@@ -304,9 +306,12 @@ async function pruneTx(db, designId, drop) {
   });
 }
 
-/** Whether a design has any versions yet (reads keys only). */
+/** Whether a design has any versions yet (just counts them). */
 export async function hasVersions(designId) {
-  return (await keysIn(`${designId}|v|`)).length > 0;
+  const [lo, hi] = range(`${designId}|v|`);
+  const db = await open();
+  if (!db) return [...memory.versions.keys()].some((k) => k >= lo && k <= hi);
+  return (await txRetry(db, 'versions', 'readonly', (s) => s.count(IDBKeyRange.bound(lo, hi)))) > 0;
 }
 
 /** A design's saved versions (just their details), newest first. */

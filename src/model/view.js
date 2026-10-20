@@ -24,5 +24,7 @@ export function marginSize(doc) {
   return Math.round(Math.min(doc.width, doc.height) * 0.05);
 }
 
-/** Print bleed: the 3 mm strip that may be trimmed off. */
-export const BLEED = toPx(3, 'mm');
+/** Print bleed: the 3 mm strip that may be trimmed off, at the size the design prints at (as PDF export does). */
+export function bleedSize(doc) {
+  return doc.unit === 'mm' || doc.unit === 'in' ? toPx(3, 'mm') : (3 / 25.4) * 96;
+}

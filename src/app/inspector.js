@@ -396,7 +396,7 @@ export class Inspector {
       return [
         section('Frame',
           h('p', { class: 'hint' }, 'Drop a photo onto the frame, drag one from Uploads, or pick one here.'),
-          h('button', { type: 'button', class: 'btn small wide primary', 'data-testid': 'frame-add-photo', onClick: () => this.canvas.pickPhotoFor(el) }, icon('image'), 'Add a photo')),
+          h('button', { type: 'button', class: 'btn small wide primary', 'data-testid': 'frame-add-photo', onClick: () => this.canvas.pickPhotoFor(el, { evenLocked: true }) }, icon('image'), 'Add a photo')),
         shape,
       ];
     }

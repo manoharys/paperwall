@@ -196,7 +196,7 @@ export class Editor {
   /** Put the design back the way a version had it, as one undo step. */
   restoreVersion(versionDoc) {
     // Images aren't copied: they never change once added.
-    const v = { ...clone({ ...versionDoc, assets: undefined }), assets: versionDoc.assets };
+    const v = versionSnapshot(versionDoc);
     this.change(() => {
       // Keep today's images too: undo snapshots share the design's assets.
       Object.assign(this.doc, { name: v.name, width: v.width, height: v.height, unit: v.unit, pages: v.pages, assets: { ...this.doc.assets, ...v.assets } });
