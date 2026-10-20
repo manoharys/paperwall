@@ -336,3 +336,28 @@ test('[MOT-07] a video started at or past its end shows just before the end', as
   assert.ok(Math.abs(videoTime(v, 0, 6) - 5.96) < 1e-9);
   assert.ok(Math.abs(videoTime(v, 3, 6) - 5.96) < 0.05);
 });
+
+test('[MOT-07] presenting live keeps a video\'s place even when it has no poster', async () => {
+  const { createDesign, createVideo } = await import('../../src/model/doc.js');
+  const doc = createDesign({ width: 400, height: 300 });
+  doc.assets.a = { type: 'video', dataUrl: 'data:video/webm;base64,AA==', duration: 2 };
+  doc.pages[0].elements.push(createVideo('a', { x: 10, y: 10, w: 200, h: 150 }));
+  const svg = renderFrame(doc, frameAt(doc, timeline(doc), 0.5), { videoSlots: true });
+  assert.match(svg, /<foreignObject[^>]+data-video=/, 'a place for the playing video');
+  assert.doesNotMatch(svg, /#e5e5ef/, 'not the grey box of a missing picture');
+});
+
+test('[MOT-06] MP4: the last sample lasts as long as the frame shown last', async () => {
+  const { buildMp4, readBoxes } = await import('../../src/model/mp4.js');
+  // Decode order I P B: the P frame (shown last) says 50 ms, the B frame 10 ms.
+  const chunk = (timestamp, duration, key = false) => ({ data: new Uint8Array(4), timestamp, duration, key });
+  const bytes = buildMp4({ video: { codec: 'vp9', width: 2, height: 2, chunks: [chunk(0, 33333, true), chunk(66666, 50000), chunk(33333, 10000)] }, duration: 0.12 });
+  const find = (type, start = 0, end = bytes.length) => readBoxes(bytes, start, end).find((b) => b.type === type);
+  let box = find('moov');
+  for (const t of ['trak', 'mdia', 'minf', 'stbl', 'stts']) box = find(t, t === 'trak' ? box.start : box.start, box.end) || box;
+  const view = new DataView(bytes.buffer, bytes.byteOffset);
+  const runs = view.getUint32(box.start + 4);
+  const entries = Array.from({ length: runs }, (_, i) => [view.getUint32(box.start + 8 + i * 8), view.getUint32(box.start + 12 + i * 8)]);
+  const last = entries[entries.length - 1];
+  assert.equal(last[1], 4500, '50 ms at 90 kHz');
+});

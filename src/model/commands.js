@@ -321,6 +321,7 @@ const STYLE_KEYS = {
   shape: ['fill', 'stroke', 'strokeWidth', 'dash', 'radius'],
   line: ['stroke', 'strokeWidth', 'dash', 'startCap', 'endCap'],
   image: ['filters', 'radius', 'mask'],
+  video: ['filters', 'radius', 'mask'],
   icon: ['color'],
   connector: ['stroke', 'strokeWidth', 'dash', 'startCap', 'endCap', 'route'],
   draw: ['stroke', 'strokeWidth'],

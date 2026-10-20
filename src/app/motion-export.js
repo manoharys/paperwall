@@ -52,9 +52,11 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal },
       const frame = frameAt(doc, tl, t);
       const pictures = new Map();
       if (videos) {
-        for (const [index, local] of [[frame.index, frame.local], ...(frame.from ? [[frame.from.index, frame.from.local]] : [])]) {
-          for (const el of videosOn(doc, [index])) pictures.set(el.id, await videos.seek(el, local));
-        }
+        // Each video has its own player: they all seek at once.
+        const wanted = [[frame.index, frame.local], ...(frame.from ? [[frame.from.index, frame.from.local]] : [])]
+          .flatMap(([index, local]) => videosOn(doc, [index]).map((el) => [el, local]));
+        const got = await Promise.all(wanted.map(([el, local]) => videos.seek(el, local)));
+        wanted.forEach(([el], k) => pictures.set(el.id, got[k]));
       }
       const svg = renderFrame(doc, frame, { measure, fontCss, idPrefix: 'mv', videoFrame: (el) => pictures.get(el.id) });
       if (svg !== last) await drawFrame(svg, { ctx, width, height });

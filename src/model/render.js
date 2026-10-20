@@ -168,8 +168,9 @@ function renderVideo(ctx, el) {
 function renderPicture(ctx, el, href, as = 'image') {
   const outline = maskPath(el);
   // A picture whose image is missing (damaged file) keeps a grey box everywhere.
-  if (el.assetId && !href) return `<path d="${outline}" fill="#e5e5ef"/>`;
-  if (!href) {
+  // (A live video's place is kept even without a poster: the video fills it.)
+  if (el.assetId && !href && as !== 'slot') return `<path d="${outline}" fill="#e5e5ef"/>`;
+  if (!href && as !== 'slot') {
     // An empty frame shows a soft placeholder while editing; downloads leave it out.
     if (!ctx.placeholders) return '';
     const s = Math.min(el.w, el.h) * 0.22;
@@ -193,7 +194,7 @@ function renderPicture(ctx, el, href, as = 'image') {
   }
   const at = `x="${f(-crop.x * iw)}" y="${f(-crop.y * ih)}" width="${f(iw)}" height="${f(ih)}"`;
   const media = as === 'slot'
-    ? `<image href="${esc(href)}" ${at} preserveAspectRatio="none"/><foreignObject ${at} data-video="${esc(el.id)}"${fx ? ` filter="url(#${fx})"` : ''}></foreignObject>`
+    ? `${href ? `<image href="${esc(href)}" ${at} preserveAspectRatio="none"/>` : ''}<foreignObject ${at} data-video="${esc(el.id)}"${fx ? ` filter="url(#${fx})"` : ''}></foreignObject>`
     : `<image href="${esc(href)}" ${at} preserveAspectRatio="none"${fx ? ` filter="url(#${fx})"` : ''}/>`;
   return `<g clip-path="url(#${clip})">${media}${shade}</g>`;
 }

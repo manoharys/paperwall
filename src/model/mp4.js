@@ -78,7 +78,9 @@ function trak(t, id, offsets, duration) {
   // stay gaps. The last sample lasts its own duration.
   const pts = t.chunks.map((c) => ticks(c.timestamp ?? 0));
   const dts = [...pts].sort((a, b) => a - b);
-  const deltas = dts.map((d, i) => (i + 1 < dts.length ? dts[i + 1] - d : Math.max(1, ticks(t.chunks[i].duration ?? 0) || (i ? dts[i] - dts[i - 1] : 1))));
+  // The last sample lasts as long as the frame shown last says.
+  const lastShown = t.chunks[pts.indexOf(dts[dts.length - 1])];
+  const deltas = dts.map((d, i) => (i + 1 < dts.length ? dts[i + 1] - d : Math.max(1, ticks(lastShown?.duration ?? 0) || (i ? dts[i] - dts[i - 1] : 1))));
   const runs = [];
   for (const d of deltas) {
     const last = runs[runs.length - 1];

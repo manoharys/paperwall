@@ -80,7 +80,8 @@ export function buildWebmParts({ video, audio = null, duration }) {
   if (audio) {
     tracks.push(el(ID.TrackEntry,
       uint(ID.TrackNumber, 2), uint(ID.TrackUID, 2), uint(ID.TrackType, 2), str(ID.CodecID, 'A_OPUS'),
-      el(ID.CodecPrivate, audio.codecPrivate || opusHead(audio.channels, audio.sampleRate)),
+      // The encoder's own header when it gave one in the usual form, else ours.
+      el(ID.CodecPrivate, isOpusHead(audio.codecPrivate) ? audio.codecPrivate : opusHead(audio.channels, audio.sampleRate)),
       // The decoder's delay, from the header's pre-skip (48 kHz samples), in ns.
       uint(ID.CodecDelay, Math.round((opusPreSkip(audio.codecPrivate) / 48000) * 1e9)), uint(ID.SeekPreRoll, 80000000),
       el(ID.Audio, float(ID.SamplingFrequency, audio.sampleRate), uint(ID.Channels, audio.channels))));
@@ -134,8 +135,12 @@ export function buildWebmParts({ video, audio = null, duration }) {
 
 /** The pre-skip (samples at 48 kHz) in an OpusHead, or Opus's usual 312. */
 export function opusPreSkip(head) {
-  const ok = head && head.length >= 12 && String.fromCharCode(...head.subarray(0, 8)) === 'OpusHead';
-  return ok ? head[10] | (head[11] << 8) : 312;
+  return isOpusHead(head) ? head[10] | (head[11] << 8) : 312;
+}
+
+/** Whether some bytes are an OpusHead block. */
+function isOpusHead(head) {
+  return !!head && head.length >= 19 && String.fromCharCode(...head.subarray(0, 8)) === 'OpusHead';
 }
 
 /** Opus's header block, for when the encoder doesn't hand one over. */

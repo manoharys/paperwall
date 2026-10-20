@@ -138,9 +138,19 @@ export function present(editor, canvas, { autoplay = false } = {}) {
   const tl = timeline(doc, shown);
   // The soundtrack plays with Play (as the panel says), not plain presenting.
   const sound = autoplay ? soundtrackPlayer(doc) : null;
-  // Videos are taken at the size they show on screen, not bigger.
-  const shownScale = () => (slide.clientWidth || doc.width) / doc.width;
-  const opts = { measure, noSize: true, assetHref: canvas.assetHref, videoFrame: (el) => videos.capture(el, shownScale()) };
+  // Videos are taken at the size they show on screen (the slide fits the
+  // screen both ways), and at most 30 times a second, however fast the screen.
+  const shownScale = () => Math.min(window.innerWidth / doc.width, window.innerHeight / doc.height);
+  const taken = new Map(); // element id → { at, picture }
+  const capture = (el) => {
+    const now = performance.now();
+    const last = taken.get(el.id);
+    if (last && now - last.at < 33) return last.picture;
+    const picture = videos.capture(el, shownScale());
+    taken.set(el.id, { at: now, picture });
+    return picture;
+  };
+  const opts = { measure, noSize: true, assetHref: canvas.assetHref, videoFrame: capture };
   let frame = 0;
   let info = null; // the shown page's motion, worked out once when it comes up
   let started = 0;
@@ -264,7 +274,7 @@ function soundtrackPlayer(doc) {
     url = u;
     if (stopped) return URL.revokeObjectURL(u);
     audio.src = u;
-  });
+  }).catch(() => null); // a damaged sound: the slides play in silence
   let wanted = null; // the latest place asked for, played once the sound is ready
   let wantedAt = 0; // when it was asked for: the sound has been due to play since
   const play = () => {

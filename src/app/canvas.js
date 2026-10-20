@@ -713,7 +713,8 @@ export class Canvas {
     if (uploadId) {
       try {
         const upload = await store.getUpload(uploadId);
-        if (upload && !this.ed.closed) await place(upload);
+        if (upload && !upload.dataUrl) toast(`${upload.name} is missing. Try uploading it again.`, 'error');
+        else if (upload && !this.ed.closed) await place(upload);
       } catch (err) {
         toast(err.message, 'error');
       }
