@@ -66,20 +66,9 @@ function open() {
   return dbPromise;
 }
 
-/**
- * Run a transaction, opening the database again once if it was closed under
- * us (another tab upgraded it).
- */
-async function txRetry(db, store, mode, fn) {
-  try {
-    return await tx(db, store, mode, fn);
-  } catch (e) {
-    if (e?.name !== 'InvalidStateError') throw e;
-    dbPromise = null;
-    const fresh = await open();
-    if (!fresh) throw e;
-    return tx(fresh, store, mode, fn);
-  }
+/** Run a transaction, opening the database again once if it was closed under us (another tab upgraded it). */
+function txRetry(store, mode, fn) {
+  return withDb((db) => tx(db, store, mode, fn));
 }
 
 /** Run fn(db) with the open database, reopening once if another tab closed it. */
@@ -113,7 +102,7 @@ export function isPersistent() {
 export async function put(store, key, value) {
   const db = await open();
   if (!db) return void memory[store].set(key, value);
-  await txRetry(db, store, 'readwrite', (s) => s.put(value, key));
+  await txRetry(store, 'readwrite', (s) => s.put(value, key));
 }
 
 /** Several puts (value set) and deletes (value undefined) in one transaction. */
@@ -124,7 +113,7 @@ async function batch(store, ops) {
     for (const [k, v] of ops) v === undefined ? memory[store].delete(k) : memory[store].set(k, v);
     return;
   }
-  await txRetry(db, store, 'readwrite', (s) => {
+  await txRetry(store, 'readwrite', (s) => {
     for (const [k, v] of ops) v === undefined ? s.delete(k) : s.put(v, k);
   });
 }
@@ -132,19 +121,19 @@ async function batch(store, ops) {
 export async function get(store, key) {
   const db = await open();
   if (!db) return memory[store].get(key);
-  return txRetry(db, store, 'readonly', (s) => s.get(key));
+  return txRetry(store, 'readonly', (s) => s.get(key));
 }
 
 export async function del(store, key) {
   const db = await open();
   if (!db) return void memory[store].delete(key);
-  await txRetry(db, store, 'readwrite', (s) => s.delete(key));
+  await txRetry(store, 'readwrite', (s) => s.delete(key));
 }
 
 export async function all(store) {
   const db = await open();
   if (!db) return [...memory[store].values()];
-  return txRetry(db, store, 'readonly', (s) => s.getAll());
+  return txRetry(store, 'readonly', (s) => s.getAll());
 }
 
 // ---------- designs ----------
@@ -186,14 +175,14 @@ async function keysIn(prefix) {
   const [lo, hi] = range(prefix);
   const db = await open();
   if (!db) return [...memory.versions.keys()].filter((k) => k >= lo && k <= hi).sort();
-  return txRetry(db, 'versions', 'readonly', (s) => s.getAllKeys(IDBKeyRange.bound(lo, hi)));
+  return txRetry('versions', 'readonly', (s) => s.getAllKeys(IDBKeyRange.bound(lo, hi)));
 }
 
 async function valuesIn(prefix) {
   const [lo, hi] = range(prefix);
   const db = await open();
   if (!db) return [...memory.versions.entries()].filter(([k]) => k >= lo && k <= hi).map(([, v]) => v);
-  return txRetry(db, 'versions', 'readonly', (s) => s.getAll(IDBKeyRange.bound(lo, hi)));
+  return txRetry('versions', 'readonly', (s) => s.getAll(IDBKeyRange.bound(lo, hi)));
 }
 
 /** Several values by key, in one transaction (undefined where missing). */
@@ -312,7 +301,7 @@ export async function hasVersions(designId) {
   const [lo, hi] = range(`${designId}|v|`);
   const db = await open();
   if (!db) return [...memory.versions.keys()].some((k) => k >= lo && k <= hi);
-  return (await txRetry(db, 'versions', 'readonly', (s) => s.count(IDBKeyRange.bound(lo, hi)))) > 0;
+  return (await txRetry('versions', 'readonly', (s) => s.count(IDBKeyRange.bound(lo, hi)))) > 0;
 }
 
 /** A design's saved versions (just their details), newest first. */

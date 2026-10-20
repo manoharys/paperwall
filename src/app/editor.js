@@ -209,7 +209,7 @@ export class Editor {
   }
 
   undo() {
-    if (!this.history.canUndo) return;
+    if (!this.history.canUndo || this.isDragging?.()) return;
     this.doc = this.history.undo(this.doc);
     this.page = Math.min(this.page, this.doc.pages.length - 1);
     this.editingTextId = null;
@@ -230,7 +230,7 @@ export class Editor {
   }
 
   redo() {
-    if (!this.history.canRedo) return;
+    if (!this.history.canRedo || this.isDragging?.()) return;
     this.doc = this.history.redo(this.doc);
     this.page = Math.min(this.page, this.doc.pages.length - 1);
     this.afterChange();

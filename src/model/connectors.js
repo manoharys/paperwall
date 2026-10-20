@@ -109,7 +109,10 @@ export function updateConnectors(page, { refit = true } = {}) {
   const visit = (els, ox, oy) => {
     for (const el of els) {
       if (el.type === 'group') {
-        if (!el.rotation && !el.flipX && !el.flipY) {
+        // A turned or mirrored group moves as one picture, connectors and all;
+        // only an end whose element is gone comes loose.
+        if (el.rotation || el.flipX || el.flipY) freeMissing(el.children);
+        else {
           const before = changed;
           changed = false;
           visit(el.children, ox + el.x, oy + el.y);
@@ -124,6 +127,18 @@ export function updateConnectors(page, { refit = true } = {}) {
         continue;
       }
       if (el.type === 'connector' && sync(el, ox, oy)) changed = true;
+    }
+  };
+  const freeMissing = (els) => {
+    for (const e of els) {
+      if (e.type === 'group') freeMissing(e.children);
+      if (e.type !== 'connector') continue;
+      for (const k of ['start', 'end']) {
+        if (e[k]?.id && !byId.has(e[k].id)) {
+          e[k] = { id: null, side: e[k].side };
+          changed = true;
+        }
+      }
     }
   };
   const sync = (el, ox, oy) => {

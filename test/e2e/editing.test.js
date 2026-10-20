@@ -497,3 +497,20 @@ test('[EDIT-01] a drag the system calls off puts everything back, with no undo s
   assert.equal(await state(page, (ed) => ed.history.past.length), steps);
   await context.close();
 });
+
+test('[VIEW-06] undo waits while a guide is being dragged', async () => {
+  const { page, context } = await newDesign('square');
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.keyboard.press('Shift+R');
+  const ruler = await page.locator('[data-testid="ruler-y"]').boundingBox();
+  const to = await screenPoint(page, 300, 500);
+  await page.mouse.move(ruler.x + 10, to.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 6 });
+  await page.keyboard.press(`${mod}+z`);
+  await page.mouse.up();
+  assert.deepEqual(errors, []);
+  assert.equal((await state(page, (ed) => ed.pageData.guides || [])).length, 1, 'the guide was placed');
+  await context.close();
+});

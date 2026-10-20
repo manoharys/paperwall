@@ -43,6 +43,13 @@ export class Canvas {
     this.el.addEventListener('pointermove', (e) => this.onMove(e));
     this.el.addEventListener('pointerup', (e) => this.onUp(e));
     this.el.addEventListener('pointercancel', (e) => this.onCancel(e));
+    // Capture lost without a pointerup (the browser or a system gesture): the
+    // drag is over, or every later touch would be taken for a second finger.
+    this.el.addEventListener('lostpointercapture', (e) => {
+      if (this.drag && e.pointerId === this.drag.pointerId) this.onCancel(e);
+    });
+    // Undo and redo wait while a drag is going (it holds parts of the design).
+    editor.isDragging = () => !!this.drag;
     this.el.addEventListener('dblclick', (e) => this.onDouble(e));
     this.el.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     this.el.addEventListener('dragover', (e) => {
@@ -61,7 +68,7 @@ export class Canvas {
       // Mid-drag: attached connector ends follow what's being moved (group
       // boxes are refitted once the drag ends, in afterChange).
       if (what === 'live') {
-        editor.syncConnectors();
+        this.liveSync = true; // once per drawn frame, not per pointer event
         return this.schedule();
       }
       if (what === 'tool') return void this.el.classList.toggle('drawing', !!editor.drawTool);
@@ -91,6 +98,8 @@ export class Canvas {
     if (this.frame) return;
     this.frame = requestAnimationFrame(() => {
       this.frame = 0;
+      if (this.liveSync) this.ed.syncConnectors();
+      this.liveSync = false;
       this.render();
     });
   }
@@ -368,7 +377,11 @@ export class Canvas {
   /** The pointer that started a drag is the one that moves and ends it. */
   capture(e) {
     this.drag.pointerId = e.pointerId;
-    this.el.setPointerCapture(e.pointerId);
+    try {
+      this.el.setPointerCapture(e.pointerId);
+    } catch {
+      /* the pointer is already gone: its pointerup still ends the drag */
+    }
   }
 
   onMove(e) {
@@ -575,6 +588,7 @@ export class Canvas {
   }
 
   onDouble(e) {
+    if (this.ed.drawTool) return; // two quick dots are two strokes, nothing more
     const p = this.toPage(e);
     const hit = this.hitTest(p);
     if (!hit || hit.locked) return;
@@ -784,9 +798,11 @@ export class Canvas {
    */
   attachTarget(p, connector, which) {
     const other = (which ? connector.start : connector.end)?.id;
+    // Not the other end's element, nor a group holding it.
+    const holds = (el) => el.id === other || (el.type === 'group' && el.children.some(holds));
     // A little past the edge counts, since the handle sits on it.
     const reach = 8 / this.ed.zoom;
-    return topmost(this.ed.pageData, (el) => !el.hidden && el.type !== 'connector' && el !== connector && el.id !== other && pointInBox(p.x, p.y, el, reach));
+    return topmost(this.ed.pageData, (el) => !el.hidden && el.type !== 'connector' && el !== connector && !holds(el) && pointInBox(p.x, p.y, el, reach));
   }
 
 

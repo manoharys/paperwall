@@ -541,3 +541,14 @@ test('[VIEW-07] print bleed is 3 mm at the size the design prints at', async () 
   assert.ok(Math.abs(bleedSize({ unit: 'px' }) - (3 / 25.4) * 96) < 1e-9, 'px designs print at 96 per inch');
   assert.ok(Math.abs(bleedSize({ unit: 'mm' }) - (3 / 25.4) * 300) < 0.5, 'mm designs at 300 per inch');
 });
+
+test('[ELM-10] a connector in a turned group comes loose when its element is deleted', async () => {
+  const { createConnector, updateConnectors } = await import('../../src/model/connectors.js');
+  const { createShape, createGroup } = await import('../../src/model/doc.js');
+  const a = createShape('rect', { x: 0, y: 0, w: 100, h: 100 });
+  const c = createConnector({ from: [100, 50], to: [400, 50], start: a.id, end: 'gone' });
+  const g = createGroup([a, c], { rotation: 10 });
+  updateConnectors({ elements: [g] });
+  assert.equal(c.start.id, a.id, 'still on its element');
+  assert.equal(c.end.id, null, 'loose: its element is gone');
+});
