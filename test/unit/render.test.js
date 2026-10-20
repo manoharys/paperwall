@@ -268,9 +268,10 @@ test('[IMG-14] frames clip photos to their shape and show a placeholder when emp
   }
   const doc = createDesign({ width: 400, height: 400 });
   addElement(doc, 0, createFrame('heart', { x: 0, y: 0, w: 200, h: 200 }));
-  const svg = renderPage(doc, 0, { measure: approxMeasure });
-  assert.match(svg, /fill="#dcdce6"/, 'empty frames draw a placeholder');
+  const svg = renderPage(doc, 0, { measure: approxMeasure, editor: true });
+  assert.match(svg, /fill="#dcdce6"/, 'empty frames draw a placeholder while editing');
   assert.ok(!svg.includes('<image'), 'and no picture');
+  assert.ok(!renderPage(doc, 0, { measure: approxMeasure }).includes('#dcdce6'), 'but not in downloads');
 });
 
 test('[IMG-15] grid cells tile the page with even gaps', async () => {
@@ -392,4 +393,28 @@ test('[ELM-10] connectors are clicked on their line, and can attach inside group
   page.elements[0].y = 300;
   updateConnectors(page);
   assert.ok(endsOf(k)[0][1] > 300, 'follows the group');
+});
+
+test('[ELM-10] a rotated or flipped connector is straightened where it is drawn', async () => {
+  const { createConnector, updateConnectors, endsOf } = await import('../../src/model/connectors.js');
+  const c = createConnector({ from: [100, 100], to: [300, 100] });
+  c.flipX = true;
+  updateConnectors({ elements: [c] });
+  assert.equal(c.flipX, false);
+  assert.deepEqual(endsOf(c).map((p) => p.map(Math.round)), [[300, 100], [100, 100]], 'ends swapped by the flip');
+  c.rotation = 90;
+  updateConnectors({ elements: [c] });
+  assert.equal(c.rotation, 0);
+  const near = (p, q) => Math.abs(p[0] - q[0]) <= 1.5 && Math.abs(p[1] - q[1]) <= 1.5;
+  const [r0, r1] = endsOf(c);
+  assert.ok(near(r0, [200, 200]) && near(r1, [200, 0]), `turned a quarter: ${r0} ${r1}`);
+  // Inside a plain group, a connector follows a target in the same group.
+  const a = createShape('rect', { x: 0, y: 0, w: 50, h: 50 });
+  const b = createShape('rect', { x: 400, y: 0, w: 50, h: 50 });
+  const k = createConnector({ from: [0, 0], to: [1, 1], start: a.id, end: b.id });
+  const g = { id: 'g', type: 'group', x: 100, y: 100, w: 450, h: 50, rotation: 0, children: [a, k] };
+  updateConnectors({ elements: [g, b] });
+  const [s, e] = endsOf(k);
+  assert.deepEqual([s[0] + 100, s[1] + 100].map(Math.round), [150, 125], 'starts on a, in page terms');
+  assert.deepEqual([e[0] + 100, e[1] + 100].map(Math.round), [400, 25], 'ends on b outside the group');
 });

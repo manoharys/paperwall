@@ -24,10 +24,9 @@ function open() {
       const db = req.result;
       for (const s of STORES) if (!db.objectStoreNames.contains(s)) db.createObjectStore(s);
     };
-    req.onsuccess = () => {
-      const db = req.result;
-      // Let a newer version of Paperwall in another tab upgrade the database;
-      // the next read or write here opens it again.
+    // Let a newer version of Paperwall in another tab upgrade the database;
+    // the next read or write here opens it again.
+    const watch = (db) => {
       db.onversionchange = () => {
         db.close();
         dbPromise = null;
@@ -35,11 +34,39 @@ function open() {
       db.onclose = () => {
         dbPromise = null;
       };
+      return db;
+    };
+    let settled = false;
+    req.onsuccess = () => {
+      const db = watch(req.result);
+      if (settled) {
+        // The upgrade finished after we went on with the old database: use the new one from now on.
+        dbPromise = Promise.resolve(db);
+        return;
+      }
+      settled = true;
       resolve(db);
     };
     req.onblocked = () => {
-      // An older tab still has the database open; it upgrades once that tab closes.
+      // An older Paperwall tab still has the database open. Carry on with the
+      // database as it is (designs and uploads work; version history waits)
+      // and finish upgrading once that tab closes.
       globalThis.dispatchEvent?.(new CustomEvent('paperwall:storage-blocked'));
+      const old = indexedDB.open(DB_NAME);
+      old.onsuccess = () => {
+        if (settled) return old.result.close();
+        settled = true;
+        const db = old.result;
+        db.onversionchange = () => db.close(); // let our own upgrade through
+        resolve(db);
+      };
+      old.onerror = () => {
+        if (!settled) {
+          settled = true;
+          persistent = false;
+          resolve(null);
+        }
+      };
     };
     req.onerror = () => {
       persistent = false;
@@ -135,7 +162,17 @@ async function valuesIn(prefix) {
 }
 
 /** Keep a copy of the design as it is now. The oldest beyond MAX_VERSIONS are dropped. */
-export async function saveVersion(doc, { label = '' } = {}) {
+// Versions are saved one at a time, so one save's clean-up can't remove
+// images another save has written but not yet pointed to.
+let versionQueue = Promise.resolve();
+
+export function saveVersion(doc, opts) {
+  const run = versionQueue.then(() => writeVersion(doc, opts));
+  versionQueue = run.catch(() => null);
+  return run;
+}
+
+async function writeVersion(doc, { label = '' } = {}) {
   const at = Date.now();
   const key = vKey(doc.id, at);
   const { assets, ...meta } = doc;

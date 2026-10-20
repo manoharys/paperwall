@@ -18,6 +18,13 @@ const DUOTONES = [
   ['Forest', '#1f3a2e', '#e9c46a'], ['Pop', '#2a1bd6', '#ff6b9a'], ['Citrus', '#14532d', '#fde047'], ['Sepia', '#3a2418', '#f4d6a0'],
 ];
 
+// Effect previews depend only on the font, so each is drawn once.
+const previews = new Map();
+function cached(key, make) {
+  if (!previews.has(key)) previews.set(key, make());
+  return previews.get(key);
+}
+
 const EFFECT_NAMES = { none: 'None', lift: 'Lift', hollow: 'Hollow', splice: 'Splice', echo: 'Echo', glitch: 'Glitch', glow: 'Glow', neon: 'Neon' };
 
 const TYPE_NAMES = { text: 'Text', shape: 'Shape', line: 'Line', image: 'Image', icon: 'Icon', sticker: 'Sticker', qr: 'QR code', group: 'Group', chart: 'Chart', table: 'Table', draw: 'Drawing', connector: 'Connector' };
@@ -295,10 +302,10 @@ export class Inspector {
   textEffects(el) {
     const fx = el.effect || { type: 'none' };
     const set = (patch, live) => this.up({ effect: { ...fx, ...patch } }, live ? 'effect' : null);
-    const preview = (type) => renderElementOnly(this.ed.doc, createText({
+    const preview = (type) => cached(`${el.font}|${type}`, () => renderElementOnly(this.ed.doc, createText({
       text: 'Ag', w: 64, h: 44, size: 32, weight: 800, font: el.font, color: type === 'neon' ? '#ff2d95' : '#1a1a2e', align: 'center', lineHeight: 1.2,
       effect: { type, color: type === 'splice' ? '#ffb703' : type === 'glow' ? '#ffb703' : undefined },
-    }), { measure, idPrefix: `fx-${type}` });
+    }), { measure, idPrefix: `fx-${type}` }));
     const uses = {
       color: ['splice', 'glitch', 'glow', 'neon'].includes(fx.type),
       offset: ['splice', 'echo', 'glitch'].includes(fx.type),

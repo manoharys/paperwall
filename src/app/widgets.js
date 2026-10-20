@@ -1,6 +1,7 @@
 // Form controls used by the panels: color picker, sliders, number fields.
 
 import { h, icon, iconButton } from './ui.js';
+import { hexToRgb } from '../model/lint.js';
 
 export const PALETTES = [
   { name: 'Ink', colors: ['#16161d', '#3d3d4e', '#8a8a9e', '#d9d9e3', '#ffffff'] },
@@ -279,8 +280,8 @@ function cssGradient(g, angle = 90) {
 }
 
 function mixHex(a, b, t) {
-  const p = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  const [x, y] = [p(a), p(b)];
+  const [x, y] = [hexToRgb(a), hexToRgb(b)];
+  if (!x || !y) return x ? a : b;
   return `#${x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('')}`;
 }
 

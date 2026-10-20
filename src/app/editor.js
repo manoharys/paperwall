@@ -307,7 +307,9 @@ export class Editor {
 
   /** Put a picture in an image or frame, keeping its place and shape: it's cropped to fill. */
   fillFrame(id, upload) {
-    const el = cmd.findElement(this.pageData, id);
+    // Look on every page: the page may have changed while a photo was being picked.
+    const page = this.doc.pages.find((p) => cmd.findElement(p, id));
+    const el = page && cmd.findElement(page, id);
     if (!el || el.type !== 'image') return null;
     this.change(() => {
       el.assetId = addAsset(this.doc, upload);
@@ -315,7 +317,7 @@ export class Editor {
       const pic = upload.width / upload.height;
       el.crop = pic > frame ? { x: (1 - frame / pic) / 2, y: 0, w: frame / pic, h: 1 } : { x: 0, y: (1 - pic / frame) / 2, w: 1, h: pic / frame };
     });
-    this.select([el.id]);
+    if (page === this.pageData) this.select([el.id]);
     return el;
   }
 

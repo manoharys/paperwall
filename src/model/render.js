@@ -3,6 +3,7 @@
 
 import { shapePath, dashArray, maskPath, drawPath } from './shapes.js';
 import { connectorGeometry, arrowHead } from './connectors.js';
+import { hexToRgb } from './lint.js';
 import { layoutText, displayText, approxMeasure } from './text-layout.js';
 import { iconById, stickerById } from './graphics.js';
 import { qrMatrix, qrPath } from './qr.js';
@@ -92,7 +93,7 @@ function imageFilter(ctx, fl) {
   if (fl.hue) parts.push(`<feColorMatrix type="hueRotate" values="${f(fl.hue)}"/>`);
   if (fl.duotone?.dark && fl.duotone?.light) {
     // Shadows become one color, highlights another, by brightness.
-    const rgb = (hex) => [1, 3, 5].map((i) => parseInt(String(hex).slice(i, i + 2), 16) / 255 || 0);
+    const rgb = (hex) => (hexToRgb(hex) || [0, 0, 0]).map((v) => v / 255);
     const [d, l] = [rgb(fl.duotone.dark), rgb(fl.duotone.light)];
     parts.push('<feColorMatrix type="matrix" values="0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0 0 0 1 0"/>');
     parts.push(`<feComponentTransfer>${['R', 'G', 'B'].map((c, i) => `<feFunc${c} type="table" tableValues="${f(d[i])} ${f(l[i])}"/>`).join('')}</feComponentTransfer>`);
@@ -142,7 +143,8 @@ function renderImage(ctx, el) {
   const href = el.assetId ? ctx.href(el.assetId) : '';
   const outline = maskPath(el);
   if (!href) {
-    // An empty frame: a soft placeholder with a little picture in the middle.
+    // An empty frame shows a soft placeholder while editing; downloads leave it out.
+    if (!ctx.editor) return '';
     const s = Math.min(el.w, el.h) * 0.22;
     const ox = (el.w - s) / 2;
     const oy = (el.h - s) / 2;
@@ -166,14 +168,15 @@ function renderImage(ctx, el) {
 }
 
 function renderConnector(ctx, el) {
-  const { d, startDir, endDir } = connectorGeometry(el);
   const sw = el.strokeWidth || 4;
+  const head = sw * 3.2;
+  const { d, startDir, endDir } = connectorGeometry(el, { start: el.startCap === 'arrow' ? head * 0.8 : 0, end: el.endCap === 'arrow' ? head * 0.8 : 0 });
   const dash = dashArray(el.dash, sw);
   const color = esc(el.stroke || '#000000');
   const [a, b] = el.points.map(([fx, fy]) => [fx * el.w, fy * el.h]);
   let out = `<path d="${d}" fill="none" stroke="${color}" stroke-width="${f(sw)}" stroke-linejoin="round" stroke-linecap="${dash ? 'round' : 'butt'}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`;
-  if (el.endCap === 'arrow') out += `<path d="${arrowHead(b, endDir, sw * 3.2)}" fill="${color}"/>`;
-  if (el.startCap === 'arrow') out += `<path d="${arrowHead(a, [-startDir[0], -startDir[1]], sw * 3.2)}" fill="${color}"/>`;
+  if (el.endCap === 'arrow') out += `<path d="${arrowHead(b, endDir, head)}" fill="${color}"/>`;
+  if (el.startCap === 'arrow') out += `<path d="${arrowHead(a, [-startDir[0], -startDir[1]], head)}" fill="${color}"/>`;
   return out;
 }
 
@@ -246,10 +249,9 @@ export const TEXT_EFFECTS = ['none', 'lift', 'hollow', 'splice', 'echo', 'glitch
 
 /** Mix a #rrggbb color toward white by t (0..1). */
 function lighten(hex, t) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
-  if (!m) return hex;
-  const n = parseInt(m[1], 16);
-  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(v + (255 - v) * t));
+  const rgb = hexToRgb(hex);
+  if (!rgb) return hex;
+  const c = rgb.map((v) => Math.round(v + (255 - v) * t));
   return `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
 

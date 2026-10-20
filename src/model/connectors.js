@@ -33,7 +33,8 @@ export function setEnds(el, a, b) {
   const y = Math.min(a[1], b[1]);
   const w = Math.max(1, Math.abs(a[0] - b[0]));
   const h = Math.max(1, Math.abs(a[1] - b[1]));
-  Object.assign(el, { x, y, w, h, rotation: 0 });
+  // A connector is defined by its ends alone: never rotated or flipped.
+  Object.assign(el, { x, y, w, h, rotation: 0, flipX: false, flipY: false });
   el.points = [a, b].map(([px, py]) => [Math.round(((px - x) / w) * 10000) / 10000, Math.round(((py - y) / h) * 10000) / 10000]);
 }
 
@@ -49,6 +50,19 @@ export function anchorOn(box, toward) {
   return { point: [cx, dy >= 0 ? b.y + b.h : b.y], side: dy >= 0 ? 'b' : 't' };
 }
 
+/** Where the ends are drawn, taking a rotation or flip (from the panel, or ungrouping) into account. */
+function visualEnds(el) {
+  const cx = el.x + el.w / 2;
+  const cy = el.y + el.h / 2;
+  const r = ((el.rotation || 0) * Math.PI) / 180;
+  return endsOf(el).map(([x, y]) => {
+    let dx = (x - cx) * (el.flipX ? -1 : 1);
+    let dy = (y - cy) * (el.flipY ? -1 : 1);
+    [dx, dy] = [dx * Math.cos(r) - dy * Math.sin(r), dx * Math.sin(r) + dy * Math.cos(r)];
+    return [cx + dx, cy + dy];
+  });
+}
+
 const center = (box) => {
   const b = boundsOf(box);
   return [b.x + b.w / 2, b.y + b.h / 2];
@@ -60,24 +74,43 @@ const center = (box) => {
  */
 export function updateConnectors(page) {
   let changed = false;
-  // An element inside a group is reached through its group: the end
-  // attaches to the group's box and follows the group.
+  // Every element's box on the page. Inside unrotated groups that's the
+  // element's own box moved by the group; inside a rotated or flipped group
+  // the end attaches to the outermost group's box instead.
   const byId = new Map();
-  const index = (els, top) => {
+  const index = (els, ox, oy, top) => {
     for (const e of els) {
-      byId.set(e.id, top || e);
-      if (e.type === 'group') index(e.children, top || e);
+      byId.set(e.id, top || { ...e, x: e.x + ox, y: e.y + oy });
+      if (e.type !== 'group') continue;
+      const plain = !top && !e.rotation && !e.flipX && !e.flipY;
+      index(e.children, ox + e.x, oy + e.y, plain ? null : top || { ...e, x: e.x + ox, y: e.y + oy });
     }
   };
-  index(page.elements, null);
-  for (const el of page.elements) {
-    if (el.type !== 'connector') continue;
-    const [a0, b0] = endsOf(el);
+  index(page.elements, 0, 0, null);
+  // Connectors inside an (unrotated) group are synced in page coordinates too.
+  const visit = (els, ox, oy) => {
+    for (const el of els) {
+      if (el.type === 'group') {
+        if (!el.rotation && !el.flipX && !el.flipY) visit(el.children, ox + el.x, oy + el.y);
+        continue;
+      }
+      if (el.type === 'connector' && sync(el, ox, oy)) changed = true;
+    }
+  };
+  const sync = (el, ox, oy) => {
+    let moved = false;
+    if (el.rotation || el.flipX || el.flipY) {
+      // Bake a rotation or flip into the ends, where the line is actually drawn.
+      const [p, q] = visualEnds(el);
+      setEnds(el, p, q);
+      moved = true;
+    }
+    const [a0, b0] = endsOf(el).map(([x, y]) => [x + ox, y + oy]);
     const sTarget = el.start?.id ? byId.get(el.start.id) : null;
     const eTarget = el.end?.id ? byId.get(el.end.id) : null;
     if (el.start?.id && !sTarget) el.start = { id: null };
     if (el.end?.id && !eTarget) el.end = { id: null };
-    if (!sTarget && !eTarget) continue;
+    if (!sTarget && !eTarget) return moved;
     const a = sTarget ? anchorOn(sTarget, eTarget ? center(eTarget) : b0) : null;
     const b = eTarget ? anchorOn(eTarget, sTarget ? center(sTarget) : a0) : null;
     el.start.side = a?.side;
@@ -85,16 +118,35 @@ export function updateConnectors(page) {
     const na = a ? a.point : a0;
     const nb = b ? b.point : b0;
     if (Math.abs(na[0] - a0[0]) + Math.abs(na[1] - a0[1]) + Math.abs(nb[0] - b0[0]) + Math.abs(nb[1] - b0[1]) > 0.01) {
-      setEnds(el, na, nb);
-      changed = true;
+      setEnds(el, [na[0] - ox, na[1] - oy], [nb[0] - ox, nb[1] - oy]);
+      moved = true;
     }
-  }
+    return moved;
+  };
+  visit(page.elements, 0, 0);
   return changed;
 }
 
-/** Path data in the connector's own box, plus the direction at each end (for arrowheads). */
-export function connectorGeometry(el) {
+/**
+ * Path data in the connector's own box, plus the direction at each end (for
+ * arrowheads). `trim` pulls the line back from its ends (by px) so it stops
+ * inside an arrowhead instead of poking out of its tip.
+ */
+export function connectorGeometry(el, trim = { start: 0, end: 0 }) {
   const [a, b] = el.points.map(([fx, fy]) => [fx * el.w, fy * el.h]);
+  const g = routeBetween(el, a, b);
+  if (!trim.start && !trim.end) return g;
+  const unit = ([x, y]) => {
+    const l = Math.hypot(x, y) || 1;
+    return [x / l, y / l];
+  };
+  const [us, ue] = [unit(g.startDir), unit(g.endDir)];
+  const a2 = [a[0] + us[0] * trim.start, a[1] + us[1] * trim.start];
+  const b2 = [b[0] - ue[0] * trim.end, b[1] - ue[1] * trim.end];
+  return { ...routeBetween(el, a2, b2), startDir: g.startDir, endDir: g.endDir };
+}
+
+function routeBetween(el, a, b) {
   const horizontalStart = el.start?.side ? 'lr'.includes(el.start.side) : Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]);
   if (el.route === 'elbow') {
     if (horizontalStart) {
