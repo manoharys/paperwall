@@ -501,7 +501,18 @@ const RENDERERS = {
   connector: renderConnector,
   draw: (ctx, el) => `<path d="${drawPath(el)}" fill="none" stroke="${esc(el.stroke)}" stroke-width="${f(el.strokeWidth)}" stroke-linecap="round" stroke-linejoin="round"/>`,
   // While playing, a group's elements move by their own animations.
-  group: (ctx, el) => el.children.map((c) => (ctx.motion ? renderMoving(ctx, c, true) : renderElement(ctx, c))).join(''),
+  group: (ctx, el) => {
+    if (!ctx.motion) return el.children.map((c) => renderElement(ctx, c)).join('');
+    // Children move as seen on the page: the group's turn and flips (and
+    // those of groups around it) are taken back out of their motion.
+    const outer = ctx.motion.turn;
+    ctx.motion.turn = mul(outer || IDENTITY, turnOf(el));
+    try {
+      return el.children.map((c) => renderMoving(ctx, c, true)).join('');
+    } finally {
+      ctx.motion.turn = outer;
+    }
+  },
 };
 
 export function renderElement(ctx, el) {
@@ -566,6 +577,20 @@ function pageBody(ctx, page, w, h, opts) {
 }
 
 /** One element at a moment of its page's animations (`nested`: inside a group). */
+// 2×2 matrices [a, b, c, d] (x' = a·x + c·y, y' = b·x + d·y): how a group
+// turns and flips what's inside it.
+const IDENTITY = [1, 0, 0, 1];
+function turnOf(el) {
+  const r = ((el.rotation || 0) * Math.PI) / 180;
+  const sx = el.flipX ? -1 : 1;
+  const sy = el.flipY ? -1 : 1;
+  return [Math.cos(r) * sx, Math.sin(r) * sx, -Math.sin(r) * sy, Math.cos(r) * sy];
+}
+function mul([a, b, c, d], [e, g, h, k]) {
+  return [a * e + c * g, b * e + d * g, a * h + c * k, b * h + d * k];
+}
+const isIdentity = (m) => !m || (Math.abs(m[0] - 1) < 1e-9 && Math.abs(m[1]) < 1e-9 && Math.abs(m[2]) < 1e-9 && Math.abs(m[3] - 1) < 1e-9);
+
 function renderMoving(ctx, el, nested) {
   const { page, order, time, size } = ctx.motion;
   const anim = animationOf(page, el, order, { nested });
@@ -582,11 +607,29 @@ function renderMoving(ctx, el, nested) {
   const cx = b.x + b.w / 2;
   const cy = b.y + b.h / 2;
   const attrs = [];
-  if (m.dx || m.dy || m.scale !== 1 || m.rotate) {
-    attrs.push(`transform="translate(${f(m.dx)} ${f(m.dy)}) translate(${f(cx)} ${f(cy)}) rotate(${f(m.rotate)}) scale(${m.scale}) translate(${f(-cx)} ${f(-cy)})"`);
+  // Inside a turned or flipped group: page directions in the group's own terms.
+  const turn = nested && !isIdentity(ctx.motion.turn) ? ctx.motion.turn : null;
+  let { dx, dy, rotate } = m;
+  let inv = null;
+  if (turn) {
+    const [a, b2, c, d] = turn;
+    const det = a * d - b2 * c;
+    inv = [d / det, -b2 / det, -c / det, a / det];
+    [dx, dy] = [inv[0] * m.dx + inv[2] * m.dy, inv[1] * m.dx + inv[3] * m.dy];
+    if (det < 0) rotate = -rotate; // a mirror turns the other way
+  }
+  if (dx || dy || m.scale !== 1 || rotate) {
+    attrs.push(`transform="translate(${f(dx)} ${f(dy)}) translate(${f(cx)} ${f(cy)}) rotate(${f(rotate)}) scale(${m.scale}) translate(${f(-cx)} ${f(-cy)})"`);
   }
   if (opacity < 1) attrs.push(`opacity="${f(opacity)}"`);
-  if (m.reveal < 1) {
+  if (m.reveal < 1 && turn) {
+    // A wipe from the page's left, inside a turned group: a square around the
+    // element, uncovered left to right as the page sees it.
+    const side = Math.hypot(b.w, b.h) + 80;
+    const id = ctx.id('wipe');
+    ctx.defs.push(`<clipPath id="${id}"><rect x="${f(-side / 2)}" y="${f(-side / 2)}" width="${f(side * m.reveal)}" height="${f(side)}" transform="translate(${f(cx)} ${f(cy)}) matrix(${inv.map(f).join(' ')} 0 0)"/></clipPath>`);
+    attrs.push(`clip-path="url(#${id})"`);
+  } else if (m.reveal < 1) {
     // A wipe: shown from the left edge across.
     // Room around the box for strokes, arrowheads, shadows and glows: only
     // the moving right edge cuts.

@@ -441,3 +441,22 @@ test('[MOT-03] empty motion values in a file keep their defaults', () => {
   assert.deepEqual(doc.pages[0].anim, { type: 'fade' });
   assert.equal(pageDuration(doc.pages[0]), 5);
 });
+
+test('[MOT-01] inside a flipped or turned group, an element still rises up the page', async () => {
+  const { createGroup } = await import('../../src/model/doc.js');
+  const offsetAt = (props) => {
+    const doc = createDesign({ width: 1000, height: 1000 });
+    const a = createShape('rect', { x: 0, y: 0, w: 100, h: 100, fill: '#ff0000' });
+    a.anim = { type: 'rise', duration: 1 };
+    doc.pages[0].elements.push(createGroup([a, createShape('rect', { x: 200, y: 0, w: 100, h: 100 })], props));
+    const svg = renderPage(doc, 0, { time: 0.1 });
+    const [, x, y] = svg.match(/<g transform="translate\((-?[\d.]+) (-?[\d.]+)\) translate\(50 50\)/);
+    return [+x, +y];
+  };
+  const [, plain] = offsetAt({});
+  assert.ok(plain > 0, 'starts below, in a plain group');
+  const [, flipped] = offsetAt({ flipY: true });
+  assert.ok(Math.abs(flipped + plain) < 0.01, 'a flipped group: the other way in its own terms, so up the page');
+  const [turnedX, turnedY] = offsetAt({ rotation: 90 });
+  assert.ok(Math.abs(turnedX - plain) < 0.01 && Math.abs(turnedY) < 0.01, 'a quarter turn: along its own x');
+});

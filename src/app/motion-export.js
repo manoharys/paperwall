@@ -113,10 +113,12 @@ export function canMakeVideo() {
 
 /** The best video encoding this browser offers for a container, or null. */
 async function pickVideoCodec(container, width, height) {
+  // VP9 level 4.0 holds frames up to about 2.2 megapixels; bigger ones need 5.0.
+  const vp9 = width * height > 2228224 ? 'vp09.00.50.08' : 'vp09.00.40.08';
   const tries = container === 'mp4'
     // H.264 at level 5.1 first (big frames, up to 4K), then 4.0 and 3.1 for smaller encoders.
-    ? [['avc', 'avc1.640033'], ['avc', 'avc1.640028'], ['avc', 'avc1.4d0028'], ['avc', 'avc1.42001f'], ['vp9', 'vp09.00.40.08']]
-    : [['vp9', 'vp09.00.40.08'], ['vp8', 'vp8']];
+    ? [['avc', 'avc1.640033'], ['avc', 'avc1.640028'], ['avc', 'avc1.4d0028'], ['avc', 'avc1.42001f'], ['vp9', vp9]]
+    : [['vp9', vp9], ['vp8', 'vp8']];
   for (const [codec, codecString] of tries) {
     const config = { codec: codecString, width, height, bitrate: Math.round(width * height * 30 * 0.12), framerate: FPS.video, ...(codec === 'avc' ? { avc: { format: 'avc' } } : {}) };
     try {
