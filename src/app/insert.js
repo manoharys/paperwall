@@ -330,7 +330,13 @@ export class InsertPanel {
       if (!ups.length) grid.append(h('p', { class: 'empty-note' }, 'Images you add show up here, so you can use them again in any design.'));
       for (const u of ups) {
         grid.append(h('div', { class: 'upload' },
-          h('button', { type: 'button', class: 'upload-img', title: u.name, 'aria-label': `Add ${u.name}`, 'data-testid': 'upload-item', draggable: 'true', onClick: () => ed.addImage(u), onDragstart: (e) => {
+          // A div acting as a button: Firefox never starts a drag from a <button>.
+          h('div', { role: 'button', tabindex: '0', class: 'upload-img', title: u.name, 'aria-label': `Add ${u.name}`, 'data-testid': 'upload-item', draggable: 'true', onClick: () => ed.addImage(u), onKeydown: (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              ed.addImage(u);
+            }
+          }, onDragstart: (e) => {
             // Drag onto the page to add it, or onto a frame to fill the frame.
             e.dataTransfer.setData('application/x-paperwall-upload', u.id);
             e.dataTransfer.effectAllowed = 'copy';

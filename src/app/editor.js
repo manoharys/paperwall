@@ -124,7 +124,8 @@ export class Editor {
 
   /** After any change: save, refresh, keep connectors attached. `edit: false` for corrections (re-measuring), which don't call for a new version. */
   afterChange(quiet = false, { edit = true } = {}) {
-    if (this.isDragging?.()) this.finishDrag?.(); // e.g. text refitted when a font loads
+    // Mid-drag (text refitted as a font loads): after the drag, which it mustn't cut short.
+    if (this.isDragging?.()) return void this.whenIdle(() => this.afterChange(quiet, { edit }));
     // Connectors on every page follow what they're attached to (pages
     // without connectors return at once).
     this.syncAllConnectors();
@@ -220,6 +221,19 @@ export class Editor {
     this.page = Math.min(this.page, this.doc.pages.length - 1);
     this.editingTextId = null;
     this.afterChange();
+  }
+
+  /** Run fn now, or once the drag that's going is over. */
+  whenIdle(fn) {
+    if (!this.isDragging?.()) return void fn();
+    (this.idle ||= []).push(fn);
+  }
+
+  /** The drag is over: run what waited for it. */
+  dragEnded() {
+    const waiting = this.idle || [];
+    this.idle = [];
+    for (const fn of waiting) fn();
   }
 
   /** Call off a change halfway: the design goes back to its last recorded step, which is forgotten. */

@@ -41,18 +41,30 @@ export class Canvas {
 
     this.el.addEventListener('pointerdown', (e) => this.onDown(e));
     this.el.addEventListener('pointermove', (e) => this.onMove(e));
-    this.el.addEventListener('pointerup', (e) => this.onUp(e));
-    this.el.addEventListener('pointercancel', (e) => this.onCancel(e));
+    // Whatever waited for a drag to end runs once it has.
+    const settle = () => {
+      if (!this.drag) editor.dragEnded();
+    };
+    this.el.addEventListener('pointerup', (e) => {
+      this.onUp(e);
+      settle();
+    });
+    this.el.addEventListener('pointercancel', (e) => {
+      this.onCancel(e);
+      settle();
+    });
     // Capture lost without a pointerup (the browser or a system gesture): the
     // drag is over, or every later touch would be taken for a second finger.
     this.el.addEventListener('lostpointercapture', (e) => {
       if (this.drag && e.pointerId === this.drag.pointerId) this.onCancel(e);
+      settle();
     });
     // Undo and redo wait while a drag is going (it holds parts of the design).
     editor.isDragging = () => !!this.drag;
     // Something else needs the design mid-drag: the drag ends here, as if let go.
     editor.finishDrag = () => {
       if (this.drag) this.onUp();
+      settle();
     };
     this.el.addEventListener('dblclick', (e) => this.onDouble(e));
     this.el.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
@@ -138,6 +150,11 @@ export class Canvas {
     this.svgHost.innerHTML = renderPage(ed.doc, ed.page, { measure, assetHref: this.assetHref, editor: true, scale: ed.zoom, skip, idPrefix: 'cv' });
     this.drawOverlay();
     if (this.textarea) this.positionTextarea();
+    // The page changed size (a restored version, resizing, undoing either): fit it in view again.
+    const size = `${ed.doc.width}x${ed.doc.height}`;
+    const resized = this.pageSize && this.pageSize !== size;
+    this.pageSize = size;
+    if (resized) this.zoomToFit();
   }
 
   zoomToFit() {
@@ -384,7 +401,11 @@ export class Canvas {
     try {
       this.el.setPointerCapture(e.pointerId);
     } catch {
-      /* the pointer is already gone: its pointerup still ends the drag */
+      // The pointer is already gone, so nothing will end this drag: drop it now.
+      const d = this.drag;
+      this.drag = null;
+      if (d.recorded) this.ed.history.discard();
+      this.ed.dragEnded();
     }
   }
 

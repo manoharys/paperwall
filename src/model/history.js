@@ -66,6 +66,13 @@ export class History {
     return restore(snap, doc.assets);
   }
 
+  /** The newest step stays: let go of what was kept in case it was discarded. */
+  settle() {
+    this.pending = false;
+    this.shifted = null;
+    this.discardedFuture = null;
+  }
+
   get canUndo() {
     return this.past.length > 0;
   }
@@ -76,14 +83,14 @@ export class History {
 
   undo(doc) {
     if (!this.past.length) return doc;
-    this.pending = false;
+    this.settle();
     this.future.push(snapshot(doc));
     this.lastKey = null;
     return restore(this.past.pop(), doc.assets);
   }
 
   redo(doc) {
-    this.pending = false;
+    this.settle();
     if (!this.future.length) return doc;
     this.past.push(snapshot(doc));
     this.lastKey = null;
