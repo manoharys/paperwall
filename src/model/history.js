@@ -33,6 +33,7 @@ export class History {
     this.past.push(snapshot(doc));
     if (this.past.length > this.limit) this.past.shift();
     this.discardedFuture = this.future; // brought back if this step is discarded
+    this.pending = true; // the newest step is this one, until undo or redo
     this.future = [];
     this.lastKey = key;
     this.lastAt = now;
@@ -40,6 +41,10 @@ export class History {
 
   /** Forget the last recorded step, for a change that turned out to be nothing. */
   discard() {
+    // Only if the newest step is still the one just recorded (an undo in
+    // between already used it).
+    if (!this.pending) return;
+    this.pending = false;
     this.past.pop();
     if (this.discardedFuture) this.future = this.discardedFuture;
     this.discardedFuture = null;
@@ -56,12 +61,14 @@ export class History {
 
   undo(doc) {
     if (!this.past.length) return doc;
+    this.pending = false;
     this.future.push(snapshot(doc));
     this.lastKey = null;
     return restore(this.past.pop(), doc.assets);
   }
 
   redo(doc) {
+    this.pending = false;
     if (!this.future.length) return doc;
     this.past.push(snapshot(doc));
     this.lastKey = null;

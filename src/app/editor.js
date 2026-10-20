@@ -405,9 +405,12 @@ export class Editor {
     for (const p of this.doc.pages) updateConnectors(p);
   }
 
-  /** Keep attached connector ends on their elements (called before every draw). */
+  /**
+   * Keep attached connector ends on their elements while drawing, including
+   * mid-drag. Group boxes are refitted only when a change is finished.
+   */
   syncConnectors() {
-    return updateConnectors(this.pageData);
+    return updateConnectors(this.pageData, { refit: false });
   }
 
   /** Turn a freehand stroke (page points) into a drawing with the current tool. */

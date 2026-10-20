@@ -478,3 +478,28 @@ test('[EDIT-01] a discarded step keeps redo available', async () => {
   h.discard(); // ...is dropped again
   assert.ok(h.canRedo, 'redo still works');
 });
+
+test('[EDIT-01] an undo in the middle of a drag keeps its history', async () => {
+  const { History } = await import('../../src/model/history.js');
+  const h = new History();
+  let doc = { pages: [], assets: {}, n: 1 };
+  h.record(doc);
+  doc.n = 2;
+  h.record(doc); // a drag starts
+  doc = h.undo(doc); // ...and Undo is pressed while dragging
+  h.discard(); // the drag ends without a change
+  assert.equal(h.past.length, 1, 'the earlier step is still there');
+  assert.ok(h.canRedo);
+});
+
+test('[BRD-03] a brand kit also recolors text effects and duotone photos', async () => {
+  const { createDesign, createText, createImage } = await import('../../src/model/doc.js');
+  const { applyBrand, collectColors } = await import('../../src/model/commands.js');
+  const doc = createDesign({ width: 100, height: 100 });
+  doc.pages[0].elements.push(createText({ color: '#111111', effect: { type: 'splice', color: '#ff0000' } }), createImage('a', { filters: { duotone: { dark: '#00ff00', light: '#0000ff' } } }));
+  assert.ok(['#ff0000', '#00ff00', '#0000ff'].every((c) => collectColors(doc).includes(c)));
+  applyBrand(doc, { colors: ['#123456', '#abcdef'] });
+  const [t, img] = doc.pages[0].elements;
+  assert.ok(['#123456', '#abcdef'].includes(t.effect.color));
+  assert.ok(['#123456', '#abcdef'].includes(img.filters.duotone.dark));
+});

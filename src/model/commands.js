@@ -436,6 +436,14 @@ export function collectColors(doc) {
       add(el.color);
       if (el.highlight) add(el.highlight.color);
       if (el.outline) add(el.outline.color);
+      if (el.effect) {
+        add(el.effect.color);
+        add(el.effect.color2);
+      }
+      if (el.filters?.duotone) {
+        add(el.filters.duotone.dark);
+        add(el.filters.duotone.light);
+      }
       if (el.type === 'group') visit(el.children);
     }
   };
@@ -470,6 +478,8 @@ export function applyBrand(doc, brand) {
       if (el.stroke) el.stroke = swap(el.stroke);
       if (el.color) el.color = swap(el.color);
       if (el.highlight) el.highlight = { ...el.highlight, color: swap(el.highlight.color) };
+      if (el.effect) el.effect = { ...el.effect, color: swap(el.effect.color), color2: swap(el.effect.color2) };
+      if (el.filters?.duotone) el.filters = { ...el.filters, duotone: { dark: swap(el.filters.duotone.dark), light: swap(el.filters.duotone.light) } };
       if (el.type === 'text') texts.push(el);
       if (el.type === 'group') visit(el.children);
     }

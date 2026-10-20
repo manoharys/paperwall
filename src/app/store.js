@@ -51,6 +51,22 @@ function open() {
   return dbPromise;
 }
 
+/**
+ * Run a transaction, opening the database again once if it was closed under
+ * us (another tab upgraded it).
+ */
+async function txRetry(db, store, mode, fn) {
+  try {
+    return await tx(db, store, mode, fn);
+  } catch (e) {
+    if (e?.name !== 'InvalidStateError') throw e;
+    dbPromise = null;
+    const fresh = await open();
+    if (!fresh) throw e;
+    return tx(fresh, store, mode, fn);
+  }
+}
+
 function tx(db, store, mode, fn) {
   return new Promise((resolve, reject) => {
     const t = db.transaction(store, mode);
@@ -69,7 +85,7 @@ export function isPersistent() {
 export async function put(store, key, value) {
   const db = await open();
   if (!db) return void memory[store].set(key, value);
-  await tx(db, store, 'readwrite', (s) => s.put(value, key));
+  await txRetry(db, store, 'readwrite', (s) => s.put(value, key));
 }
 
 /** Several puts (value set) and deletes (value undefined) in one transaction. */
@@ -80,7 +96,7 @@ async function batch(store, ops) {
     for (const [k, v] of ops) v === undefined ? memory[store].delete(k) : memory[store].set(k, v);
     return;
   }
-  await tx(db, store, 'readwrite', (s) => {
+  await txRetry(db, store, 'readwrite', (s) => {
     for (const [k, v] of ops) v === undefined ? s.delete(k) : s.put(v, k);
   });
 }
@@ -88,19 +104,19 @@ async function batch(store, ops) {
 export async function get(store, key) {
   const db = await open();
   if (!db) return memory[store].get(key);
-  return tx(db, store, 'readonly', (s) => s.get(key));
+  return txRetry(db, store, 'readonly', (s) => s.get(key));
 }
 
 export async function del(store, key) {
   const db = await open();
   if (!db) return void memory[store].delete(key);
-  await tx(db, store, 'readwrite', (s) => s.delete(key));
+  await txRetry(db, store, 'readwrite', (s) => s.delete(key));
 }
 
 export async function all(store) {
   const db = await open();
   if (!db) return [...memory[store].values()];
-  return tx(db, store, 'readonly', (s) => s.getAll());
+  return txRetry(db, store, 'readonly', (s) => s.getAll());
 }
 
 // ---------- designs ----------
@@ -142,14 +158,14 @@ async function keysIn(prefix) {
   const [lo, hi] = range(prefix);
   const db = await open();
   if (!db) return [...memory.versions.keys()].filter((k) => k >= lo && k <= hi).sort();
-  return tx(db, 'versions', 'readonly', (s) => s.getAllKeys(IDBKeyRange.bound(lo, hi)));
+  return txRetry(db, 'versions', 'readonly', (s) => s.getAllKeys(IDBKeyRange.bound(lo, hi)));
 }
 
 async function valuesIn(prefix) {
   const [lo, hi] = range(prefix);
   const db = await open();
   if (!db) return [...memory.versions.entries()].filter(([k]) => k >= lo && k <= hi).map(([, v]) => v);
-  return tx(db, 'versions', 'readonly', (s) => s.getAll(IDBKeyRange.bound(lo, hi)));
+  return txRetry(db, 'versions', 'readonly', (s) => s.getAll(IDBKeyRange.bound(lo, hi)));
 }
 
 // Versions are saved one at a time, so one save's clean-up can't remove
@@ -236,10 +252,10 @@ export async function versionDoc(version) {
   const doc = await get('versions', dKey(version.designId, version.at));
   if (!doc) throw new Error('This version is missing');
   const assets = {};
-  for (const id of version.assetIds || []) {
-    const a = await get('versions', aKey(version.designId, id));
-    if (a) assets[id] = a;
-  }
+  const found = await Promise.all((version.assetIds || []).map((id) => get('versions', aKey(version.designId, id))));
+  (version.assetIds || []).forEach((id, i) => {
+    if (found[i]) assets[id] = found[i];
+  });
   return { ...doc, assets };
 }
 

@@ -107,6 +107,20 @@ export function drawPath(el) {
   return `${d} L${f(z[0])} ${f(z[1])}`;
 }
 
+/** Whether point p (page px) is within `tol` px of a drawing's stroke. */
+export function drawHit(el, p, tol) {
+  const pts = (el.points || []).map(([x, y]) => [el.x + x * el.w, el.y + y * el.h]);
+  if (pts.length === 1) return Math.hypot(p.x - pts[0][0], p.y - pts[0][1]) <= tol;
+  for (let i = 1; i < pts.length; i++) {
+    const [ax, ay] = pts[i - 1];
+    const [bx, by] = pts[i];
+    const len2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
+    const t = Math.max(0, Math.min(1, ((p.x - ax) * (bx - ax) + (p.y - ay) * (by - ay)) / len2));
+    if (Math.hypot(p.x - (ax + t * (bx - ax)), p.y - (ay + t * (by - ay))) <= tol) return true;
+  }
+  return false;
+}
+
 /** The outline a photo is clipped to: its frame shape, or a (rounded) rectangle. */
 export function maskPath(el) {
   const shape = !el.mask || el.mask === 'none' ? 'rect' : el.mask === 'circle' ? 'ellipse' : el.mask;

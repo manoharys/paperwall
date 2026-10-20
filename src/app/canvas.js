@@ -10,6 +10,7 @@ import { resizeElement, coverCrop } from '../model/commands.js';
 import { clone, DRAW_TOOLS, DPI } from '../model/doc.js';
 import { gridLines, marginSize, BLEED } from '../model/view.js';
 import { endsOf, setEnds, connectorHit } from '../model/connectors.js';
+import { drawHit } from '../model/shapes.js';
 import { measure } from './fonts.js';
 import { h, dataUrlToBlob, toast, pickFile } from './ui.js';
 import * as store from './store.js';
@@ -221,8 +222,10 @@ export class Canvas {
     for (let i = els.length - 1; i >= 0; i--) {
       const el = els[i];
       if (el.hidden) continue;
-      if (el.type === 'connector') {
-        if (connectorHit(el, p, Math.max(el.strokeWidth / 2, 0) + Math.max(margin, 8 / this.ed.zoom))) return el;
+      // Lines you draw or connect are picked near the line, not anywhere in their box.
+      if (el.type === 'connector' || (el.type === 'draw' && !el.rotation)) {
+        const tol = (el.strokeWidth || 0) / 2 + Math.max(margin, 8 / this.ed.zoom);
+        if (el.type === 'connector' ? connectorHit(el, p, tol) : drawHit(el, p, tol)) return el;
         continue;
       }
       if (pointInBox(p.x, p.y, el, el.type === 'line' ? Math.max(margin, 10 / this.ed.zoom) : margin)) return el;
@@ -271,7 +274,7 @@ export class Canvas {
       return;
     }
     const guide = e.target.closest?.('[data-guide]');
-    if (guide && !ed.drawTool) {
+    if (guide) {
       e.preventDefault();
       const index = +guide.getAttribute('data-guide');
       ed.history.record(ed.doc);

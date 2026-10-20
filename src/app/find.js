@@ -44,7 +44,11 @@ export function findDialog(editor) {
     const hit = hits[at];
     editor.change(() => refit(replaceText(editor.doc, find.value, repl.value, { ...opts, onlyId: hit.id }).changed));
     refresh();
-    if (hits.length) show(at);
+    if (!hits.length) return;
+    // Move on: if the new text still contains the query, the same place
+    // still matches, and replacing it again would never end.
+    const same = hits.findIndex((x) => x.page === hit.page && x.id === hit.id);
+    show(same >= 0 ? same + 1 : at);
   };
   const replaceAll = () => {
     let count = 0;

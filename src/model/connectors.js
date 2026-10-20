@@ -77,7 +77,7 @@ const center = (box) => {
  * Put every attached end of every connector on a page back on its target.
  * Ends whose target is gone become free. Returns whether anything moved.
  */
-export function updateConnectors(page) {
+export function updateConnectors(page, { refit = true } = {}) {
   if (!page || !hasConnector(page.elements)) return false;
   let changed = false;
   // Every element's box on the page. Inside unrotated groups that's the
@@ -102,7 +102,8 @@ export function updateConnectors(page) {
           changed = false;
           visit(el.children, ox + el.x, oy + el.y);
           // A connector inside that moved may now reach past the group's box.
-          if (changed) refitGroup(el);
+          // Not mid-drag (refit false): the drag code owns the group's box then.
+          if (changed && refit) refitGroup(el);
           changed = changed || before;
         }
         continue;
@@ -156,20 +157,22 @@ export function connectorGeometry(el, trim = { start: 0, end: 0 }) {
   const [us, ue] = [unit(g.startDir), unit(g.endDir)];
   const a2 = [a[0] + us[0] * trim.start, a[1] + us[1] * trim.start];
   const b2 = [b[0] - ue[0] * trim.end, b[1] - ue[1] * trim.end];
-  return { ...routeBetween(el, a2, b2), startDir: g.startDir, endDir: g.endDir };
+  // Same route shape as the untrimmed line, so it still meets the arrowheads.
+  return { ...routeBetween(el, a2, b2, g.horizontal), startDir: g.startDir, endDir: g.endDir };
 }
 
-function routeBetween(el, a, b) {
-  const r = route(el, a, b);
+function routeBetween(el, a, b, horizontal) {
+  const r = route(el, a, b, horizontal);
+  r.horizontal = horizontal ?? (el.start?.side ? 'lr'.includes(el.start.side) : Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]));
   // A route can fold flat (two boxes side by side): point the arrows along the line between the ends.
   const along = [b[0] - a[0] || 1, b[1] - a[1]];
   const some = (d) => (Math.hypot(d[0], d[1]) > 1e-6 ? d : along);
   return { ...r, startDir: some(r.startDir), endDir: some(r.endDir) };
 }
 
-function route(el, a, b) {
+function route(el, a, b, horizontal) {
   const path = (pts) => `M${f(pts[0][0])} ${f(pts[0][1])} ` + pts.slice(1).map(([x, y]) => `L${f(x)} ${f(y)}`).join(' ');
-  const horizontalStart = el.start?.side ? 'lr'.includes(el.start.side) : Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]);
+  const horizontalStart = horizontal ?? (el.start?.side ? 'lr'.includes(el.start.side) : Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]));
   if (el.route === 'elbow') {
     if (horizontalStart) {
       const mx = (a[0] + b[0]) / 2;

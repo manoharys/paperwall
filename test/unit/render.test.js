@@ -423,3 +423,12 @@ test('[ELM-10] a rotated or flipped connector is straightened where it is drawn'
   const right = Math.max(...g.children.map((c) => c.x + c.w));
   assert.ok(right <= g.w + 0.5, 'the group still wraps its children');
 });
+
+test('[ELM-09] drawings are picked near their stroke, not anywhere in their box', async () => {
+  const { createDrawing } = await import('../../src/model/doc.js');
+  const { drawHit } = await import('../../src/model/shapes.js');
+  const d = createDrawing([[0, 0], [400, 0], [400, 400]], { tool: 'pen' });
+  assert.ok(drawHit(d, { x: 200, y: 2 }, 6));
+  assert.ok(drawHit(d, { x: 398, y: 300 }, 6));
+  assert.ok(!drawHit(d, { x: 100, y: 300 }, 6), 'inside the box, far from the stroke');
+});
