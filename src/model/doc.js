@@ -217,7 +217,8 @@ export function createVideo(assetId, props = {}) {
 
 /** Where a video is (seconds into its file) at `local` seconds into its page. */
 export function videoTime(el, local, duration) {
-  const start = Math.max(0, el.trim?.start || 0);
+  // A start point at or past the end means just before the end.
+  const start = Math.max(0, duration > 0 ? Math.min(el.trim?.start || 0, duration - 0.04) : el.trim?.start || 0);
   const t = start + Math.max(0, local);
   if (!(duration > 0)) return t;
   if (el.loop === false) return Math.min(t, Math.max(0, duration - 0.04));

@@ -4,7 +4,7 @@
 import { shapePath, dashArray, maskPath, drawPath } from './shapes.js';
 import { connectorGeometry, arrowHead } from './connectors.js';
 import { hexToRgb, mixHex, sortedStops } from './color.js';
-import { layoutText, displayText, approxMeasure } from './text-layout.js';
+import { layoutText, displayText, approxMeasure, measureWith } from './text-layout.js';
 import { iconById, stickerById } from './graphics.js';
 import { qrMatrix, qrPath } from './qr.js';
 import { animationOf, motionAt, readingOrder, transitionAt } from './motion.js';
@@ -341,8 +341,10 @@ function renderText(ctx, el) {
       const shown = all.slice(0, Math.max(0, left));
       left -= all.length;
       if (!shown.length) return;
-      // Same place as the whole line; underlines and boxes only under what's typed.
-      line = { ...line, text: shown.join(''), width: line.width * (shown.length / (all.length || 1)), fullWidth: line.width };
+      // Same place as the whole line; underlines and boxes only under what's
+      // typed (measured, as the letters are).
+      const text = shown.join('');
+      line = { ...line, text, width: shown.length === all.length ? line.width : measureWith(ctx.measure, el)(text), fullWidth: line.width };
     }
     const top = pad + i * lineHeight;
     const baseline = top + (lineHeight - el.size) / 2 + ascent;
@@ -487,7 +489,8 @@ const RENDERERS = {
   text: renderText,
   connector: renderConnector,
   draw: (ctx, el) => `<path d="${drawPath(el)}" fill="none" stroke="${esc(el.stroke)}" stroke-width="${f(el.strokeWidth)}" stroke-linecap="round" stroke-linejoin="round"/>`,
-  group: (ctx, el) => el.children.map((c) => renderElement(ctx, c)).join(''),
+  // While playing, a group's elements move by their own animations.
+  group: (ctx, el) => el.children.map((c) => (ctx.motion ? renderMoving(ctx, c, true) : renderElement(ctx, c))).join(''),
 };
 
 export function renderElement(ctx, el) {
@@ -542,14 +545,19 @@ function svgDocument(ctx, body, w, h, opts, extra = '') {
 function pageBody(ctx, page, w, h, opts) {
   const bg = opts.transparent ? '' : renderBackground(ctx, page.background, w, h);
   if (opts.time === undefined) return bg + page.elements.map((el) => renderElement(ctx, el)).join('');
-  const order = readingOrder(page);
-  const size = Math.min(w, h);
-  return bg + page.elements.map((el) => renderMoving(ctx, page, el, order, opts.time, size)).join('');
+  const before = ctx.motion;
+  ctx.motion = { page, order: readingOrder(page), time: opts.time, size: Math.min(w, h) };
+  try {
+    return bg + page.elements.map((el) => renderMoving(ctx, el, false)).join('');
+  } finally {
+    ctx.motion = before;
+  }
 }
 
-/** One element at a moment of its page's animations. */
-function renderMoving(ctx, page, el, order, time, size) {
-  const anim = animationOf(page, el, order);
+/** One element at a moment of its page's animations (`nested`: inside a group). */
+function renderMoving(ctx, el, nested) {
+  const { page, order, time, size } = ctx.motion;
+  const anim = animationOf(page, el, order, { nested });
   if (!anim || el.hidden) return renderElement(ctx, el);
   const m = motionAt(anim, time, size);
   const typing = anim.type === 'typewriter';
@@ -569,8 +577,11 @@ function renderMoving(ctx, page, el, order, time, size) {
   if (opacity < 1) attrs.push(`opacity="${f(opacity)}"`);
   if (m.reveal < 1) {
     // A wipe: shown from the left edge across.
+    // Room around the box for strokes, arrowheads, shadows and glows: only
+    // the moving right edge cuts.
+    const room = Math.max(b.w, b.h) * 0.5 + 40;
     const id = ctx.id('wipe');
-    ctx.defs.push(`<clipPath id="${id}"><rect x="${f(b.x)}" y="${f(b.y - 1)}" width="${f(b.w * m.reveal)}" height="${f(b.h + 2)}"/></clipPath>`);
+    ctx.defs.push(`<clipPath id="${id}"><rect x="${f(b.x - room)}" y="${f(b.y - room)}" width="${f(room + b.w * m.reveal)}" height="${f(b.h + room * 2)}"/></clipPath>`);
     attrs.push(`clip-path="url(#${id})"`);
   }
   return attrs.length ? `<g ${attrs.join(' ')}>${body}</g>` : body;

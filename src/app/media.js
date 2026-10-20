@@ -83,13 +83,16 @@ export async function audioInfo(file) {
  * string). The browser decodes it (fetch), not a byte-by-byte loop here.
  */
 export async function blobUrlFor(dataUrl) {
-  let blob;
+  return URL.createObjectURL(await dataUrlBlob(dataUrl));
+}
+
+/** A stored data: URL as a Blob, decoded by the browser where it can. */
+export async function dataUrlBlob(dataUrl) {
   try {
-    blob = await (await fetch(dataUrl)).blob();
+    return await (await fetch(dataUrl)).blob();
   } catch {
-    blob = dataUrlToBlob(dataUrl); // where data: can't be fetched
+    return dataUrlToBlob(dataUrl); // where data: can't be fetched
   }
-  return URL.createObjectURL(blob);
 }
 
 /**
@@ -124,11 +127,12 @@ export class VideoFrames {
     video.preload = 'auto';
     p = {
       video,
+      // Resolves to whether it can play here; a damaged file just shows its poster.
       ready: this.urlFor(el.assetId).then((url) => {
         if (!url || this.disposed) return false;
         video.src = url;
         return once(video, 'loadeddata').then(() => true, () => false);
-      }),
+      }).catch(() => false),
     };
     this.players.set(el.id, p);
     return p;
@@ -199,7 +203,7 @@ export class VideoFrames {
       video.load();
     }
     this.players.clear();
-    for (const url of this.urls.values()) url.then((u) => u && URL.revokeObjectURL(u));
+    for (const url of this.urls.values()) url.then((u) => u && URL.revokeObjectURL(u), () => null);
     this.urls.clear();
   }
 }

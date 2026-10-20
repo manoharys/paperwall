@@ -186,8 +186,10 @@ export function present(editor, canvas, { autoplay = false } = {}) {
     cancelAnimationFrame(frame);
     clearTimeout(wait);
     from = forward && to !== at ? shown[at] : null;
+    // Moving on by itself, the next page starts when the last one's time was
+    // up (not a frame later), so pages keep time with the soundtrack.
+    started = auto ? started + pageDuration(doc.pages[shown[at]]) * 1000 : performance.now();
     at = to;
-    started = performance.now();
     drawn = 0;
     const page = doc.pages[shown[at]];
     info = { end: animationsEnd(page), keeps: keepsMoving(page) };

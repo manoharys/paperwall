@@ -9,6 +9,7 @@ import { measure, fontCssFor, registerDesignFonts } from './fonts.js';
 import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage } from './ui.js';
 import { section, segmented, slider, toggle } from './widgets.js';
 import { exportGif, exportVideo, canMakeVideo } from './motion-export.js';
+import { dataUrlBlob } from './media.js';
 import { designMoves, timeline } from '../model/motion.js';
 
 const MAX_SIDE = 16000;
@@ -155,9 +156,7 @@ export async function soundtrackBuffer(doc) {
   if (!Ctx) return null;
   const ctx = new Ctx();
   try {
-    // The browser turns the stored text back into bytes (fetch), not a loop here.
-    const bytes = await fetch(a.dataUrl).then((r) => r.arrayBuffer()).catch(() => dataUrlToBytes(a.dataUrl).bytes.buffer);
-    return await ctx.decodeAudioData(bytes);
+    return await ctx.decodeAudioData(await (await dataUrlBlob(a.dataUrl)).arrayBuffer());
   } finally {
     ctx.close?.();
   }
@@ -279,8 +278,6 @@ export function exportDialog(editor) {
       body.classList.remove('busy');
       draw(); // everything back as it was, ready to try again
       toast(e.message || 'Export failed', 'error');
-      btn.disabled = false;
-      btn.lastChild.textContent = 'Download';
     }
   };
   draw();

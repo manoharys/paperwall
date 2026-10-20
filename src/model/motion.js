@@ -76,10 +76,11 @@ export function readingOrder(page) {
  * An element's animation on its page: its own, else the page's (each element
  * a little after the one before, in reading order). Null when it doesn't move.
  */
-export function animationOf(page, el, order = readingOrder(page)) {
+export function animationOf(page, el, order = readingOrder(page), { nested = false } = {}) {
   const known = (a) => a && Object.hasOwn(ANIMATIONS, a.type) && a.type !== 'none';
   const own = known(el.anim) ? el.anim : null;
-  const pageAnim = known(page.anim) ? page.anim : null;
+  // Inside a group, only an element's own animation (the group comes in as one).
+  const pageAnim = !nested && known(page.anim) ? page.anim : null;
   const anim = own || pageAnim;
   if (!anim) return null;
   const duration = clampNum(anim.duration, 0.1, 10, DEFAULT_ANIM_DURATION);
@@ -152,15 +153,25 @@ export function motionAt(anim, t, size = 1000) {
   return s;
 }
 
+/** Every shown element's animation on a page, inside groups too. */
+function animations(page) {
+  const order = readingOrder(page);
+  const out = [];
+  const walk = (els, nested) => {
+    for (const el of els) {
+      if (el.hidden) continue;
+      const a = animationOf(page, el, order, { nested });
+      if (a) out.push(a);
+      if (el.type === 'group') walk(el.children, true);
+    }
+  };
+  walk(page.elements, false);
+  return out;
+}
+
 /** When a page's animations are all done (loops aside), in seconds. */
 export function animationsEnd(page) {
-  const order = readingOrder(page);
-  let end = 0;
-  for (const el of page.elements) {
-    const a = animationOf(page, el, order);
-    if (a) end = Math.max(end, a.delay + a.duration);
-  }
-  return end;
+  return animations(page).reduce((end, a) => Math.max(end, a.delay + a.duration), 0);
 }
 
 /** Whether a page has a video (inside groups too). */
@@ -171,14 +182,12 @@ export function hasVideo(page) {
 
 /** Whether a page keeps moving after its animations are done (a looping one, or a video). */
 export function keepsMoving(page) {
-  const order = readingOrder(page);
-  return hasVideo(page) || page.elements.some((el) => ANIMATIONS[animationOf(page, el, order)?.type]?.loop);
+  return hasVideo(page) || animations(page).some((a) => ANIMATIONS[a.type].loop);
 }
 
 /** Whether anything on a page moves. */
 export function pageMoves(page) {
-  const order = readingOrder(page);
-  return page.elements.some((el) => animationOf(page, el, order)) || transitionOf(page).type !== 'none' || hasVideo(page);
+  return animations(page).length > 0 || transitionOf(page).type !== 'none' || hasVideo(page);
 }
 
 /** Whether anything in a design moves (so a GIF or video is worth making). */

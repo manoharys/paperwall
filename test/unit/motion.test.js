@@ -309,3 +309,30 @@ test('[MOT-01] typewriter counts an emoji as one letter', async () => {
   assert.match(svg, />a🎉</);
   assert.ok(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(svg), 'no half an emoji');
 });
+
+test('[MOT-01] an element in a group plays its own animation; hidden ones don\'t count', async () => {
+  const { createDesign, createShape, createGroup } = await import('../../src/model/doc.js');
+  const { renderPage } = await import('../../src/model/render.js');
+  const { animationsEnd, keepsMoving, pageMoves } = await import('../../src/model/motion.js');
+  const doc = createDesign({ width: 1000, height: 1000 });
+  const a = createShape('rect', { x: 0, y: 0, w: 100, h: 100, fill: '#ff0000' });
+  a.anim = { type: 'fade', duration: 1, delay: 0.5 };
+  const g = createGroup([a, createShape('rect', { x: 200, y: 0, w: 100, h: 100, fill: '#0000ff' })]);
+  doc.pages[0].elements.push(g);
+  assert.ok(!/#ff0000/.test(renderPage(doc, 0, { time: 0.2 })), 'not in yet, inside its group');
+  assert.match(renderPage(doc, 0, { time: 0.2 }), /#0000ff/, 'its neighbour shows');
+  assert.equal(animationsEnd(doc.pages[0]), 1.5);
+  const loop = createShape('rect');
+  loop.anim = { type: 'breathe' };
+  loop.hidden = true;
+  const page = { elements: [loop] };
+  assert.equal(keepsMoving(page), false, 'a hidden loop keeps nothing moving');
+  assert.equal(pageMoves(page), false);
+});
+
+test('[MOT-07] a video started at or past its end shows just before the end', async () => {
+  const { createVideo, videoTime } = await import('../../src/model/doc.js');
+  const v = createVideo('a', { trim: { start: 6 } });
+  assert.ok(Math.abs(videoTime(v, 0, 6) - 5.96) < 1e-9);
+  assert.ok(Math.abs(videoTime(v, 3, 6) - 5.96) < 0.05);
+});

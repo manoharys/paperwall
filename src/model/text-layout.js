@@ -9,7 +9,7 @@ export function displayText(el) {
   return el.caps ? el.text.toUpperCase() : el.text;
 }
 
-function measureWith(measure, el) {
+export function measureWith(measure, el) {
   const spacing = el.letterSpacing || 0;
   return (s) => measure(s, el) + spacing * [...s].length;
 }
