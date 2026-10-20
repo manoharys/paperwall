@@ -224,6 +224,9 @@ export class Editor {
     this.selection = this.selection.filter((id) => cmd.findElement(this.pageData, id));
     this.emit('doc');
     this.emit('aids');
+    // A save may have run mid-drag: store the design as it is again.
+    this.save();
+    this.thumb();
   }
 
   redo() {
@@ -487,8 +490,9 @@ export class Editor {
   }
 
   /** Turn a freehand stroke (page points) into a drawing with the current tool. */
-  addDrawing(points) {
-    const t = this.drawTool;
+  /** `tool` is the pen the stroke began with (drawing may have been turned off since). */
+  addDrawing(points, tool = this.drawTool) {
+    const t = tool;
     if (!t || !points.length) return null;
     const el = createDrawing(thinPoints(points, 1.5 / this.zoom), { tool: t.tool, stroke: t.color, strokeWidth: t.size });
     this.change(() => cmd.addElement(this.doc, this.page, el));

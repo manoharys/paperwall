@@ -671,3 +671,31 @@ test('[ELM-10] connector lines that stay attached to elements', async () => {
   assert.equal((await elements(page)).filter((e) => e.type === 'connector').length, 2);
   await context.close();
 });
+
+test('[ELM-10] dragging a connector with one end attached moves its loose end with the pointer', async () => {
+  const { page, context } = await newDesign('square');
+  const ends = await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    const place = (el, box) => ed.change(() => Object.assign(ed.pageData.elements.find((e) => e.id === el.id), box));
+    const a = ed.addShape('rect');
+    const b = ed.addShape('rect');
+    place(a, { x: 100, y: 400, w: 200, h: 200 });
+    place(b, { x: 700, y: 400, w: 200, h: 200 });
+    const c = ed.connect([a.id, b.id], 'straight');
+    ed.select([b.id]);
+    ed.deleteSelection(); // the end comes loose where it was
+    ed.select([c.id]);
+    const el = ed.pageData.elements.find((e) => e.id === c.id);
+    return el.points.map(([fx, fy]) => [el.x + fx * el.w, el.y + fy * el.h]);
+  });
+  const mid = [(ends[0][0] + ends[1][0]) / 2, (ends[0][1] + ends[1][1]) / 2];
+  // Alt: no snapping, so the move is exactly the pointer's.
+  await drag(page, await screenPoint(page, mid[0], mid[1]), await screenPoint(page, mid[0] + 60, mid[1] + 60), { steps: 10, modifiers: ['Alt'] });
+  const after = await page.evaluate(() => {
+    const el = window.paperwall.editor.pageData.elements.find((e) => e.type === 'connector');
+    return el.points.map(([fx, fy]) => [el.x + fx * el.w, el.y + fy * el.h]);
+  });
+  const loose = after[1];
+  assert.ok(Math.abs(loose[0] - (ends[1][0] + 60)) < 3 && Math.abs(loose[1] - (ends[1][1] + 60)) < 3, `the loose end followed: ${loose} from ${ends[1]}`);
+  await context.close();
+});

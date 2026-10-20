@@ -23,6 +23,7 @@ export function historyDialog(editor) {
     try {
       rows = await store.listVersions(editor.doc.id);
     } catch (e) {
+      forget(list);
       clear(list);
       list.append(h('p', { class: 'empty-note' }, `Couldn't read the versions: ${e.message}`));
       return;

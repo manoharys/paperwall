@@ -277,12 +277,10 @@ export class Canvas {
       return;
     }
     if (ed.drawTool) {
-      // Drawing: every press on the page starts a new stroke. A second finger
-      // or a palm while one stroke is going is ignored.
+      // Drawing: every press on the page starts a new stroke.
       e.preventDefault();
-      if (this.drag?.mode === 'draw') return;
       ed.deselect();
-      this.drag = { mode: 'draw', points: [[p.x, p.y]], pointerId: e.pointerId };
+      this.drag = { mode: 'draw', points: [[p.x, p.y]], pointerId: e.pointerId, tool: { ...ed.drawTool } };
       this.el.setPointerCapture(e.pointerId);
       this.drawStroke();
       return;
@@ -333,7 +331,9 @@ export class Canvas {
       const movable = ed.selected.filter((el) => !el.locked);
       if (!movable.length) return;
       ed.history.record(ed.doc);
-      this.drag = { mode: 'move', start: p, items: movable.map((el) => ({ el, x: el.x, y: el.y })), moved: false };
+      // A connector's box changes as its attached ends follow: keep its shape
+      // at the start, so each frame moves it from there (not from the last frame).
+      this.drag = { mode: 'move', start: p, items: movable.map((el) => ({ el, x: el.x, y: el.y, shape: el.type === 'connector' ? { w: el.w, h: el.h, points: clone(el.points) } : null })), moved: false };
       this.el.setPointerCapture(e.pointerId);
     } else {
       if (!e.shiftKey) ed.deselect();
@@ -349,7 +349,7 @@ export class Canvas {
     ed.history.record(ed.doc);
     if (handle === 'end0' || handle === 'end1') {
       const el = sel[0];
-      this.drag = { mode: 'end', el, which: +handle.slice(3), moved: false, target: null, orig: clone({ x: el.x, y: el.y, w: el.w, h: el.h, points: el.points, start: el.start, end: el.end }) };
+      this.drag = { mode: 'end', el, which: +handle.slice(3), moved: false, target: null };
     } else if (handle === 'rotate') {
       this.drag = { mode: 'rotate', el: sel[0], moved: false };
     } else if (sel.length === 1) {
@@ -430,6 +430,7 @@ export class Canvas {
         ed.guides = snap.guides;
       }
       for (const it of d.items) {
+        if (it.shape) Object.assign(it.el, it.shape, { points: it.shape.points.map((q) => [...q]) });
         it.el.x = it.x + dx;
         it.el.y = it.y + dy;
       }
@@ -534,9 +535,11 @@ export class Canvas {
       const g = ed.pageData.guides[d.index];
       const size = d.axis === 'x' ? ed.doc.width : ed.doc.height;
       const off = !g || g.pos < 0 || g.pos > size;
-      if (off) ed.pageData.guides.splice(d.index, 1);
+      // A new guide that was only clicked goes again too.
+      const drop = off || (d.isNew && !d.moved);
+      if (drop) ed.pageData.guides.splice(d.index, 1);
       // Dragged back to where it started counts as not moved.
-      if ((d.isNew && off) || !d.moved || (!off && !d.isNew && g.pos === d.orig)) {
+      if ((d.isNew && drop) || !d.moved || (!off && !d.isNew && g.pos === d.orig)) {
         ed.history.discard();
         ed.emit('aids');
       } else ed.afterChange();
@@ -545,7 +548,7 @@ export class Canvas {
     if (d.mode === 'draw') {
       this.stroke?.remove();
       this.stroke = null;
-      ed.addDrawing(d.points);
+      ed.addDrawing(d.points, d.tool);
       return;
     }
     ed.guides = [];

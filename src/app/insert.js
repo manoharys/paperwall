@@ -186,7 +186,8 @@ export class InsertPanel {
           onClick: () => pick({ tool, size: DRAW_TOOLS[tool].strokeWidth, color: tool === 'highlighter' && pen.color === '#1a1a2e' ? '#ffd166' : pen.color }),
         }, h('span', { class: `tool-tip ${tool}`, style: { background: pen.color } }), tool[0].toUpperCase() + tool.slice(1)))),
         h('div', { class: 'swatches draw-colors' }, COLORS.map((c) => h('button', { type: 'button', class: `swatch${pen.color === c ? ' on' : ''}`, style: { '--swatch': c }, title: c, 'aria-label': `Draw in ${c}`, 'data-testid': `draw-color-${c.slice(1)}`, onClick: () => pick({ color: c }) })),
-          colorButton({ label: 'Drawing color', value: pen.color, onChange: (c) => pick({ color: c }) })),
+          // While the picker is dragged only the pen changes (the panel is redrawn once it's done).
+          colorButton({ label: 'Drawing color', value: pen.color, onChange: (c, live) => (live ? (pen.color = c) : pick({ color: c })) })),
         slider({ label: 'Size', value: pen.size, min: 1, max: 120, testid: 'draw-size', onChange: (v) => (pen.size = v) }),
         h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'draw-stop', onClick: () => this.open('templates') }, 'Done drawing')),
     ];
