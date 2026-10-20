@@ -601,3 +601,14 @@ test('[BRD-03] applying a brand never flattens a duotone to one color', async ()
   applyBrand(doc, { colors: ['#ff0000'] });
   assert.notEqual(img.filters.duotone.dark, img.filters.duotone.light);
 });
+
+test('[BRD-03] short #rgb colors are listed and rebranded too', async () => {
+  const { createDesign, createShape } = await import('../../src/model/doc.js');
+  const { collectColors, applyBrand } = await import('../../src/model/commands.js');
+  const doc = createDesign({ width: 100, height: 100 });
+  const s = createShape('rect', { fill: '#f00' });
+  doc.pages[0].elements.push(s);
+  assert.ok(collectColors(doc).includes('#ff0000'));
+  applyBrand(doc, { colors: ['#123456'] });
+  assert.equal(s.fill, '#123456');
+});

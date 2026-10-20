@@ -7,7 +7,7 @@ import { FONTS, FONT_KINDS } from '../model/fonts.js';
 import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, isEmptyFrame, parseChartData, chartDataText, parseTable, tableText } from '../model/doc.js';
 import { collectColors, cropZoom } from '../model/commands.js';
 import { renderElementOnly, TEXT_EFFECTS } from '../model/render.js';
-import { measure, addCustomFont, customFontNames, ensureFont, fontLoaded } from './fonts.js';
+import { measure, addCustomFont, customFontNames, ensureFont, fontSettled } from './fonts.js';
 import { iconById, stickerById } from '../model/graphics.js';
 import { getSetting } from './store.js';
 
@@ -175,6 +175,8 @@ export class Inspector {
       rotation: numberField({ label: 'Rotation', short: '°', value: el.rotation || 0, onChange: set('rotation'), testid: 'geo-rotation' }),
     };
     if (el.type === 'text') fields.h.querySelector('input').disabled = true;
+    // A connector is set by its ends: turning it is just moving them.
+    if (el.type === 'connector') delete fields.rotation;
     this.geo = { el, fields };
     return section('Position and size', h('div', { class: 'geo-grid' }, Object.values(fields)));
   }
@@ -314,9 +316,10 @@ export class Inspector {
     const fx = el.effect || { type: 'none' };
     // Start from the effect as it is now: the panel isn't redrawn while a slider is in use.
     const set = (patch, live) => this.up({ effect: { ...(this.ed.single?.effect || fx), ...patch } }, live ? 'effect' : null);
-    // Kept only once the font has loaded, so a preview never sticks with stand-in
-    // letters. The previews use the heavy weight, which the text itself may not.
-    const heavy = fontLoaded(el.font, 800);
+    // Kept only once the font is done loading (or has failed for good, when
+    // stand-in letters are all there will be). The previews use the heavy
+    // weight, which the text itself may not.
+    const heavy = fontSettled(el.font, 800);
     if (!heavy) ensureFont(el.font, 800).catch(() => null);
     const preview = (type) => cached(`${el.font}|${type}`, heavy, () => renderElementOnly(this.ed.doc, createText({
       text: 'Ag', w: 64, h: 44, size: 32, weight: 800, font: el.font, color: type === 'neon' ? '#ff2d95' : '#1a1a2e', align: 'center', lineHeight: 1.2,

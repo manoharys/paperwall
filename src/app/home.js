@@ -67,8 +67,9 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, installPr
           if (!file) return;
           try {
             const doc = await readProjectFile(file);
-            const existing = await store.loadDesign(doc.id);
-            if (existing) doc.id = uid('d');
+            // A new id if the design is here already, or if history from a
+            // deleted copy is still kept under its id (it would attach to this one).
+            if ((await store.loadDesign(doc.id)) || (await store.hasVersions(doc.id))) doc.id = uid('d');
             newDesign(doc);
           } catch (e) {
             toast(e.message, 'error');

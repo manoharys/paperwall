@@ -431,11 +431,20 @@ export function resizeDesign(doc, width, height) {
   return out;
 }
 
+/** A #rrggbb or short #rgb color as lowercase #rrggbb; anything else as null. */
+function hexKey(c) {
+  if (typeof c !== 'string') return null;
+  const m = /^#([0-9a-f]{6}|[0-9a-f]{3})$/i.exec(c.trim());
+  if (!m) return null;
+  return `#${m[1].length === 3 ? [...m[1]].map((x) => x + x).join('') : m[1]}`.toLowerCase();
+}
+
 /** Every color used in the design, most used first. */
 export function collectColors(doc) {
   const counts = new Map();
   const add = (c) => {
-    if (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)) counts.set(c.toLowerCase(), (counts.get(c.toLowerCase()) || 0) + 1);
+    const key = hexKey(c);
+    if (key) counts.set(key, (counts.get(key) || 0) + 1);
     else if (c && typeof c === 'object' && Array.isArray(c.stops)) c.stops.forEach((s) => add(s.color));
   };
   const visit = (els) => {
@@ -476,7 +485,7 @@ export function applyBrand(doc, brand) {
     if (colors.length) map.set(c, colors[i % colors.length]);
   });
   const swap = (c) => {
-    if (typeof c === 'string') return map.get(c.toLowerCase()) || c;
+    if (typeof c === 'string') return map.get(hexKey(c)) || c;
     if (c && typeof c === 'object' && Array.isArray(c.stops)) return { ...c, stops: c.stops.map((s) => ({ ...s, color: swap(s.color) })) };
     return c;
   };

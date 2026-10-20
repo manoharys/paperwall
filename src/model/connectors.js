@@ -4,7 +4,7 @@
 
 import { uid } from './doc.js';
 import { drawHit } from './shapes.js';
-import { boxCenter, rotatePoint, nearPolyline, round2, boxAround, refitGroup } from './geometry.js';
+import { boxCenter, rotatePoint, nearPolyline, round2, boxAround, refitGroup, fromLocal } from './geometry.js';
 
 const f = round2;
 
@@ -66,13 +66,8 @@ function hasConnector(els) {
 
 /** Where the ends are drawn, taking a rotation or flip (from the panel, or ungrouping) into account. */
 function visualEnds(el) {
-  const cx = el.x + el.w / 2;
-  const cy = el.y + el.h / 2;
   return endsOf(el).map(([x, y]) => {
-    // Mirror first, then turn: the same order the renderer uses.
-    const mx = el.flipX ? 2 * cx - x : x;
-    const my = el.flipY ? 2 * cy - y : y;
-    const p = rotatePoint(mx, my, cx, cy, el.rotation || 0);
+    const p = fromLocal(el, { x, y });
     return [p.x, p.y];
   });
 }

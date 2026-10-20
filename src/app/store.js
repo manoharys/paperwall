@@ -159,8 +159,11 @@ export async function deleteDesign(id) {
 
 export const MAX_VERSIONS = 30;
 const stamp = (at) => String(at).padStart(15, '0');
-const vKey = (designId, at) => `${designId}|v|${stamp(at)}`;
-const dKey = (designId, at) => `${designId}|d|${stamp(at)}`;
+// Each tab tags its keys, so two tabs saving in the same millisecond don't
+// overwrite each other (the time still comes first, so keys sort by time).
+const TAB = Math.random().toString(36).slice(2, 6);
+const vKey = (designId, at) => `${designId}|v|${stamp(at)}~${TAB}`;
+const dKey = (designId, at) => `${designId}|d|${stamp(at)}~${TAB}`;
 const aKey = (designId, assetId) => `${designId}|a|${assetId}`;
 const range = (prefix) => [prefix, `${prefix}\uffff`];
 
@@ -274,7 +277,7 @@ export async function listVersions(designId) {
 
 /** A version as a whole design again, images included. */
 export async function versionDoc(version) {
-  const doc = await get('versions', dKey(version.designId, version.at));
+  const doc = await get('versions', version.key.replace('|v|', '|d|'));
   if (!doc) throw new Error('This version is missing');
   // Just the images this version uses, in one read.
   const ids = version.assetIds || [];

@@ -68,6 +68,14 @@ export function toLocal(el, p) {
   return { x: el.flipX ? 2 * cx - r.x : r.x, y: el.flipY ? 2 * cy - r.y : r.y };
 }
 
+/** The other way: where a point on the plain element is drawn on the page (mirrored, then turned). */
+export function fromLocal(el, p) {
+  const cx = el.x + el.w / 2;
+  const cy = el.y + el.h / 2;
+  const m = { x: el.flipX ? 2 * cx - p.x : p.x, y: el.flipY ? 2 * cy - p.y : p.y };
+  return el.rotation ? rotatePoint(m.x, m.y, cx, cy, el.rotation) : m;
+}
+
 /** Is the point inside the rotated box (with an optional margin in px)? */
 export function pointInBox(px, py, b, margin = 0) {
   const c = boxCenter(b);
