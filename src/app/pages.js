@@ -1,9 +1,9 @@
 // The strip of pages along the bottom, and presenting pages full screen.
 
-import { h, icon, iconButton, clear, debounce, dialog, toast, lazily, forget } from './ui.js';
+import { h, icon, iconButton, clear, debounce, dialog, toast, lazily, forget, pressable } from './ui.js';
 import { renderPage } from '../model/render.js';
 import { measure } from './fonts.js';
-import { visiblePages } from '../model/doc.js';
+import { visiblePages, pageName } from '../model/doc.js';
 
 export class PageStrip {
   constructor(editor, canvas) {
@@ -24,9 +24,28 @@ export class PageStrip {
     editor.on((what) => {
       if (what === 'view') this.zoomLabel.textContent = `${Math.round(editor.zoom * 100)}%`;
       else if (what === 'page') this.redraw.flush(); // now, and once (a 'doc' redraw may be waiting too)
-      else if (what === 'doc' || what === 'strip') this.redraw();
+      else if (what === 'doc') this.redraw();
+      else if (what === 'strip') this.relabel();
     });
     this.render();
+  }
+
+  /** Titles changed: update the labels, without drawing every page again. */
+  relabel() {
+    const items = this.list.querySelectorAll('[data-testid="page-thumb"]');
+    if (items.length !== this.ed.doc.pages.length) return this.redraw();
+    this.ed.doc.pages.forEach((p, i) => {
+      const item = items[i];
+      const name = pageName(p, i);
+      const label = p.hidden ? `${name} (hidden)` : name;
+      const thumb = item.querySelector('.page-thumb');
+      thumb.title = label;
+      thumb.setAttribute('aria-label', label);
+      let span = item.querySelector('.page-title');
+      if (!p.title) return void span?.remove();
+      if (!span) item.append((span = h('span', { class: 'page-title', 'data-testid': 'page-title-label' })));
+      span.textContent = p.title;
+    });
   }
 
   render() {
@@ -35,7 +54,7 @@ export class PageStrip {
     ed.doc.pages.forEach((p, i) => {
       const name = pageName(p, i);
       const item = h('li', { class: `${i === ed.page ? 'on' : ''}${p.hidden ? ' hidden-page' : ''}`, draggable: 'true', 'data-testid': 'page-thumb' },
-        h('button', { type: 'button', class: 'page-thumb', title: p.hidden ? `${name} (hidden)` : name, 'aria-label': p.hidden ? `${name} (hidden)` : name, 'aria-current': String(i === ed.page), onClick: () => ed.setPage(i) },
+        pressable({ class: 'page-thumb', title: p.hidden ? `${name} (hidden)` : name, 'aria-label': p.hidden ? `${name} (hidden)` : name, 'aria-current': String(i === ed.page) }, () => ed.setPage(i),
           h('span', { class: 'page-img', style: { aspectRatio: `${ed.doc.width} / ${ed.doc.height}` }, html: renderPage(ed.doc, i, { measure, noSize: true, placeholders: true, idPrefix: `ps${i}`, assetHref: this.canvas.assetHref }) }),
           h('span', { class: 'page-no' }, String(i + 1)),
           p.hidden ? h('span', { class: 'page-hidden-mark', 'aria-hidden': 'true' }, icon('eyeOff', 14)) : null),
@@ -59,9 +78,6 @@ function pageDrag(el, i, onMove) {
   });
 }
 
-export function pageName(page, i) {
-  return page.title ? `Page ${i + 1}: ${page.title}` : `Page ${i + 1}`;
-}
 
 /** Every page large, in a grid: click one to go to it, drag to reorder. */
 export function pageGrid(editor, canvas) {
@@ -74,10 +90,10 @@ export function pageGrid(editor, canvas) {
       const img = h('span', { class: 'page-img', style: { aspectRatio: `${editor.doc.width} / ${editor.doc.height}` } });
       lazily(img, () => (img.innerHTML = renderPage(editor.doc, i, { measure, noSize: true, placeholders: true, idPrefix: `pg${i}`, assetHref: canvas.assetHref })));
       const card = h('li', { class: `pg-card${i === editor.page ? ' on' : ''}${p.hidden ? ' hidden-page' : ''}`, draggable: 'true', 'data-testid': 'page-grid-card' },
-        h('button', { type: 'button', class: 'pg-open', 'aria-label': `Open ${pageName(p, i)}`, onClick: () => {
+        pressable({ class: 'pg-open', 'aria-label': `Open ${pageName(p, i)}` }, () => {
           editor.setPage(i);
           d.close();
-        } }, img),
+        }, img),
         h('div', { class: 'pg-meta' },
           h('b', null, String(i + 1)),
           h('span', null, p.title || ''),

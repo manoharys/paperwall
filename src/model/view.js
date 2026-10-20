@@ -1,7 +1,7 @@
 // How the page is shown while editing: grid, safe margins and print bleed.
 // None of it is part of the design or its downloads.
 
-import { toPx } from './doc.js';
+import { pxPerUnit, printDpi } from './doc.js';
 
 /** Grid spacing in page px: a share of the page's shorter side. */
 export function gridStep(doc, size = 'medium') {
@@ -26,5 +26,5 @@ export function marginSize(doc) {
 
 /** Print bleed: the 3 mm strip that may be trimmed off, at the size the design prints at (as PDF export does). */
 export function bleedSize(doc) {
-  return doc.unit === 'mm' || doc.unit === 'in' ? toPx(3, 'mm') : (3 / 25.4) * 96;
+  return 3 * pxPerUnit('mm', printDpi(doc));
 }

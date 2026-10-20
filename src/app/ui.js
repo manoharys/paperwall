@@ -117,6 +117,21 @@ export function icon(name, size = 20) {
   return span;
 }
 
+/**
+ * Something to press that can also be dragged: a div acting as a button
+ * (Firefox never starts a drag from a <button>). Enter and Space press it.
+ */
+export function pressable(attrs, onPress, ...children) {
+  return h('div', {
+    role: 'button', tabindex: '0', ...attrs, onClick: onPress,
+    onKeydown: (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      onPress(e);
+    },
+  }, ...children);
+}
+
 export function iconButton(name, label, onClick, attrs = {}) {
   return h('button', { type: 'button', class: 'icon-btn', title: label, 'aria-label': label, onClick, ...attrs }, icon(name));
 }
@@ -125,11 +140,20 @@ export function debounce(fn, ms) {
   let t = null;
   const wrapped = (...args) => {
     clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
+    t = setTimeout(() => {
+      t = null;
+      fn(...args);
+    }, ms);
   };
   wrapped.flush = () => {
     clearTimeout(t);
+    t = null;
     return fn();
+  };
+  /** Run now only if a call is waiting. */
+  wrapped.flushPending = () => {
+    if (t === null) return Promise.resolve();
+    return wrapped.flush();
   };
   return wrapped;
 }

@@ -1,6 +1,6 @@
 // The left-hand panel: everything you can add to a page.
 
-import { h, icon, iconButton, clear, toast, pickFile, mod, lazily, forget } from './ui.js';
+import { h, icon, iconButton, clear, toast, pickFile, mod, lazily, forget, pressable } from './ui.js';
 import { colorButton, selectField, section, slider } from './widgets.js';
 import { FONTS, FONT_PAIRS } from '../model/fonts.js';
 import { ALL_ICONS, ALL_STICKERS, searchGraphics } from '../model/graphics.js';
@@ -330,17 +330,11 @@ export class InsertPanel {
       if (!ups.length) grid.append(h('p', { class: 'empty-note' }, 'Images you add show up here, so you can use them again in any design.'));
       for (const u of ups) {
         grid.append(h('div', { class: 'upload' },
-          // A div acting as a button: Firefox never starts a drag from a <button>.
-          h('div', { role: 'button', tabindex: '0', class: 'upload-img', title: u.name, 'aria-label': `Add ${u.name}`, 'data-testid': 'upload-item', draggable: 'true', onClick: () => ed.addImage(u), onKeydown: (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              ed.addImage(u);
-            }
-          }, onDragstart: (e) => {
+          pressable({ class: 'upload-img', title: u.name, 'aria-label': `Add ${u.name}`, 'data-testid': 'upload-item', draggable: 'true', onDragstart: (e) => {
             // Drag onto the page to add it, or onto a frame to fill the frame.
             e.dataTransfer.setData('application/x-paperwall-upload', u.id);
             e.dataTransfer.effectAllowed = 'copy';
-          } }, h('img', { src: u.dataUrl, alt: '', draggable: 'false' })),
+          } }, () => ed.addImage(u), h('img', { src: u.dataUrl, alt: '', draggable: 'false' })),
           iconButton('trash', 'Remove from uploads', async () => {
             await store.deleteUpload(u.id);
             load();

@@ -35,6 +35,21 @@ export function presetById(id) {
 }
 
 /** Convert a print size to pixels at 300 DPI. */
+/** How a page is named in lists: its number, and its title if it has one. */
+export function pageName(page, i) {
+  return page.title ? `Page ${i + 1}: ${page.title}` : `Page ${i + 1}`;
+}
+
+/** Page px in one mm or inch (or 1 for px), unrounded. */
+export function pxPerUnit(unit, dpi = DPI) {
+  return unit === 'mm' ? dpi / 25.4 : unit === 'in' ? dpi : 1;
+}
+
+/** The resolution a design prints and exports at: print units at DPI, px designs as screens see them. */
+export function printDpi(doc) {
+  return doc.unit === 'mm' || doc.unit === 'in' ? DPI : 96;
+}
+
 export function toPx(value, unit = 'px', dpi = DPI) {
   if (unit === 'mm') return Math.round((value / 25.4) * dpi);
   if (unit === 'in') return Math.round(value * dpi);

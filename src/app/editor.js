@@ -143,7 +143,13 @@ export class Editor {
     this.history.record(this.doc, key);
     this.changing = (this.changing || 0) + 1;
     try {
-      const result = fn();
+      let result;
+      try {
+        result = fn();
+      } catch (e) {
+        this.history.discard(); // no empty step left behind
+        throw e;
+      }
       if (unchanged?.(result)) this.history.discard();
       else this.afterChange(quiet);
       return result;
@@ -220,7 +226,7 @@ export class Editor {
       // whole designs: the home-screen one if it's up to date, else a new one.
       const fresh = () => (this.lastThumb?.at === snapshot.updatedAt ? this.lastThumb.url : null);
       // A home-screen thumbnail is usually on its way: draw it now and use it for both.
-      if (!fresh() && !quick) await this.thumb.flush();
+      if (!fresh() && !quick) await this.thumb.flushPending();
       const thumb = fresh() || (quick || !this.makeThumb ? null : await this.makeThumb(snapshot).catch(() => null));
       await store.saveVersion(snapshot, { label, thumb });
       return true;

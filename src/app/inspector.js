@@ -325,7 +325,7 @@ export class Inspector {
       h('div', { class: 'fx-grid', role: 'group', 'aria-label': 'Text effect', 'data-testid': 'text-effects' }, TEXT_EFFECTS.map((type) => h('button', {
         type: 'button', class: `fx${fx.type === type ? ' on' : ''}`, 'aria-pressed': String(fx.type === type), title: EFFECT_NAMES[type], 'data-testid': `effect-${type}`,
         // Starting from no effect, the colors are the ones the preview shows.
-        onClick: () => this.up({ effect: type === 'none' ? null : { type, color: fx.color ?? (['splice', 'glow'].includes(type) ? '#ffb703' : undefined), offset: fx.offset, thickness: fx.thickness } }),
+        onClick: () => this.up({ effect: type === 'none' ? null : { type, color: fx.color ?? ({ splice: '#ffb703', glow: '#ffb703', neon: '#ff2d95' })[type], offset: fx.offset, thickness: fx.thickness } }),
       }, h('span', { class: 'fx-img', html: preview(type) }), h('small', null, EFFECT_NAMES[type])))),
       fx.type !== 'none' ? h('div', { class: 'sub' },
         uses.color ? h('div', { class: 'field inline' },

@@ -18,7 +18,7 @@ test('[PAGE-01] [PAGE-08] add a blank page and move between pages', async () => 
   let s = await state(page, (ed) => ({ n: ed.doc.pages.length, page: ed.page, els: ed.pageData.elements.length }));
   assert.deepEqual(s, { n: 2, page: 1, els: 0 });
   assert.equal(await page.locator('[data-testid="page-thumb"]').count(), 2);
-  await page.locator('[data-testid="page-thumb"]').first().locator('button').click();
+  await page.locator('[data-testid="page-thumb"]').first().locator('.page-thumb').click();
   s = await state(page, (ed) => ({ page: ed.page, els: ed.pageData.elements.length }));
   assert.deepEqual(s, { page: 0, els: 1 });
   assert.equal(await page.locator('[data-testid="page"] [data-type="text"]').count(), 1);
@@ -127,7 +127,7 @@ test('[VIEW-05] present pages full screen, move with the arrow keys', async () =
   const { page, context } = await newDesign('slides');
   await addText(page);
   await page.click('[data-testid="strip-add-page"]');
-  await page.locator('[data-testid="page-thumb"]').first().locator('button').click();
+  await page.locator('[data-testid="page-thumb"]').first().locator('.page-thumb').click();
   await page.click('[data-testid="present"]');
   await page.waitForSelector('[data-testid="presenter"] svg');
   assert.equal(await page.textContent('.slide-count'), '1 / 2');

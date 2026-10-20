@@ -7,7 +7,7 @@ import {
   pointInBox, rectFromPoints, rectsIntersect, HANDLES,
 } from '../model/geometry.js';
 import { resizeElement, coverCrop, topmost } from '../model/commands.js';
-import { clone, DRAW_TOOLS, DPI } from '../model/doc.js';
+import { clone, DRAW_TOOLS, pxPerUnit } from '../model/doc.js';
 import { gridLines, marginSize, bleedSize } from '../model/view.js';
 import { endsOf, setEnds, connectorHit } from '../model/connectors.js';
 import { drawHit } from '../model/shapes.js';
@@ -827,7 +827,7 @@ export class Canvas {
     if (key === this.rulerKey) return;
     this.rulerKey = key;
     // Ticks in the design's own unit, on a step that stays readable: 1, 2 or 5 × a power of ten.
-    const perUnit = unit === 'mm' ? DPI / 25.4 : unit === 'in' ? DPI : 1;
+    const perUnit = pxPerUnit(unit);
     const raw = 60 / (z * perUnit);
     const pow = 10 ** Math.floor(Math.log10(raw));
     const step = [1, 2, 5, 10].map((k) => k * pow).find((s) => s >= raw);

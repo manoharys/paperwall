@@ -4,7 +4,7 @@
 import { renderPage, textRuns } from '../model/render.js';
 import { buildPdf } from '../model/pdf.js';
 import { buildZip } from '../model/zip.js';
-import { validateDesign, clone, visiblePages } from '../model/doc.js';
+import { validateDesign, clone, visiblePages, printDpi, pageName } from '../model/doc.js';
 import { measure, fontCssFor, registerDesignFonts } from './fonts.js';
 import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage } from './ui.js';
 import { section, segmented, slider, toggle } from './widgets.js';
@@ -62,7 +62,7 @@ export async function exportSvg(doc, pageIndex, { transparent = false } = {}) {
 
 /** Print designs (mm/in sizes) are 300 DPI; screen designs are 96 DPI. */
 export function pagePoints(doc) {
-  const dpi = doc.unit === 'mm' || doc.unit === 'in' ? 300 : 96;
+  const dpi = printDpi(doc);
   return { ptWidth: (doc.width / dpi) * 72, ptHeight: (doc.height / dpi) * 72, renderScale: dpi === 300 ? 1 : 2 };
 }
 
@@ -171,7 +171,7 @@ export function exportDialog(editor) {
         cb.checked = state.pages.has(i);
         cb.addEventListener('change', () => (cb.checked ? state.pages.add(i) : state.pages.delete(i)));
         const p = doc.pages[i];
-        return h('label', { class: 'toggle' }, cb, h('span', null, `Page ${i + 1}${p.title ? `: ${p.title}` : ''}${p.hidden ? ' (hidden)' : ''}`));
+        return h('label', { class: 'toggle' }, cb, h('span', null, `${pageName(p, i)}${p.hidden ? ' (hidden)' : ''}`));
       }))) : null,
       h('div', { class: 'export-actions' },
         h('button', { type: 'button', class: 'btn primary big', 'data-testid': 'export-download', onClick: () => run() }, icon('download'), 'Download'),
