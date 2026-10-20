@@ -298,20 +298,33 @@ function deleteVersions(designId) {
 
 // ---------- uploads (reusable across designs) ----------
 
+// A video's or sound's bytes are kept apart from its details ("~data|<id>",
+// sorting after every upload id), so listing Uploads doesn't read every video.
+const DATA = '~data|';
+const isMedia = (u) => u.kind === 'video' || u.kind === 'audio';
+
 export async function saveUpload(upload) {
-  await put('uploads', upload.id, upload);
+  if (!isMedia(upload)) return put('uploads', upload.id, upload);
+  const { dataUrl, ...details } = upload;
+  await batch('uploads', [[`${DATA}${upload.id}`, { dataUrl }], [upload.id, details]]);
 }
 
+/** Every upload, newest first: pictures whole, videos and sounds without their bytes (getUpload has them). */
 export async function listUploads() {
-  return (await all('uploads')).sort((a, b) => b.addedAt - a.addedAt);
+  const rows = await run('uploads', 'readonly', (s) => s.getAll(IDBKeyRange.upperBound('~', true)),
+    () => [...memory.uploads].filter(([k]) => !k.startsWith(DATA)).map(([, v]) => v));
+  return rows.sort((a, b) => b.addedAt - a.addedAt);
 }
 
+/** An upload, whole. */
 export async function getUpload(id) {
-  return get('uploads', id);
+  const [upload, data] = await getMany('uploads', [id, `${DATA}${id}`]);
+  if (!upload) return upload;
+  return data ? { ...upload, ...data } : upload;
 }
 
 export async function deleteUpload(id) {
-  await del('uploads', id);
+  await batch('uploads', [[id, undefined], [`${DATA}${id}`, undefined]]);
 }
 
 // ---------- settings ----------

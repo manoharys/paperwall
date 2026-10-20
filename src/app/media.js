@@ -48,6 +48,13 @@ export async function videoInfo(file) {
   try {
     v.src = url;
     await once(v, 'loadeddata');
+    // Some recordings (from a browser's recorder, say) don't say how long they
+    // are until the player has been to the end: send it there to find out.
+    if (!Number.isFinite(v.duration)) {
+      const known = once(v, 'durationchange', 'error', 5000).catch(() => null);
+      v.currentTime = 1e101;
+      await known;
+    }
     const duration = Number.isFinite(v.duration) ? v.duration : 0;
     v.currentTime = Math.min(0.2, duration / 2 || 0);
     await once(v, 'seeked').catch(() => null);
@@ -143,7 +150,7 @@ export class VideoFrames {
     const p = this.player(el);
     if (!(await p.ready)) return null; // the poster shows instead
     const v = p.video;
-    const t = videoTime(el, local, v.duration);
+    const t = videoTime(el, local, this.lengthOf(el, v));
     if (Math.abs(v.currentTime - t) > 0.001) {
       const seeked = once(v, 'seeked', 'error', 5000).catch(() => null);
       v.currentTime = t;
@@ -163,14 +170,25 @@ export class VideoFrames {
         const v = p.video;
         // Looping goes back to the start point (as downloads do), not to 0.
         v.loop = false;
+        const length = this.lengthOf(el, v);
         v.onended = el.loop === false ? null : () => {
-          v.currentTime = videoTime(el, 0, v.duration);
+          v.currentTime = videoTime(el, 0, length);
           v.play().catch(() => null);
         };
-        v.currentTime = videoTime(el, 0, v.duration);
+        v.currentTime = videoTime(el, 0, length);
         v.play().catch(() => null);
       });
     }
+  }
+
+  /** How long `el`'s video is: the player's word, else what was found when it was added. */
+  lengthOf(el, v) {
+    return Number.isFinite(v.duration) ? v.duration : this.doc.assets[el.assetId]?.duration || 0;
+  }
+
+  /** The `<video>` playing `el`, once one has been made for it (to show it live). */
+  videoOf(el) {
+    return this.players.get(el.id)?.video || null;
   }
 
   /** Whatever `el`'s video is showing now, at `scale` (screen px per page px). */

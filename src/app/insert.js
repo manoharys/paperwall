@@ -338,7 +338,12 @@ export class InsertPanel {
             // Drag onto the page to add it, or onto a frame to fill the frame.
             e.dataTransfer.setData('application/x-paperwall-upload', u.id);
             e.dataTransfer.effectAllowed = 'copy';
-          } }, () => ed.place(u), look, u.kind === 'video' ? h('span', { class: 'upload-play', 'aria-hidden': 'true' }, icon('play', 14)) : null),
+          } }, async () => {
+            // Videos and sounds are listed without their bytes: fetched when used.
+            const whole = u.dataUrl ? u : await store.getUpload(u.id);
+            if (!whole?.dataUrl) return toast(`${u.name} is missing. Try uploading it again.`, 'error');
+            if (!ed.closed) await ed.place(whole);
+          }, look, u.kind === 'video' ? h('span', { class: 'upload-play', 'aria-hidden': 'true' }, icon('play', 14)) : null),
           iconButton('trash', 'Remove from uploads', async () => {
             await store.deleteUpload(u.id);
             load();

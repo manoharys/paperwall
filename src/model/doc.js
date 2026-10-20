@@ -222,7 +222,7 @@ export function videoTime(el, local, duration) {
   const t = start + Math.max(0, local);
   if (!(duration > 0)) return t;
   if (el.loop === false) return Math.min(t, Math.max(0, duration - 0.04));
-  return start >= duration ? 0 : start + ((t - start) % Math.max(0.04, duration - start));
+  return start + ((t - start) % Math.max(0.04, duration - start));
 }
 
 export const DRAW_TOOLS = {

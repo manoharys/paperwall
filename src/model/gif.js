@@ -45,7 +45,13 @@ export class GifEncoder {
     const f = this.pending;
     if (!f) return;
     this.pending = null;
-    const { box, px, delay } = f;
+    const { box, px } = f;
+    // A frame shows for at most 655.35 s (a 16-bit count of hundredths); a
+    // longer still is that, then a tiny unchanged frame for the rest.
+    const MAX = 65535 * 10;
+    let delay = f.delay;
+    const rest = Math.max(0, delay - MAX);
+    delay = Math.min(delay, MAX);
     const o = this.out;
     const palette = buildPalette([px], 256);
     const bits = Math.max(1, Math.ceil(Math.log2(Math.max(2, palette.length))));
@@ -77,6 +83,12 @@ export class GifEncoder {
       o.bytes(lzw.subarray(i, i + n));
     }
     o.byte(0);
+    if (rest > 0) {
+      // The top-left pixel again, as it is: nothing visible changes.
+      const p = this.prev.subarray(0, 4);
+      this.pending = { box: { x: 0, y: 0, w: 1, h: 1 }, px: Uint8ClampedArray.from(p), delay: rest };
+      this.flush();
+    }
   }
 
   finish() {

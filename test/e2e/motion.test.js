@@ -225,9 +225,16 @@ test('[MOT-07] add a video: it shows its poster, plays when presenting and moves
   // Its panel: where it starts, looping.
   await page.click('[data-testid="video-loop"]');
   assert.equal((await elements(page)).find((e) => e.type === 'video').loop, false);
-  // Presenting shows it playing: its picture is taken from the video.
+  // Uploads lists it without its bytes; using it from there still adds it whole.
+  await page.click('[data-testid="upload-item"][data-kind="video"]');
+  await page.waitForFunction(() => window.paperwall.editor.pageData.elements.filter((e) => e.type === 'video').length === 2);
+  await page.evaluate(() => window.paperwall.editor.undo());
+  // Presenting shows it playing, live, in its own place in the slide.
   await page.click('[data-testid="present"]');
-  await page.waitForFunction(() => /<image[^>]+href="data:image\/jpeg/.test(document.querySelector('[data-testid="slide"]')?.innerHTML || ''));
+  await page.waitForFunction(() => {
+    const v = document.querySelector('[data-testid="slide"] foreignObject[data-video] video');
+    return v && v.currentTime > 0.2;
+  });
   await page.keyboard.press('Escape');
   // A GIF of the page has the square popping in, from the video alone.
   const gif = await page.evaluate(async () => {

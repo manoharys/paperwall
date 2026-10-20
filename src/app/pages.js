@@ -2,7 +2,7 @@
 
 import { h, icon, iconButton, clear, debounce, dialog, toast, lazily, forget, pressable } from './ui.js';
 import { renderPage, renderFrame } from '../model/render.js';
-import { animationsEnd, keepsMoving, pageDuration, pageFrame, transitionOf, timeline } from '../model/motion.js';
+import { animationsEnd, keepsMoving, hasLoop, pageDuration, pageFrame, transitionOf, timeline } from '../model/motion.js';
 import { VideoFrames, videosOn, blobUrlFor } from './media.js';
 import { measure } from './fonts.js';
 import { visiblePages, pageName, pageLabel } from '../model/doc.js';
@@ -147,6 +147,7 @@ export function present(editor, canvas, { autoplay = false } = {}) {
   let from = null; // the page before, when moving forward (its transition plays)
   let drawn = 0; // when the slide was last drawn
   let wait = 0; // a still page's timer, when playing
+  let live = false; // the page's videos are playing in place: nothing to redraw
   const draw = (now) => {
     frame = 0;
     const i = shown[at];
@@ -155,13 +156,28 @@ export function present(editor, canvas, { autoplay = false } = {}) {
     const tr = transitionOf(page);
     // Once only videos or looping animations move, 30 frames a second is plenty.
     const settled = local >= Math.max(info.end, from !== null ? tr.duration : 0);
-    if (settled && info.keeps && now - drawn < 33 && drawn) {
+    if (settled && info.keeps && !info.loops && !live) {
+      // Only videos move now: drawn once more, with each live video in its
+      // own place in the slide (layered and clipped as designed), so no
+      // picture is taken of them frame by frame.
+      live = true;
+      slide.innerHTML = renderFrame(doc, pageFrame(doc, i, local, null), { ...opts, idPrefix: `pr${i}`, videoSlots: true });
+      for (const box of slide.querySelectorAll('foreignObject[data-video]')) {
+        const v = videos.videoOf({ id: box.dataset.video });
+        if (!v) continue;
+        v.className = 'slide-video';
+        box.append(v);
+      }
+    } else if (live) {
+      // Nothing to draw: the videos play themselves.
+    } else if (settled && info.keeps && now - drawn < 33 && drawn) {
       frame = requestAnimationFrame(draw);
       return;
+    } else {
+      drawn = now;
+      // The same rule for transitions as downloads use.
+      slide.innerHTML = renderFrame(doc, pageFrame(doc, i, local, from), { ...opts, idPrefix: `pr${i}` });
     }
-    drawn = now;
-    // The same rule for transitions as downloads use.
-    slide.innerHTML = renderFrame(doc, pageFrame(doc, i, local, from), { ...opts, idPrefix: `pr${i}` });
     root.dataset.time = local.toFixed(2);
     if (autoplay && local >= pageDuration(page)) {
       if (at < shown.length - 1) return go(at + 1, true, { auto: true });
@@ -172,7 +188,7 @@ export function present(editor, canvas, { autoplay = false } = {}) {
     }
     // Keep drawing while anything moves. When playing a page that's now still,
     // just wait for its time to be up.
-    const moving = local < Math.max(info.end, from !== null ? tr.duration : 0) || info.keeps;
+    const moving = local < Math.max(info.end, from !== null ? tr.duration : 0) || (info.keeps && !live);
     if (moving) frame = requestAnimationFrame(draw);
     else if (autoplay) {
       wait = setTimeout(() => {
@@ -191,8 +207,9 @@ export function present(editor, canvas, { autoplay = false } = {}) {
     started = auto ? started + pageDuration(doc.pages[shown[at]]) * 1000 : performance.now();
     at = to;
     drawn = 0;
+    live = false;
     const page = doc.pages[shown[at]];
-    info = { end: animationsEnd(page), keeps: keepsMoving(page) };
+    info = { end: animationsEnd(page), keeps: keepsMoving(page), loops: hasLoop(page) };
     videos.pauseAll();
     videos.start(videosOn(doc, [shown[at]]));
     if (!auto) sound?.seek(tl.parts[at].start);
@@ -249,17 +266,22 @@ function soundtrackPlayer(doc) {
     audio.src = u;
   });
   let wanted = null; // the latest place asked for, played once the sound is ready
+  let wantedAt = 0; // when it was asked for: the sound has been due to play since
   const play = () => {
     if (stopped || wanted === null) return;
+    // Where the slides are now, not where they were when asked (the sound
+    // may take a moment to load).
+    const t = wanted + (performance.now() - wantedAt) / 1000;
     // Past the end of the sound: silence (as in a download), not its last moment.
-    if (audio.duration && wanted >= audio.duration) return audio.pause();
-    audio.currentTime = wanted;
+    if (audio.duration && t >= audio.duration) return audio.pause();
+    audio.currentTime = t;
     audio.play().catch(() => null);
   };
   audio.addEventListener('loadedmetadata', play);
   return {
     seek(t) {
       wanted = t;
+      wantedAt = performance.now();
       if (audio.readyState >= 1) play();
     },
     pause() {

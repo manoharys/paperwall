@@ -180,9 +180,14 @@ export function hasVideo(page) {
   return walk(page.elements);
 }
 
+/** Whether a page has an animation that never ends (breathing, say). */
+export function hasLoop(page) {
+  return animations(page).some((a) => ANIMATIONS[a.type].loop);
+}
+
 /** Whether a page keeps moving after its animations are done (a looping one, or a video). */
 export function keepsMoving(page) {
-  return hasVideo(page) || animations(page).some((a) => ANIMATIONS[a.type].loop);
+  return hasVideo(page) || hasLoop(page);
 }
 
 /** Whether anything on a page moves. */

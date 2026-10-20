@@ -44,6 +44,7 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal },
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   // Videos on the pages are shown frame by frame, each at its exact moment.
   const videos = videosOn(doc, pages).length ? new VideoFrames(doc) : null;
+  let last = null; // the last frame's picture, as SVG: a still moment isn't drawn again
   try {
     for (let i = 0; i < count; i++) {
       if (signal?.aborted) throw new Error('Stopped');
@@ -55,7 +56,9 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal },
           for (const el of videosOn(doc, [index])) pictures.set(el.id, await videos.seek(el, local));
         }
       }
-      await drawFrame(doc, frame, pictures, { fontCss, ctx, width, height });
+      const svg = renderFrame(doc, frame, { measure, fontCss, idPrefix: 'mv', videoFrame: (el) => pictures.get(el.id) });
+      if (svg !== last) await drawFrame(svg, { ctx, width, height });
+      last = svg;
       await each(canvas, ctx, i, t);
       onProgress?.((i + 1) / count);
     }
@@ -65,9 +68,8 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal },
   return { count, total: tl.total };
 }
 
-/** One frame into the canvas: the page(s) at their moment, videos at theirs. */
-async function drawFrame(doc, frame, pictures, { fontCss, ctx, width, height }) {
-  const svg = renderFrame(doc, frame, { measure, fontCss, idPrefix: 'mv', videoFrame: (el) => pictures.get(el.id) });
+/** One frame (the page(s) at their moment, as SVG) into the canvas. */
+async function drawFrame(svg, { ctx, width, height }) {
   const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
   try {
     const img = await loadImage(url);
@@ -118,9 +120,10 @@ async function pickVideoCodec(container, width, height) {
 
 /**
  * The design as a video: 'mp4' or 'webm'. `audio` (optional) is a soundtrack
- * as an AudioBuffer, cut to the video's length.
+ * as an AudioBuffer, cut to the video's length. `onNote(message)` hears about
+ * anything left out (a soundtrack this browser can't encode).
  */
-export async function exportVideo(doc, pages, { container = 'mp4', size = null, audio = null, volume = 1, onProgress, signal } = {}) {
+export async function exportVideo(doc, pages, { container = 'mp4', size = null, audio = null, volume = 1, onProgress, onNote, signal } = {}) {
   if (!canMakeVideo()) throw new Error("This browser can't make videos. Try a recent Chrome, Edge, Safari or Firefox.");
   const { width, height } = frameSize(doc, 'video', size);
   const pick = await pickVideoCodec(container, width, height);
@@ -155,14 +158,15 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
     if (encoder.state !== 'closed') encoder.close();
   }
   if (failure) throw failure;
-  const sound = audio ? await encodeAudio(audio, total, container, volume) : null;
+  const sound = audio ? await encodeAudio(audio, total, container, volume, signal) : null;
+  if (audio && !sound) onNote?.("This browser can't encode sound, so the video is silent.");
   const video = { codec: pick.codec, codecString: pick.codecString, width, height, description, chunks };
   const parts = container === 'mp4' ? buildMp4Parts({ video, audio: sound, duration: total }) : buildWebmParts({ video, audio: sound, duration: total });
   return new Blob(parts, { type: container === 'mp4' ? 'video/mp4' : 'video/webm' });
 }
 
 /** A soundtrack, encoded for the container (Opus; AAC in MP4 where the browser has it). */
-async function encodeAudio(buffer, seconds, container, volume = 1) {
+async function encodeAudio(buffer, seconds, container, volume = 1, signal = null) {
   if (typeof AudioEncoder === 'undefined') return null;
   const sampleRate = 48000;
   const channels = Math.min(2, buffer.numberOfChannels);
@@ -209,6 +213,9 @@ async function encodeAudio(buffer, seconds, container, volume = 1) {
   try {
     const block = 4800; // 0.1 s at a time
     for (let at = 0; at < frames; at += block) {
+      if (signal?.aborted) throw new Error('Stopped');
+      // A breath now and then, so the page stays responsive (and can be stopped).
+      if (at % (block * 50) === 0) await new Promise((r) => setTimeout(r, 0));
       const n = Math.min(block, frames - at);
       const planar = new Float32Array(n * channels);
       for (let c = 0; c < channels; c++) planar.set(pcm.getChannelData(c).subarray(at, at + n), c * n);

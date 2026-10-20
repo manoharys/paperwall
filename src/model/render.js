@@ -31,6 +31,8 @@ function makeCtx(doc, opts) {
     skip: opts.skip || null,
     // While playing or downloading: the picture for each video at this moment.
     videoFrame: opts.videoFrame || null,
+    // Presenting: places for the live videos (see renderVideo).
+    videoSlots: !!opts.videoSlots,
   };
 }
 
@@ -155,13 +157,15 @@ function renderImage(ctx, el) {
 function renderVideo(ctx, el) {
   const asset = ctx.doc.assets[el.assetId];
   const href = ctx.videoFrame?.(el) || asset?.poster || '';
-  const pic = renderPicture(ctx, el, href); // no picture at all: the grey box of a missing image
+  // Presenting a page whose videos play live: a place for the playing video
+  // itself (put in after drawing), framed and clipped like a picture.
+  const pic = renderPicture(ctx, el, href, ctx.videoSlots && asset ? 'slot' : 'image'); // no picture at all: the grey box of a missing image
   if (!ctx.editor) return pic;
   const s = Math.max(14, Math.min(el.w, el.h) * 0.14);
   return `${pic}<g transform="translate(${f(el.w - s * 1.35)} ${f(s * 0.35)})"><circle cx="${f(s / 2)}" cy="${f(s / 2)}" r="${f(s / 2)}" fill="#000" fill-opacity="0.55"/><path d="M${f(s * 0.4)} ${f(s * 0.3)}L${f(s * 0.72)} ${f(s / 2)}L${f(s * 0.4)} ${f(s * 0.7)}Z" fill="#fff"/></g>`;
 }
 
-function renderPicture(ctx, el, href) {
+function renderPicture(ctx, el, href, as = 'image') {
   const outline = maskPath(el);
   // A picture whose image is missing (damaged file) keeps a grey box everywhere.
   if (el.assetId && !href) return `<path d="${outline}" fill="#e5e5ef"/>`;
@@ -187,7 +191,11 @@ function renderPicture(ctx, el, href) {
     ctx.defs.push(`<radialGradient id="${id}" cx="50%" cy="50%" r="72%"><stop offset="${f(0.75 - v * 0.45)}" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="${f(0.25 + v * 0.6)}"/></radialGradient>`);
     shade = `<rect width="${f(el.w)}" height="${f(el.h)}" fill="url(#${id})"/>`;
   }
-  return `<g clip-path="url(#${clip})"><image href="${esc(href)}" x="${f(-crop.x * iw)}" y="${f(-crop.y * ih)}" width="${f(iw)}" height="${f(ih)}" preserveAspectRatio="none"${fx ? ` filter="url(#${fx})"` : ''}/>${shade}</g>`;
+  const at = `x="${f(-crop.x * iw)}" y="${f(-crop.y * ih)}" width="${f(iw)}" height="${f(ih)}"`;
+  const media = as === 'slot'
+    ? `<image href="${esc(href)}" ${at} preserveAspectRatio="none"/><foreignObject ${at} data-video="${esc(el.id)}"${fx ? ` filter="url(#${fx})"` : ''}></foreignObject>`
+    : `<image href="${esc(href)}" ${at} preserveAspectRatio="none"${fx ? ` filter="url(#${fx})"` : ''}/>`;
+  return `<g clip-path="url(#${clip})">${media}${shade}</g>`;
 }
 
 function renderConnector(ctx, el) {

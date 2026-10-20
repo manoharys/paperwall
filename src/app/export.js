@@ -252,21 +252,36 @@ export function exportDialog(editor) {
         const onProgress = (p) => (btn.lastChild.textContent = `Making ${state.format.toUpperCase()}… ${Math.round(p * 100)}%`);
         const still = versionSnapshot(doc);
         const signal = stopper.signal;
+        let note = null;
+        let audio = null;
+        if (state.format !== 'gif' && still.audio) {
+          audio = await soundtrackBuffer(still).catch(() => null);
+          if (!audio) note = "The soundtrack couldn't be read here, so the video is silent.";
+        }
         const blob = state.format === 'gif'
           ? await exportGif(still, pages, { onProgress, signal })
-          : await exportVideo(still, pages, { container: state.format, audio: await soundtrackBuffer(still).catch(() => null), volume: still.audio?.volume ?? 1, onProgress, signal });
+          : await exportVideo(still, pages, { container: state.format, audio, volume: still.audio?.volume ?? 1, onProgress, onNote: (m) => (note = m), signal });
         if (signal.aborted) return;
         download(blob, `${name}.${state.format}`);
+        if (note) toast(note);
       } else if (state.format === 'pdf') {
-        download(await exportPdf(doc, pages), `${name}.pdf`);
+        const pdf = await exportPdf(doc, pages);
+        if (stopper.signal.aborted) return; // closed while making it
+        download(pdf, `${name}.pdf`);
       } else {
         const ext = state.format;
         const make = (i) => (ext === 'svg' ? exportSvg(doc, i, { transparent: state.transparent }) : exportImage(doc, i, { format: ext, scale: state.scale, transparent: state.transparent, quality: state.quality / 100 }));
         if (pages.length === 1) {
-          download(await make(pages[0]), `${name}${doc.pages.length > 1 ? `-${pages[0] + 1}` : ''}.${ext}`);
+          const file = await make(pages[0]);
+          if (stopper.signal.aborted) return;
+          download(file, `${name}${doc.pages.length > 1 ? `-${pages[0] + 1}` : ''}.${ext}`);
         } else {
           const files = [];
-          for (const i of pages) files.push({ name: `${name}-${i + 1}.${ext}`, data: await blobBytes(await make(i)) });
+          for (const i of pages) {
+            if (stopper.signal.aborted) return;
+            files.push({ name: `${name}-${i + 1}.${ext}`, data: await blobBytes(await make(i)) });
+          }
+          if (stopper.signal.aborted) return;
           download(new Blob([buildZip(files)], { type: 'application/zip' }), `${name}.zip`);
         }
       }
