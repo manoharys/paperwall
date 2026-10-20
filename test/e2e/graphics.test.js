@@ -236,7 +236,9 @@ test('[IMG-12] drop shadow on images and shapes', async () => {
 test('[ELM-01] [ELM-02] original icons, searchable, in any color', async () => {
   const { page, context } = await newDesign('square');
   await openTab(page, 'graphics');
-  assert.ok((await page.locator('[data-testid="icon-grid"] .thumb').count()) >= 60);
+  assert.equal(await page.locator('[data-testid="icon-grid"] .thumb').count(), 120, 'first 120 shown');
+  await page.click('[data-testid="icons-more"]');
+  assert.equal(await page.locator('[data-testid="icon-grid"] .thumb').count(), 360);
   await page.fill('[data-testid="insert-search"]', 'birthday');
   assert.ok(await page.locator('[data-testid="icon-cake"]').isVisible());
   assert.equal(await page.locator('[data-testid="icon-phone"]').count(), 0);
@@ -252,7 +254,7 @@ test('[ELM-01] [ELM-02] original icons, searchable, in any color', async () => {
 test('[ELM-03] original stickers', async () => {
   const { page, context } = await newDesign('square');
   await openTab(page, 'graphics');
-  assert.ok((await page.locator('[data-testid="sticker-grid"] .thumb').count()) >= 15);
+  assert.ok((await page.locator('[data-testid="sticker-grid"] .thumb').count()) >= 150);
   await page.click('[data-testid="sticker-confetti"]');
   assert.equal((await last(page)).type, 'sticker');
   await context.close();

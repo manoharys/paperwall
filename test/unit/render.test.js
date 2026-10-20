@@ -7,7 +7,7 @@ import { renderPage, esc } from '../../src/model/render.js';
 import { layoutText, fitHeight, approxMeasure } from '../../src/model/text-layout.js';
 import { shapePath } from '../../src/model/shapes.js';
 import { qrMatrix, pickVersion } from '../../src/model/qr.js';
-import { ICONS, STICKERS, searchGraphics } from '../../src/model/graphics.js';
+import { ICONS, ALL_ICONS, ALL_STICKERS, searchGraphics } from '../../src/model/graphics.js';
 import { buildPdf } from '../../src/model/pdf.js';
 import { resizeBox, rotatePoint, snapMove, angleTo, snapAngle, pointInBox } from '../../src/model/geometry.js';
 
@@ -134,13 +134,19 @@ test('[ELM-04] QR codes match a reference encoder module for module', () => {
 });
 
 test('[ELM-01] [ELM-02] [ELM-03] icon and sticker library is searchable and well-formed', () => {
-  assert.ok(ICONS.length >= 60, `${ICONS.length} icons`);
-  assert.ok(STICKERS.length >= 15);
-  const ids = new Set([...ICONS, ...STICKERS].map((g) => g.id));
-  assert.equal(ids.size, ICONS.length + STICKERS.length, 'unique ids');
-  for (const i of ICONS) assert.ok(!/fill="#/.test(i.body), `${i.id} must take the element color`);
+  assert.ok(ICONS.length >= 60, `${ICONS.length} of our own icons`);
+  assert.ok(ALL_ICONS.length >= 1500, `${ALL_ICONS.length} icons in all`);
+  assert.ok(ALL_STICKERS.length >= 150, `${ALL_STICKERS.length} stickers`);
+  const ids = new Set([...ALL_ICONS, ...ALL_STICKERS].map((g) => g.id));
+  assert.equal(ids.size, ALL_ICONS.length + ALL_STICKERS.length, 'unique ids');
+  for (const i of ALL_ICONS) assert.ok(!/(fill|stroke)="#/.test(i.body), `${i.id} must take the element color`);
+  for (const s of ALL_STICKERS) assert.ok(!/NaN|undefined/.test(s.svg), s.id);
   assert.ok(searchGraphics('birthday').icons.some((i) => i.id === 'cake'));
   assert.ok(searchGraphics('sale').stickers.some((s) => s.id === 'burst'));
+  const cart = searchGraphics('shopping cart');
+  assert.ok(cart.icons.some((i) => i.id === 'lu-shopping-cart'), 'multi-word search across Lucide');
+  assert.equal(searchGraphics('', { limit: 10 }).icons.length, 10);
+  assert.equal(searchGraphics('', { limit: 10 }).icons[0].source, 'paperwall', 'our own icons come first');
 });
 
 test('[EXP-06] PDF writer produces a well-formed file with a correct cross-reference table', () => {

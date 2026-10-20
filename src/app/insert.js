@@ -3,7 +3,7 @@
 import { h, icon, iconButton, clear, toast, pickFile, mod } from './ui.js';
 import { colorButton, selectField, section } from './widgets.js';
 import { FONTS, FONT_PAIRS } from '../model/fonts.js';
-import { ICONS, STICKERS, searchGraphics } from '../model/graphics.js';
+import { ALL_ICONS, ALL_STICKERS, searchGraphics } from '../model/graphics.js';
 import { renderPage, renderElementOnly } from '../model/render.js';
 import { createShape, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES } from '../model/doc.js';
 import { collectColors } from '../model/commands.js';
@@ -195,20 +195,37 @@ export class InsertPanel {
     const ed = this.ed;
     const iconsGrid = h('div', { class: 'thumb-grid small', 'data-testid': 'icon-grid' });
     const stickerGrid = h('div', { class: 'thumb-grid', 'data-testid': 'sticker-grid' });
+    const more = h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'icons-more' });
+    let shown = 120;
+    const thumb = (cls, title, testid, onClick, makeSvg) => {
+      const b = h('button', { type: 'button', class: cls, title, 'aria-label': title, 'data-testid': testid, onClick });
+      lazily(b, () => (b.innerHTML = makeSvg()));
+      return b;
+    };
     const fill = () => {
-      const { icons, stickers } = searchGraphics(this.query);
+      const { icons, stickers, total } = searchGraphics(this.query, { limit: shown });
       clear(iconsGrid);
       clear(stickerGrid);
-      for (const i of icons) iconsGrid.append(h('button', { type: 'button', class: 'thumb', title: i.name, 'aria-label': i.name, 'data-testid': `icon-${i.id}`, onClick: () => ed.addIcon(i.id), html: renderElementOnly(PREVIEW_DOC, createIcon(i.id, { w: 48, h: 48, color: '#2b2b38' })) }));
-      for (const s of stickers) stickerGrid.append(h('button', { type: 'button', class: 'thumb', title: s.name, 'aria-label': s.name, 'data-testid': `sticker-${s.id}`, onClick: () => ed.addSticker(s.id), html: renderElementOnly(PREVIEW_DOC, createSticker(s.id, { w: 100, h: 100 })) }));
+      for (const i of icons) iconsGrid.append(thumb('thumb', i.name, `icon-${i.id}`, () => ed.addIcon(i.id), () => renderElementOnly(PREVIEW_DOC, createIcon(i.id, { w: 48, h: 48, color: '#2b2b38' }))));
+      for (const s of stickers) stickerGrid.append(thumb('thumb', s.name, `sticker-${s.id}`, () => ed.addSticker(s.id), () => renderElementOnly(PREVIEW_DOC, createSticker(s.id, { w: 100, h: 100 }))));
       if (!icons.length && !stickers.length) iconsGrid.append(h('p', { class: 'empty-note' }, 'Nothing found. Try "heart", "star" or "party".'));
+      more.hidden = total <= icons.length;
+      more.textContent = `Show more icons (${total - icons.length} more)`;
     };
+    more.addEventListener('click', () => {
+      shown += 240;
+      fill();
+    });
+    const search = this.search(`Search ${ALL_ICONS.length.toLocaleString()} icons and ${ALL_STICKERS.length} stickers`, () => {
+      shown = 120;
+      fill();
+    });
     fill();
     return [
-      this.search(`Search ${ICONS.length} icons and ${STICKERS.length} stickers`, fill),
-      section('Icons', h('p', { class: 'hint' }, 'Change the color of an icon after you add it.'), iconsGrid),
+      search,
+      section('Icons', h('p', { class: 'hint' }, 'Change the color of an icon after you add it.'), iconsGrid, more),
       section('Stickers', stickerGrid),
-      h('p', { class: 'hint' }, 'All drawn for Paperwall and free for any use (CC0).'),
+      h('p', { class: 'hint' }, "Paperwall's own icons and every sticker are free for any use (CC0). The rest of the icons are from Lucide (ISC license)."),
     ];
   }
 

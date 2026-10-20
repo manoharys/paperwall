@@ -1,6 +1,10 @@
-// Paperwall's own icons and stickers, drawn for this project and released as CC0.
-// Icons are line drawings on a 24 × 24 grid; they take the element's color.
-// Stickers are full-color drawings on a 100 × 100 grid.
+// Paperwall's own icons and stickers, drawn for this project and released as CC0,
+// plus the open-license Lucide icon set. Icons are line drawings on a 24 × 24
+// grid; they take the element's color. Stickers are full-color drawings on a
+// 100 × 100 grid.
+
+import { LUCIDE } from './icon-library.js';
+import { GENERATED_STICKERS } from './sticker-library.js';
 
 const I = (id, name, tags, body) => ({ id, name, tags, body });
 
@@ -95,16 +99,39 @@ export const STICKERS = [
   S('squiggle', 'Squiggle', 'line decoration fun', '<path d="M6 50c8-16 14-16 22 0s14 16 22 0 14-16 22 0 14 16 22 0" fill="none" stroke="#8338ec" stroke-width="6" stroke-linecap="round"/>'),
 ];
 
+const human = (id) => id.replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase());
+
+/** Every icon: Paperwall's own first, then Lucide's (ids prefixed "lu-"). */
+export const ALL_ICONS = [
+  ...ICONS.map((i) => ({ ...i, source: 'paperwall' })),
+  ...LUCIDE.map(([id, body, tags]) => ({ id: `lu-${id}`, name: human(id), tags: `${id.replace(/-/g, ' ')} ${tags}`, body, source: 'lucide' })),
+];
+
+const byId = new Map(ALL_ICONS.map((i) => [i.id, i]));
+
 export function iconById(id) {
-  return ICONS.find((i) => i.id === id) || null;
+  return byId.get(id) || null;
 }
+
+/** Every sticker: the hand-drawn ones, then the generated families in their colorways. */
+export const ALL_STICKERS = [...STICKERS, ...GENERATED_STICKERS];
+const stickerMap = new Map(ALL_STICKERS.map((s) => [s.id, s]));
 
 export function stickerById(id) {
-  return STICKERS.find((s) => s.id === id) || null;
+  return stickerMap.get(id) || null;
 }
 
-export function searchGraphics(query) {
-  const q = query.trim().toLowerCase();
-  const match = (g) => !q || g.name.toLowerCase().includes(q) || g.tags.includes(q) || g.id.includes(q);
-  return { icons: ICONS.filter(match), stickers: STICKERS.filter(match) };
+/**
+ * Icons and stickers matching a search. Every word must match the name or a
+ * tag; names that start with the query come first. With no query: Paperwall's
+ * own icons, then the rest.
+ */
+export function searchGraphics(query, { limit = Infinity } = {}) {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const hay = (g) => `${g.name.toLowerCase()} ${g.tags} ${g.id}`;
+  const match = (g) => words.every((w) => hay(g).includes(w));
+  const rank = (g) => (words.length && g.name.toLowerCase().startsWith(words[0]) ? 0 : 1);
+  const icons = ALL_ICONS.filter(match);
+  if (words.length) icons.sort((a, b) => rank(a) - rank(b));
+  return { icons: icons.slice(0, limit), stickers: ALL_STICKERS.filter(match), total: icons.length };
 }
