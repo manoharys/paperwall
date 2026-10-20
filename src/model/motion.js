@@ -85,11 +85,19 @@ export function animationOf(page, el, order = readingOrder(page), { nested = fal
   const anim = own || pageAnim;
   if (!anim) return null;
   const duration = clampNum(anim.duration, ...LIMITS.duration, DEFAULT_ANIM_DURATION);
-  const at = Math.max(0, order.indexOf(el.id));
+  const at = rankIn(order, el.id);
   // A page's elements all come in within its time: with many of them, closer together.
   const fit = order.length > 1 ? Math.max(0, pageDuration(page) - duration) / (order.length - 1) : Infinity;
   const delay = own ? clampNum(own.delay, ...LIMITS.delay, 0) : at * Math.min(fit, clampNum(pageAnim.stagger, ...LIMITS.stagger, DEFAULT_STAGGER));
   return { type: anim.type, duration, delay };
+}
+
+// Each reading order's positions, looked up by id (worked out once per order).
+const ranks = new WeakMap();
+function rankIn(order, id) {
+  let r = ranks.get(order);
+  if (!r) ranks.set(order, (r = new Map(order.map((k, i) => [k, i]))));
+  return r.get(id) ?? 0;
 }
 
 function clampNum(v, lo, hi, fallback) {

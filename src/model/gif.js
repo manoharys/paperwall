@@ -63,10 +63,12 @@ export class GifEncoder {
     const rest = Math.max(0, delay - MAX);
     delay = Math.min(delay, MAX);
     const o = this.out;
-    const palette = buildPalette([px], 256);
+    // 256 colors or fewer (a flat design): each exactly, with no dither to
+    // speckle flat areas. More (photos, gradients): the nearest of 256, dithered.
+    const exact = exactColors(px, 256);
+    const palette = exact ? exact.palette : buildPalette([px], 256);
     const bits = Math.max(1, Math.ceil(Math.log2(Math.max(2, palette.length))));
-    const map = paletteMapper(palette);
-    const idx = indexFrame(px, box.w, box.h, map, this.dither, box.x, box.y);
+    const idx = exact ? exact.idx : indexFrame(px, box.w, box.h, paletteMapper(palette), this.dither, box.x, box.y);
     // Graphic control: keep what's there (only this box is drawn over it).
     o.bytes([0x21, 0xf9, 0x04, 0x04]);
     o.u16(Math.max(2, Math.round(delay / 10)));
@@ -211,6 +213,25 @@ export function buildPalette(datas, max = 256) {
     }
     return [Math.round(r / list.length), Math.round(g / list.length), Math.round(bl / list.length)];
   });
+}
+
+/** Every pixel's color as a palette index, when there are at most `max` colors (else null). */
+function exactColors(px, max) {
+  const seen = new Map();
+  const palette = [];
+  const idx = new Uint8Array(px.length / 4);
+  for (let i = 0, p = 0; i < px.length; i += 4, p++) {
+    const c = (px[i] << 16) | (px[i + 1] << 8) | px[i + 2];
+    let k = seen.get(c);
+    if (k === undefined) {
+      if (palette.length === max) return null;
+      k = palette.length;
+      seen.set(c, k);
+      palette.push([px[i], px[i + 1], px[i + 2]]);
+    }
+    idx[p] = k;
+  }
+  return { palette, idx };
 }
 
 /**

@@ -96,25 +96,23 @@ export async function audioInfo(file) {
     await once(a, 'loadedmetadata');
     return { duration: Number.isFinite(a.duration) ? a.duration : 0 };
   } finally {
+    a.removeAttribute('src');
+    a.load();
     URL.revokeObjectURL(url);
   }
 }
 
-/**
- * A blob: URL for a stored data: URL (much quicker for players than the long
- * string). The browser decodes it (fetch), not a byte-by-byte loop here.
- */
+/** A blob: URL for a stored data: URL (much quicker for players than the long string). */
 export async function blobUrlFor(dataUrl) {
   return URL.createObjectURL(await dataUrlBlob(dataUrl));
 }
 
-/** A stored data: URL as a Blob, decoded by the browser where it can. */
+/**
+ * A stored data: URL as a Blob. (Not by fetch: the page's security policy
+ * allows no fetching at all, data: included.)
+ */
 export async function dataUrlBlob(dataUrl) {
-  try {
-    return await (await fetch(dataUrl)).blob();
-  } catch {
-    return dataUrlToBlob(dataUrl); // where data: can't be fetched
-  }
+  return dataUrlToBlob(dataUrl);
 }
 
 /**
@@ -224,8 +222,10 @@ export class VideoFrames {
 
   grab({ video: v, alpha }, el, scale = 1.5) {
     if (!v.videoWidth) return null;
-    // As sharp as it shows, but no sharper than the video.
-    const s = Math.min(1, (Math.max(el.w, el.h) * scale) / Math.max(v.videoWidth, v.videoHeight));
+    // As sharp as it shows (cropped, the whole video shows bigger than the
+    // element), but no sharper than the video.
+    const crop = el.crop || { w: 1, h: 1 };
+    const s = Math.min(1, Math.max((el.w / (crop.w || 1)) * scale / v.videoWidth, (el.h / (crop.h || 1)) * scale / v.videoHeight));
     const c = this.canvas;
     c.width = Math.max(1, Math.round(v.videoWidth * s));
     c.height = Math.max(1, Math.round(v.videoHeight * s));

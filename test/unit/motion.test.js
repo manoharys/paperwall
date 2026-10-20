@@ -368,10 +368,10 @@ test('[MOT-05] GIF: close tints stay apart (a #fafafa card on white)', async () 
   const H = 10;
   const d = new Uint8ClampedArray(W * H * 4);
   for (let i = 0; i < W * H; i++) d.set(i % W < 10 ? [255, 255, 255, 255] : [250, 250, 250, 255], i * 4);
-  const gif = readGif(encodeGif([{ data: d, delay: 100 }], { width: W, height: H, dither: false }));
+  // With the dither downloads use: flat colors come out exactly, not speckled.
+  const gif = readGif(encodeGif([{ data: d, delay: 100 }], { width: W, height: H }));
   const img = gif.frames[0].image;
-  assert.deepEqual(img[0], [255, 255, 255]);
-  assert.deepEqual(img[15], [250, 250, 250]);
+  for (let i = 0; i < W * H; i++) assert.deepEqual(img[i], i % W < 10 ? [255, 255, 255] : [250, 250, 250], `pixel ${i}`);
 });
 
 test('[MOT-06] MP4: reordered frames get offsets of zero or more, and an edit list', async () => {

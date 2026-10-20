@@ -210,6 +210,8 @@ export function dataUrlToBytes(dataUrl) {
   const meta = dataUrl.slice(5, comma);
   const data = dataUrl.slice(comma + 1);
   if (meta.endsWith(';base64')) {
+    // The browser's own decoder where it has one (much quicker for videos).
+    if (typeof Uint8Array.fromBase64 === 'function') return { bytes: Uint8Array.fromBase64(data), mime: meta.slice(0, -7) };
     const bin = atob(data);
     const out = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
