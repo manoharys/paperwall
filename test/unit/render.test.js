@@ -564,3 +564,15 @@ test('[ELM-10] in a turned group, an end on an element outside the group comes l
   assert.equal(c.start.id, a.id);
   assert.equal(c.end.id, null);
 });
+
+test('[ELM-10] a connector between two elements of one turned group keeps its length', async () => {
+  const { createConnector, updateConnectors, endsOf } = await import('../../src/model/connectors.js');
+  const { createShape, createGroup } = await import('../../src/model/doc.js');
+  const a = createShape('rect', { x: 100, y: 100, w: 100, h: 100 });
+  const b = createShape('rect', { x: 600, y: 100, w: 100, h: 100 });
+  const c = createConnector({ from: [200, 150], to: [600, 150], start: a.id, end: b.id });
+  const g = createGroup([a, b], { rotation: 30 });
+  updateConnectors({ elements: [g, c] });
+  const [p, q] = endsOf(c);
+  assert.ok(Math.hypot(q[0] - p[0], q[1] - p[1]) > 100, 'not folded to a point');
+});

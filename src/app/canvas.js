@@ -50,6 +50,10 @@ export class Canvas {
     });
     // Undo and redo wait while a drag is going (it holds parts of the design).
     editor.isDragging = () => !!this.drag;
+    // Something else needs the design mid-drag: the drag ends here, as if let go.
+    editor.finishDrag = () => {
+      if (this.drag) this.onUp();
+    };
     this.el.addEventListener('dblclick', (e) => this.onDouble(e));
     this.el.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     this.el.addEventListener('dragover', (e) => {

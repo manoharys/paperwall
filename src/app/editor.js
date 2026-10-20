@@ -113,6 +113,9 @@ export class Editor {
 
   /** Run a change as one undo step. `key` merges rapid repeats (typing, nudging). */
   change(fn, { key = null, quiet = false } = {}) {
+    // A change that comes in mid-drag (a button, a timer) finishes the drag
+    // first, as its own step: the two never share an undo step.
+    if (this.isDragging?.()) this.finishDrag?.();
     this.history.record(this.doc, key);
     const result = fn();
     this.afterChange(quiet);
@@ -121,6 +124,7 @@ export class Editor {
 
   /** After any change: save, refresh, keep connectors attached. `edit: false` for corrections (re-measuring), which don't call for a new version. */
   afterChange(quiet = false, { edit = true } = {}) {
+    if (this.isDragging?.()) this.finishDrag?.(); // e.g. text refitted when a font loads
     // Connectors on every page follow what they're attached to (pages
     // without connectors return at once).
     this.syncAllConnectors();
@@ -138,7 +142,8 @@ export class Editor {
       // Every few minutes of work, keep a version to go back to.
       // Not awaited: saving the design itself shouldn't wait on history.
       // (versionAt is set once we know whether the design has versions yet.)
-      if (this.changedSinceVersion && this.versionAt && Date.now() - this.versionAt > VERSION_EVERY) this.saveVersion();
+      // Not mid-drag: the design is half-moved then (the next save tries again).
+      if (this.changedSinceVersion && this.versionAt && !this.isDragging?.() && Date.now() - this.versionAt > VERSION_EVERY) this.saveVersion();
     } catch (e) {
       toast(`Couldn't save on this device: ${e.message}`, 'error');
     }
@@ -533,8 +538,12 @@ export class Editor {
     if (!cleared) return 0;
     g.putImageData(pixels, 0, 0);
     const dataUrl = canvas.toDataURL('image/png');
+    // Found again by id: the design may have changed (undo, a restore) while the photo was worked on.
+    const page = this.doc.pages.find((p) => deepFind(p.elements, el.id));
+    const now = page && deepFind(page.elements, el.id);
+    if (!now || now.assetId !== el.assetId || this.closed) return 0;
     this.change(() => {
-      el.assetId = addAsset(this.doc, { mime: 'image/png', dataUrl, width: canvas.width, height: canvas.height, name: `${asset.name || 'image'} (no background)` });
+      now.assetId = addAsset(this.doc, { mime: 'image/png', dataUrl, width: canvas.width, height: canvas.height, name: `${asset.name || 'image'} (no background)` });
     });
     return cleared / (canvas.width * canvas.height);
   }

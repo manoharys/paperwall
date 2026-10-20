@@ -33,10 +33,10 @@ const TYPE_NAMES = { text: 'Text', shape: 'Shape', line: 'Line', image: 'Image',
 const SHAPE_NAMES = { rect: 'Rectangle', ellipse: 'Circle', triangle: 'Triangle', star: 'Star', polygon: 'Polygon', heart: 'Heart', arrow: 'Arrow', bubble: 'Speech bubble', diamond: 'Diamond', arch: 'Arch', blob: 'Blob' };
 
 // Presets set the basic adjustments only; warmth, tint, hue, vignette and
-// duotone are left as they are.
+// duotone are left as they are. Original puts everything back.
 const BASIC = { brightness: 100, contrast: 100, saturation: 100, grayscale: 0, sepia: 0, blur: 0 };
 const FILTER_PRESETS = {
-  original: { ...BASIC },
+  original: { ...DEFAULT_FILTERS },
   bw: { ...BASIC, grayscale: 100, contrast: 110 },
   sepia: { ...BASIC, sepia: 80, contrast: 95 },
   vivid: { ...BASIC, saturation: 150, contrast: 115 },
