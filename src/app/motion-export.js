@@ -110,6 +110,13 @@ export async function exportGif(doc, pages, { size = null, onProgress, signal } 
   return new Blob([gif.finish()], { type: 'image/gif' });
 }
 
+/** Wait while more than `max` items wait in an encoder (told by its dequeue event where it has one). */
+async function drain(encoder, max) {
+  while (encoder.encodeQueueSize > max) {
+    await new Promise((r) => ('ondequeue' in encoder ? encoder.addEventListener('dequeue', r, { once: true }) : setTimeout(r, 5)));
+  }
+}
+
 /** Whether this browser can make videos (it encodes them itself). */
 export function canMakeVideo() {
   return typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined';
@@ -170,10 +177,10 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
       // A key frame every two seconds, so players can jump around.
       encoder.encode(frame, { keyFrame: i % (fps * 2) === 0 });
       frame.close();
-      // Wait for the encoder to catch up (told by its dequeue event, where it has one).
-      while (encoder.encodeQueueSize > 4) {
-        await new Promise((r) => ('ondequeue' in encoder ? encoder.addEventListener('dequeue', r, { once: true }) : setTimeout(r, 5)));
-      }
+      await drain(encoder, 4);
+      // H.264 for MP4 needs the encoder's description, which comes with its
+      // first output: without it, say so now rather than after every frame.
+      if (pick.codec === 'avc' && chunks.length && !description) throw new Error("This browser's MP4 encoder left out what players need. Try WebM instead.");
     }));
     await encoder.flush();
   } finally {
@@ -253,10 +260,7 @@ async function encodeAudio(buffer, seconds, container, volume = 1, signal = null
       const data = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: n, numberOfChannels: channels, timestamp: Math.round((at / sampleRate) * 1e6), data: planar });
       encoder.encode(data);
       data.close();
-      // As with video: no more than a few blocks waiting at a time.
-      while (encoder.encodeQueueSize > 8) {
-        await new Promise((r) => ('ondequeue' in encoder ? encoder.addEventListener('dequeue', r, { once: true }) : setTimeout(r, 5)));
-      }
+      await drain(encoder, 8);
     }
     await encoder.flush();
   } finally {

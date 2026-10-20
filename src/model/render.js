@@ -576,7 +576,6 @@ function pageBody(ctx, page, w, h, opts) {
   }
 }
 
-/** One element at a moment of its page's animations (`nested`: inside a group). */
 // 2×2 matrices [a, b, c, d] (x' = a·x + c·y, y' = b·x + d·y): how a group
 // turns and flips what's inside it.
 const IDENTITY = [1, 0, 0, 1];
@@ -591,6 +590,7 @@ function mul([a, b, c, d], [e, g, h, k]) {
 }
 const isIdentity = (m) => !m || (Math.abs(m[0] - 1) < 1e-9 && Math.abs(m[1]) < 1e-9 && Math.abs(m[2]) < 1e-9 && Math.abs(m[3] - 1) < 1e-9);
 
+/** One element at a moment of its page's animations (`nested`: inside a group). */
 function renderMoving(ctx, el, nested) {
   const { page, order, time, size } = ctx.motion;
   const anim = animationOf(page, el, order, { nested });

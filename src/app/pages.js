@@ -149,7 +149,9 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     const now = performance.now();
     const last = taken.get(el.id);
     if (last && now - last.at < 33) return last.picture;
-    const picture = videos.capture(el, shownScale());
+    // While a video seeks (starting, looping) it has no picture: the last one
+    // stays (not the poster, a jump to another moment).
+    const picture = videos.capture(el, shownScale()) || last?.picture || null;
     taken.set(el.id, { at: now, picture });
     return picture;
   };

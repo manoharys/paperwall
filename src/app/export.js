@@ -162,7 +162,8 @@ export async function soundtrackBuffer(doc) {
   // Offline: decoding needs no speakers (and Safari allows only a few live contexts).
   const Ctx = globalThis.OfflineAudioContext || globalThis.webkitOfflineAudioContext;
   if (!Ctx) return null;
-  return new Ctx(1, 1, 48000).decodeAudioData(dataUrlToBytes(a.dataUrl).bytes.buffer);
+  // (The callback form: older Safari's has no promise.)
+  return new Promise((resolve, reject) => new Ctx(1, 1, 48000).decodeAudioData(dataUrlToBytes(a.dataUrl).bytes.buffer, resolve, reject));
 }
 
 export function exportDialog(editor) {
