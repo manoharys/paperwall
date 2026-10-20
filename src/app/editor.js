@@ -413,22 +413,30 @@ export class Editor {
    * shape. Frames inside (unturned, unlocked) groups count too.
    */
   frameAt(p) {
+    // The topmost thing at the point decides: a frame under a text box or a
+    // plain photo isn't reached through it. (A frame's corners outside its
+    // shape let the point through.)
+    const BLOCKED = 0;
     const find = (els, ox, oy) => {
       for (let i = els.length - 1; i >= 0; i--) {
         const el = els[i];
-        if (el.hidden || el.locked) continue;
-        if (el.type === 'group') {
-          if (el.rotation || el.flipX || el.flipY) continue;
-          const hit = find(el.children, ox + el.x, oy + el.y);
-          if (hit) return hit;
-          continue;
-        }
+        if (el.hidden) continue;
         const at = { ...el, x: el.x + ox, y: el.y + oy };
-        if (el.type === 'image' && (!el.assetId || (el.mask && el.mask !== 'none')) && pointInBox(p.x, p.y, at) && inMask(at, p)) return el;
+        if (!pointInBox(p.x, p.y, at)) continue;
+        if (el.type === 'group') {
+          if (el.locked || el.rotation || el.flipX || el.flipY) return BLOCKED;
+          const hit = find(el.children, ox + el.x, oy + el.y);
+          if (hit !== null) return hit;
+          continue; // a gap between the group's parts
+        }
+        const frame = el.type === 'image' && (!el.assetId || (el.mask && el.mask !== 'none'));
+        if (!frame) return BLOCKED;
+        if (!inMask(at, p)) continue;
+        return el.locked ? BLOCKED : el;
       }
       return null;
     };
-    return find(this.pageData.elements, 0, 0);
+    return find(this.pageData.elements, 0, 0) || null;
   }
 
   // ---------- view: rulers, guides, grid, margins, bleed ----------
@@ -790,8 +798,10 @@ export class Editor {
   setPageTitle(i, title) {
     const clean = String(title || '').trim().slice(0, 120);
     if ((this.doc.pages[i].title || '') === clean) return;
-    // The strip catches up with the 'doc' redraw: not on every keystroke.
-    this.change(() => (this.doc.pages[i].title = clean || undefined), { key: `title:${i}` });
+    // Titles aren't on the canvas: no redraw there, only the page strip's
+    // (which batches them, rather than one per keystroke).
+    this.change(() => (this.doc.pages[i].title = clean || undefined), { key: `title:${i}`, quiet: true });
+    this.emit('strip');
   }
 
   /** Hidden pages stay in the design but are skipped when presenting and downloading. */

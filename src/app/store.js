@@ -66,9 +66,12 @@ function open() {
   return dbPromise;
 }
 
-/** Run a transaction, opening the database again once if it was closed under us (another tab upgraded it). */
-function txRetry(store, mode, fn) {
-  return withDb((db) => tx(db, store, mode, fn));
+/**
+ * One read or write: a transaction on the database (opened again once if
+ * another tab closed it), or `inMemory()` when this browser can't store.
+ */
+function run(store, mode, fn, inMemory) {
+  return withDb((db) => (db ? tx(db, store, mode, fn) : inMemory()));
 }
 
 /** Run fn(db) with the open database, reopening once if another tab closed it. */
@@ -100,40 +103,29 @@ export function isPersistent() {
 }
 
 export async function put(store, key, value) {
-  const db = await open();
-  if (!db) return void memory[store].set(key, value);
-  await txRetry(store, 'readwrite', (s) => s.put(value, key));
+  await run(store, 'readwrite', (s) => void s.put(value, key), () => void memory[store].set(key, value));
 }
 
 /** Several puts (value set) and deletes (value undefined) in one transaction. */
 async function batch(store, ops) {
   if (!ops.length) return;
-  const db = await open();
-  if (!db) {
-    for (const [k, v] of ops) v === undefined ? memory[store].delete(k) : memory[store].set(k, v);
-    return;
-  }
-  await txRetry(store, 'readwrite', (s) => {
+  await run(store, 'readwrite', (s) => {
     for (const [k, v] of ops) v === undefined ? s.delete(k) : s.put(v, k);
+  }, () => {
+    for (const [k, v] of ops) v === undefined ? memory[store].delete(k) : memory[store].set(k, v);
   });
 }
 
-export async function get(store, key) {
-  const db = await open();
-  if (!db) return memory[store].get(key);
-  return txRetry(store, 'readonly', (s) => s.get(key));
+export function get(store, key) {
+  return run(store, 'readonly', (s) => s.get(key), () => memory[store].get(key));
 }
 
 export async function del(store, key) {
-  const db = await open();
-  if (!db) return void memory[store].delete(key);
-  await txRetry(store, 'readwrite', (s) => s.delete(key));
+  await run(store, 'readwrite', (s) => void s.delete(key), () => void memory[store].delete(key));
 }
 
-export async function all(store) {
-  const db = await open();
-  if (!db) return [...memory[store].values()];
-  return txRetry(store, 'readonly', (s) => s.getAll());
+export function all(store) {
+  return run(store, 'readonly', (s) => s.getAll(), () => [...memory[store].values()]);
 }
 
 // ---------- designs ----------
@@ -172,34 +164,22 @@ const dKey = (designId, at) => `${designId}|d|${stamp(at)}`;
 const aKey = (designId, assetId) => `${designId}|a|${assetId}`;
 const range = (prefix) => [prefix, `${prefix}\uffff`];
 
-async function keysIn(prefix) {
+function keysIn(prefix) {
   const [lo, hi] = range(prefix);
-  const db = await open();
-  if (!db) return [...memory.versions.keys()].filter((k) => k >= lo && k <= hi).sort();
-  return txRetry('versions', 'readonly', (s) => s.getAllKeys(IDBKeyRange.bound(lo, hi)));
+  return run('versions', 'readonly', (s) => s.getAllKeys(IDBKeyRange.bound(lo, hi)), () => [...memory.versions.keys()].filter((k) => k >= lo && k <= hi).sort());
 }
 
-async function valuesIn(prefix) {
+function valuesIn(prefix) {
   const [lo, hi] = range(prefix);
-  const db = await open();
-  if (!db) return [...memory.versions.entries()].filter(([k]) => k >= lo && k <= hi).map(([, v]) => v);
-  return txRetry('versions', 'readonly', (s) => s.getAll(IDBKeyRange.bound(lo, hi)));
+  return run('versions', 'readonly', (s) => s.getAll(IDBKeyRange.bound(lo, hi)), () => [...memory.versions.entries()].filter(([k]) => k >= lo && k <= hi).map(([, v]) => v));
 }
 
 /** Several values by key, in one transaction (undefined where missing). */
 async function getMany(store, keys) {
   if (!keys.length) return [];
-  return withDb((db) => {
-    if (!db) return keys.map((k) => memory[store].get(k));
-    return new Promise((resolve, reject) => {
-      const t = db.transaction(store, 'readonly');
-      const s = t.objectStore(store);
-      const reqs = keys.map((k) => s.get(k));
-      t.oncomplete = () => resolve(reqs.map((r) => r.result));
-      t.onerror = () => reject(t.error);
-      t.onabort = () => reject(t.error || new Error('Reading storage was stopped'));
-    });
-  });
+  let reqs = null;
+  const kept = await run(store, 'readonly', (s) => void (reqs = keys.map((k) => s.get(k))), () => keys.map((k) => memory[store].get(k)));
+  return reqs ? reqs.map((r) => r.result) : kept;
 }
 
 // Versions are saved one at a time, so one save's clean-up can't remove
@@ -224,34 +204,23 @@ async function writeVersion(doc, { label = '', thumb = null } = {}) {
   // Which images are already stored is checked in the same transaction that
   // writes the version, so another tab's clean-up can't remove one in between.
   const [alo, ahi] = range(`${doc.id}|a|`);
-  await withDb((db) => writeVersionTx(db, doc, at, assets, rest, details, alo, ahi));
+  await run('versions', 'readwrite', (s) => {
+    const have = s.getAllKeys(IDBKeyRange.bound(alo, ahi));
+    have.onsuccess = () => {
+      const stored = new Set(have.result);
+      for (const [id, a] of Object.entries(assets || {})) if (!stored.has(aKey(doc.id, id))) s.put(a, aKey(doc.id, id));
+      s.put(rest, dKey(doc.id, at));
+      s.put(details, vKey(doc.id, at));
+    };
+  }, () => {
+    for (const [id, a] of Object.entries(assets || {})) if (!memory.versions.has(aKey(doc.id, id))) memory.versions.set(aKey(doc.id, id), a);
+    memory.versions.set(dKey(doc.id, at), rest);
+    memory.versions.set(vKey(doc.id, at), details);
+  });
   const keys = await keysIn(`${doc.id}|v|`);
   const drop = keys.slice(0, Math.max(0, keys.length - MAX_VERSIONS));
   if (drop.length) await prune(doc.id, drop);
   return vKey(doc.id, at);
-}
-
-async function writeVersionTx(db, doc, at, assets, rest, details, alo, ahi) {
-  if (!db) {
-    for (const [id, a] of Object.entries(assets || {})) if (!memory.versions.has(aKey(doc.id, id))) memory.versions.set(aKey(doc.id, id), a);
-    memory.versions.set(dKey(doc.id, at), rest);
-    memory.versions.set(vKey(doc.id, at), details);
-  } else {
-    await new Promise((resolve, reject) => {
-      const t = db.transaction('versions', 'readwrite');
-      const s = t.objectStore('versions');
-      const have = s.getAllKeys(IDBKeyRange.bound(alo, ahi));
-      have.onsuccess = () => {
-        const stored = new Set(have.result);
-        for (const [id, a] of Object.entries(assets || {})) if (!stored.has(aKey(doc.id, id))) s.put(a, aKey(doc.id, id));
-        s.put(rest, dKey(doc.id, at));
-        s.put(details, vKey(doc.id, at));
-      };
-      t.oncomplete = () => resolve();
-      t.onerror = () => reject(t.error);
-      t.onabort = () => reject(t.error || new Error('Storage is full'));
-    });
-  }
 }
 
 /**
@@ -260,25 +229,9 @@ async function writeVersionTx(db, doc, at, assets, rest, details, alo, ahi) {
  * between deciding what's unused and deleting it.
  */
 async function prune(designId, drop) {
-  await withDb((db) => pruneTx(db, designId, drop));
-}
-
-async function pruneTx(db, designId, drop) {
   const [vlo, vhi] = range(`${designId}|v|`);
   const [alo, ahi] = range(`${designId}|a|`);
-  if (!db) {
-    const m = memory.versions;
-    for (const k of drop) {
-      m.delete(k);
-      m.delete(k.replace('|v|', '|d|'));
-    }
-    const used = new Set([...m.entries()].filter(([k]) => k >= vlo && k <= vhi).flatMap(([, v]) => v.assetIds || []));
-    for (const k of [...m.keys()]) if (k >= alo && k <= ahi && !used.has(k.slice(alo.length))) m.delete(k);
-    return;
-  }
-  await new Promise((resolve, reject) => {
-    const t = db.transaction('versions', 'readwrite');
-    const s = t.objectStore('versions');
+  await run('versions', 'readwrite', (s) => {
     for (const k of drop) {
       s.delete(k);
       s.delete(k.replace('|v|', '|d|'));
@@ -291,18 +244,21 @@ async function pruneTx(db, designId, drop) {
         for (const k of images.result) if (!used.has(k.slice(alo.length))) s.delete(k);
       };
     };
-    t.oncomplete = () => resolve();
-    t.onerror = () => reject(t.error);
-    t.onabort = () => reject(t.error || new Error('Storage is full'));
+  }, () => {
+    const m = memory.versions;
+    for (const k of drop) {
+      m.delete(k);
+      m.delete(k.replace('|v|', '|d|'));
+    }
+    const used = new Set([...m.entries()].filter(([k]) => k >= vlo && k <= vhi).flatMap(([, v]) => v.assetIds || []));
+    for (const k of [...m.keys()]) if (k >= alo && k <= ahi && !used.has(k.slice(alo.length))) m.delete(k);
   });
 }
 
 /** Whether a design has any versions yet (just counts them). */
 export async function hasVersions(designId) {
   const [lo, hi] = range(`${designId}|v|`);
-  const db = await open();
-  if (!db) return [...memory.versions.keys()].some((k) => k >= lo && k <= hi);
-  return (await txRetry('versions', 'readonly', (s) => s.count(IDBKeyRange.bound(lo, hi)))) > 0;
+  return (await run('versions', 'readonly', (s) => s.count(IDBKeyRange.bound(lo, hi)), () => [...memory.versions.keys()].filter((k) => k >= lo && k <= hi).length)) > 0;
 }
 
 /** A design's saved versions (just their details), newest first. */

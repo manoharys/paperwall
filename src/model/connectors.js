@@ -161,8 +161,14 @@ export function updateConnectors(page, { refit = true } = {}) {
     const sTarget = el.start?.id ? byId.get(el.start.id) : null;
     const eTarget = el.end?.id ? byId.get(el.end.id) : null;
     // A deleted target frees the end where it was, keeping the side it left from.
-    if (el.start?.id && !sTarget) el.start = { id: null, side: el.start.side };
-    if (el.end?.id && !eTarget) el.end = { id: null, side: el.end.side };
+    if (el.start?.id && !sTarget) {
+      el.start = { id: null, side: el.start.side };
+      moved = true; // a change too, if the line itself stays put
+    }
+    if (el.end?.id && !eTarget) {
+      el.end = { id: null, side: el.end.side };
+      moved = true;
+    }
     if (!sTarget && !eTarget) return moved;
     // Both elements inside the same turned group: both ends would land on the
     // group's one box. Leave the line as it is until the group is undone.

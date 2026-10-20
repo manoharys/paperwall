@@ -576,3 +576,10 @@ test('[ELM-10] a connector between two elements of one turned group keeps its le
   const [p, q] = endsOf(c);
   assert.ok(Math.hypot(q[0] - p[0], q[1] - p[1]) > 100, 'not folded to a point');
 });
+
+test('[ELM-10] freeing the ends of deleted elements counts as a change', async () => {
+  const { createConnector, updateConnectors } = await import('../../src/model/connectors.js');
+  const c = createConnector({ from: [0, 0], to: [100, 0], start: 'gone-a', end: 'gone-b' });
+  assert.equal(updateConnectors({ elements: [c] }), true);
+  assert.equal(c.start.id, null);
+});

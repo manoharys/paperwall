@@ -24,7 +24,7 @@ export class PageStrip {
     editor.on((what) => {
       if (what === 'view') this.zoomLabel.textContent = `${Math.round(editor.zoom * 100)}%`;
       else if (what === 'page') this.redraw.flush(); // now, and once (a 'doc' redraw may be waiting too)
-      else if (what === 'doc') this.redraw();
+      else if (what === 'doc' || what === 'strip') this.redraw();
     });
     this.render();
   }

@@ -73,10 +73,17 @@ export class Canvas {
         settle();
         return null;
       }
+      // A guide just pulled out of a ruler isn't part of the design yet: it
+      // steps aside while the change is recorded, and comes back after.
+      const pulled = d.mode === 'guide' && d.isNew ? editor.pageData.guides.splice(d.index, 1)[0] : null;
       editor.history.discard();
       return () => {
         if (this.drag !== d) return;
         editor.history.record(editor.doc);
+        if (pulled) {
+          editor.pageData.guides = [...(editor.pageData.guides || []), pulled];
+          d.index = editor.pageData.guides.length - 1;
+        }
         restart(d);
       };
     };
