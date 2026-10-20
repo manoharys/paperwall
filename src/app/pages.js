@@ -2,7 +2,7 @@
 
 import { h, icon, iconButton, clear, debounce, dialog, toast, lazily, forget, pressable } from './ui.js';
 import { renderPage, renderFrame } from '../model/render.js';
-import { animationsEnd, keepsMoving, hasLoop, pageDuration, pageFrame, transitionOf, timeline } from '../model/motion.js';
+import { animationsEnd, keepsMoving, hasLoop, soundFade, pageDuration, pageFrame, transitionOf, timeline } from '../model/motion.js';
 import { VideoFrames, videosOn, blobUrlFor } from './media.js';
 import { measure } from './fonts.js';
 import { visiblePages, pageName, pageLabel, soundtrackOf } from '../model/doc.js';
@@ -140,7 +140,7 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
   const sound = autoplay && !only ? soundtrackPlayer(doc, canvas.assetHref) : null;
   // The sound starts with the page Play starts on (as in a download of the
   // pages from there); moving to another page moves it along with them.
-  const soundFrom = tl.parts[at].start;
+  let soundFrom = tl.parts[at].start;
   // Videos are taken at the size they show on screen (the slide fits the
   // screen both ways), and at most 30 times a second, however fast the screen.
   const shownScale = () => Math.min(window.innerWidth / doc.width, window.innerHeight / doc.height) * (window.devicePixelRatio || 1);
@@ -234,10 +234,13 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     info = { end: animationsEnd(page), keeps: keepsMoving(page, doc.assets), loops: hasLoop(page) };
     videos.pauseAll();
     videos.start(videosOn(doc, [shown[at]]), started);
-    if (!auto) sound?.seek(Math.max(0, tl.parts[at].start - soundFrom));
+    // Back before the page Play started on: the sound starts over from there
+    // (as if Play had started there), so later pages meet it where they did.
+    if (tl.parts[at].start < soundFrom) soundFrom = tl.parts[at].start;
+    if (!auto) sound?.seek(tl.parts[at].start - soundFrom);
     if (sound && at === shown.length - 1) {
       // The sound fades over the end, as in a download of these pages.
-      const fade = Math.min(1, (tl.total - soundFrom) / 4);
+      const fade = soundFade(tl.total - soundFrom);
       fading = setTimeout(() => sound.fadeOut(fade), Math.max(0, started + (pageDuration(page) - fade) * 1000 - performance.now()));
     }
     slide.style.aspectRatio = `${doc.width} / ${doc.height}`;

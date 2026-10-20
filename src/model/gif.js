@@ -65,12 +65,13 @@ export class GifEncoder {
     const o = this.out;
     // 256 colors or fewer (a flat design): each exactly, with no dither to
     // speckle flat areas. More (photos, gradients): the nearest of 256, dithered.
-    const exact = exactColors(px, 256);
+    const exact = f.hold ? { palette: [[0, 0, 0]], idx: Uint8Array.of(0) } : exactColors(px, 256);
     const palette = exact ? exact.palette : buildPalette([px], 256);
     const bits = Math.max(1, Math.ceil(Math.log2(Math.max(2, palette.length))));
     const idx = exact ? exact.idx : indexFrame(px, box.w, box.h, paletteMapper(palette), this.dither, box.x, box.y);
-    // Graphic control: keep what's there (only this box is drawn over it).
-    o.bytes([0x21, 0xf9, 0x04, 0x04]);
+    // Graphic control: keep what's there (only this box is drawn over it);
+    // a hold frame's one pixel is see-through (color 0), so nothing changes.
+    o.bytes([0x21, 0xf9, 0x04, f.hold ? 0x05 : 0x04]);
     o.u16(Math.max(2, Math.round(delay / 10)));
     o.bytes([0x00, 0x00]);
     // The box, with its own palette.
@@ -96,9 +97,8 @@ export class GifEncoder {
     }
     o.byte(0);
     if (rest > 0) {
-      // The top-left pixel again, as it is: nothing visible changes.
-      const p = this.prev.subarray(0, 4);
-      this.pending = { box: { x: 0, y: 0, w: 1, h: 1 }, px: Uint8ClampedArray.from(p), delay: rest };
+      // One see-through pixel: nothing visible changes.
+      this.pending = { box: { x: 0, y: 0, w: 1, h: 1 }, px: new Uint8ClampedArray(4), delay: rest, hold: true };
       this.flush();
     }
   }

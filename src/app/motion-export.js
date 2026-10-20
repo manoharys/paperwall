@@ -4,7 +4,7 @@
 // (WebCodecs) into files we put together ourselves.
 
 import { renderFrame } from '../model/render.js';
-import { timeline, frameAt } from '../model/motion.js';
+import { timeline, frameAt, soundFade } from '../model/motion.js';
 import { GifEncoder } from '../model/gif.js';
 import { buildWebmParts } from '../model/webm.js';
 import { buildMp4Parts } from '../model/mp4.js';
@@ -160,7 +160,10 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
       // A key frame every two seconds, so players can jump around.
       encoder.encode(frame, { keyFrame: i % (fps * 2) === 0 });
       frame.close();
-      while (encoder.encodeQueueSize > 4) await new Promise((r) => setTimeout(r, 5));
+      // Wait for the encoder to catch up (told by its dequeue event, where it has one).
+      while (encoder.encodeQueueSize > 4) {
+        await new Promise((r) => ('ondequeue' in encoder ? encoder.addEventListener('dequeue', r, { once: true }) : setTimeout(r, 5)));
+      }
     }));
     await encoder.flush();
   } finally {
@@ -208,7 +211,7 @@ async function encodeAudio(buffer, seconds, container, volume = 1, signal = null
   const src = offline.createBufferSource();
   src.buffer = buffer;
   const gain = offline.createGain();
-  const fade = Math.min(1, seconds / 4);
+  const fade = soundFade(seconds);
   gain.gain.setValueAtTime(volume, 0);
   gain.gain.setValueAtTime(volume, Math.max(0, seconds - fade));
   gain.gain.linearRampToValueAtTime(0, seconds);

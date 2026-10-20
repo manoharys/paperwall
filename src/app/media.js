@@ -151,8 +151,9 @@ export class VideoFrames {
       video,
       // Resolves to whether it can play here; a damaged file just shows its poster.
       ready: Promise.resolve().then(() => {
+        if (this.disposed) return false; // (no file made for a player already let go)
         const url = this.urlFor(el.assetId);
-        if (!url || this.disposed) return false;
+        if (!url) return false;
         video.src = url;
         return firstPicture(video).then(() => {
           p.alpha = seeThrough(video);

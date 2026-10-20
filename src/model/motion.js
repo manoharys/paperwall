@@ -183,6 +183,11 @@ function animations(page) {
   return out;
 }
 
+/** How long a soundtrack fades out over the end of something `seconds` long (downloads and Play alike). */
+export function soundFade(seconds) {
+  return Math.min(1, seconds / 4);
+}
+
 /** Whether something on a page starts coming in only after the page's time is up (so it never shows). */
 export function startsTooLate(page) {
   return animations(page).some((a) => a.delay >= pageDuration(page));
