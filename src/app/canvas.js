@@ -9,7 +9,8 @@ import {
 import { resizeElement, coverCrop } from '../model/commands.js';
 import { clone } from '../model/doc.js';
 import { measure } from './fonts.js';
-import { h, dataUrlToBlob, toast } from './ui.js';
+import { h, dataUrlToBlob, toast, pickFile } from './ui.js';
+import * as store from './store.js';
 
 const PAD = 64;
 const RATIO_LOCKED = new Set(['image', 'icon', 'sticker', 'qr', 'group']);
@@ -394,6 +395,7 @@ export class Canvas {
     const hit = this.hitTest(p);
     if (!hit || hit.locked) return;
     if (hit.type === 'text') this.startTextEdit(hit);
+    else if (hit.type === 'image' && !hit.assetId) this.pickPhotoFor(hit);
     else if (hit.type === 'image') this.startCrop(hit);
   }
 
@@ -407,13 +409,25 @@ export class Canvas {
   async onDrop(e) {
     e.preventDefault();
     this.el.classList.remove('dropping');
+    let at = this.toPage(e);
+    // A picture dropped on a frame goes into the frame; anywhere else it's added.
+    const place = async (upload) => {
+      const frame = this.ed.frameAt(at);
+      if (frame) this.ed.fillFrame(frame.id, upload);
+      else await this.ed.addImage(upload, { at });
+    };
+    const uploadId = e.dataTransfer?.getData('application/x-paperwall-upload');
+    if (uploadId) {
+      const upload = (await store.listUploads()).find((u) => u.id === uploadId);
+      if (upload) await place(upload);
+      return;
+    }
     const files = [...(e.dataTransfer?.files || [])].filter((f) => f.type.startsWith('image/'));
     if (!files.length) return;
-    let at = this.toPage(e);
     for (const file of files) {
       try {
         const upload = await this.ed.importImageFile(file);
-        await this.ed.addImage(upload, { at });
+        await place(upload);
         at = { x: at.x + 30, y: at.y + 30 };
       } catch (err) {
         toast(err.message, 'error');
@@ -494,6 +508,17 @@ export class Canvas {
       ed.afterChange();
     }
     this.el.focus({ preventScroll: true });
+  }
+
+  /** Choose a photo from the device for an empty frame. */
+  async pickPhotoFor(frame) {
+    const [file] = await pickFile('image/*');
+    if (!file) return;
+    try {
+      this.ed.fillFrame(frame.id, await this.ed.importImageFile(file));
+    } catch (err) {
+      toast(err.message, 'error');
+    }
   }
 
   // ---------- cropping ----------

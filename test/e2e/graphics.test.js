@@ -189,9 +189,9 @@ test('[IMG-08] rounded corners and circle crop', async () => {
   const { page, context, img } = await withImage();
   await setNumber(page, 'image-radius', 30);
   assert.equal((await last(page)).radius, 30);
-  await page.click('[data-testid="circle-mask"]');
+  await page.selectOption('[data-testid="image-mask"]', 'circle');
   assert.equal((await last(page)).mask, 'circle');
-  assert.equal(await page.locator('[data-testid="page"] clipPath ellipse').count(), 1);
+  assert.equal(await page.locator('[data-testid="page"] clipPath path').count(), 1);
   assert.ok(img);
   await context.close();
 });
@@ -468,5 +468,66 @@ test('[IMG-13] remove a plain background on your device', async () => {
   assert.deepEqual(png, { corner: 0, center: 255 });
   await page.keyboard.press(`${mod}+z`);
   assert.equal((await last(page)).assetId, img.assetId, 'one undo brings the original back');
+  await context.close();
+});
+
+// ---------- frames and grids ----------
+
+/** Drag an upload from the Uploads panel onto a point of an element on the page. */
+async function dragUploadOnto(page, id) {
+  await openTab(page, 'uploads');
+  const at = await elementCenter(page, id);
+  const box = await page.locator('[data-testid="page"]').boundingBox();
+  await page.dragAndDrop('[data-testid="upload-item"] >> nth=0', '[data-testid="page"]', { targetPosition: { x: at.x - box.x, y: at.y - box.y } });
+}
+
+test('[IMG-14] photo frames: drop a photo into a shape', async () => {
+  const { page, context } = await newDesign('square');
+  await openTab(page, 'shapes');
+  assert.ok((await page.locator('[data-testid="frame-grid"] .thumb').count()) >= 8);
+  await page.click('[data-testid="frame-Heart frame"]');
+  let frame = await last(page);
+  assert.equal(frame.type, 'image');
+  assert.equal(frame.mask, 'heart');
+  assert.equal(frame.assetId, null, 'starts empty');
+  assert.ok(await page.locator('[data-testid="frame-add-photo"]').isVisible());
+  // Double-click an empty frame to pick a photo for it.
+  const chooser = page.waitForEvent('filechooser');
+  const p = await elementCenter(page, frame.id);
+  await page.mouse.dblclick(p.x, p.y);
+  await (await chooser).setFiles(await makePng(page, { w: 900, h: 300 }));
+  await page.waitForFunction((id) => window.paperwall.editor.pageData.elements.find((e) => e.id === id).assetId, frame.id);
+  frame = (await elements(page)).find((e) => e.id === frame.id);
+  assert.equal(frame.w, frame.h, 'the frame keeps its size');
+  assert.ok(frame.crop.w < 0.5 && frame.crop.h === 1, 'the wide photo is cropped to fill the frame');
+  assert.equal(await page.locator('[data-testid="page"] clipPath path').count(), 1);
+  // The shape can change after the photo is in.
+  await page.selectOption('[data-testid="image-mask"]', 'arch');
+  assert.equal((await last(page)).mask, 'arch');
+  // Dragging an upload onto another frame fills that frame.
+  await openTab(page, 'shapes');
+  await page.click('[data-testid="frame-Circle frame"]');
+  const circle = await last(page);
+  await dragUploadOnto(page, circle.id);
+  await page.waitForFunction((id) => window.paperwall.editor.pageData.elements.find((e) => e.id === id).assetId, circle.id);
+  assert.equal((await elements(page)).filter((e) => e.type === 'image').length, 2, 'filled, not added');
+  await context.close();
+});
+
+test('[IMG-15] photo grids for collages', async () => {
+  const { page, context } = await newDesign('square');
+  await openTab(page, 'shapes');
+  assert.ok((await page.locator('[data-testid="photo-grid-list"] .thumb').count()) >= 10);
+  await page.click('[data-testid="grid-four"]');
+  const frames = (await elements(page)).filter((e) => e.type === 'image');
+  assert.equal(frames.length, 4);
+  assert.equal(await state(page, (ed) => ed.selection.length), 4, 'the new frames are selected');
+  for (const a of frames) {
+    assert.ok(a.x >= 0 && a.y >= 0 && a.x + a.w <= 1080 && a.y + a.h <= 1080, 'inside the page');
+    for (const b of frames) if (a !== b) assert.ok(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y, 'no overlap');
+  }
+  await uploadImages(page, [await makePng(page, { w: 400, h: 400 })]);
+  await dragUploadOnto(page, frames[2].id);
+  await page.waitForFunction((id) => window.paperwall.editor.pageData.elements.find((e) => e.id === id).assetId, frames[2].id);
   await context.close();
 });

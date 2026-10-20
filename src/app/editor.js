@@ -4,12 +4,13 @@
 import { History } from '../model/history.js';
 import * as cmd from '../model/commands.js';
 import {
-  createText, createShape, createLine, createImage, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
+  createText, createShape, createLine, createImage, createFrame, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
   TEXT_STYLES, clone,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
 import { curveGeometry } from '../model/render.js';
-import { unionBounds } from '../model/geometry.js';
+import { unionBounds, pointInBox } from '../model/geometry.js';
+import { gridBoxes } from '../model/grids.js';
 import { measure, ensureFont } from './fonts.js';
 import { removePlainBackground } from '../model/bgremove.js';
 import { readFileAsDataUrl, loadImage, toast, debounce } from './ui.js';
@@ -211,8 +212,13 @@ export class Editor {
     return this.insert(el);
   }
 
-  /** Add an image (from a file, the clipboard or the uploads library). */
+  /**
+   * Add an image (from a file, the clipboard or the uploads library). If an
+   * empty frame is selected, the image goes into it instead.
+   */
   async addImage(upload, { at } = {}) {
+    const frame = this.single;
+    if (!at && frame?.type === 'image' && !frame.assetId) return this.fillFrame(frame.id, upload);
     const assetId = addAsset(this.doc, upload);
     const maxW = this.doc.width * 0.6;
     const maxH = this.doc.height * 0.6;
@@ -238,13 +244,48 @@ export class Editor {
   async replaceImage(upload) {
     const el = this.single;
     if (!el || el.type !== 'image') return;
+    this.fillFrame(el.id, upload);
+  }
+
+  /** Put a picture in an image or frame, keeping its place and shape: it's cropped to fill. */
+  fillFrame(id, upload) {
+    const el = cmd.findElement(this.pageData, id);
+    if (!el || el.type !== 'image') return null;
     this.change(() => {
       el.assetId = addAsset(this.doc, upload);
-      // Keep the frame; fit the new picture inside it by cropping.
       const frame = el.w / el.h;
       const pic = upload.width / upload.height;
       el.crop = pic > frame ? { x: (1 - frame / pic) / 2, y: 0, w: frame / pic, h: 1 } : { x: 0, y: (1 - pic / frame) / 2, w: 1, h: pic / frame };
     });
+    this.select([el.id]);
+    return el;
+  }
+
+  /** The frame at a point on the page, if any: an empty one, or a photo in a shape. */
+  frameAt(p) {
+    const els = this.pageData.elements;
+    for (let i = els.length - 1; i >= 0; i--) {
+      const el = els[i];
+      if (el.type !== 'image' || el.locked || el.hidden) continue;
+      if ((!el.assetId || (el.mask && el.mask !== 'none')) && pointInBox(p.x, p.y, el)) return el;
+    }
+    return null;
+  }
+
+  addFrame(mask = 'none', props = {}) {
+    return this.insert(this.scaled(createFrame(mask, props), 0.45));
+  }
+
+  /** Fill the page with a grid of empty frames, ready for photos. */
+  addGrid(grid) {
+    const s = Math.min(this.doc.width, this.doc.height);
+    const boxes = gridBoxes(grid, this.doc.width, this.doc.height, { margin: Math.round(s * 0.04), gap: Math.round(s * 0.02) });
+    const frames = boxes.map((b) => createFrame('none', b));
+    this.change(() => {
+      for (const el of frames) cmd.addElement(this.doc, this.page, el, { center: false });
+    });
+    this.select(frames.map((el) => el.id));
+    return frames;
   }
 
   /** Make a plain background see-through. Returns how much of the picture was cleared (0..1). */
@@ -252,6 +293,7 @@ export class Editor {
     const el = this.single;
     if (!el || el.type !== 'image') return 0;
     const asset = this.doc.assets[el.assetId];
+    if (!asset) return 0;
     const img = await loadImage(asset.dataUrl);
     const canvas = document.createElement('canvas');
     canvas.width = img.naturalWidth;
@@ -271,7 +313,7 @@ export class Editor {
 
   setImageAsBackground() {
     const el = this.single;
-    if (!el || el.type !== 'image') return;
+    if (!el || el.type !== 'image' || !el.assetId) return;
     this.change(() => {
       cmd.setBackground(this.doc, this.page, { type: 'image', assetId: el.assetId, color: '#ffffff' });
       cmd.deleteElements(this.doc, this.page, [el.id]);

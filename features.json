@@ -143,7 +143,9 @@
         { "id": "IMG-10", "title": "Use an image as the page background" },
         { "id": "IMG-11", "title": "Remove an image's background on your device" },
         { "id": "IMG-12", "title": "Drop shadow on images and shapes" },
-        { "id": "IMG-13", "title": "Remove a plain, single-color background (logos, product shots) on your device" }
+        { "id": "IMG-13", "title": "Remove a plain, single-color background (logos, product shots) on your device" },
+        { "id": "IMG-14", "title": "Photo frames: drop a photo into a shape" },
+        { "id": "IMG-15", "title": "Photo grids for collages" }
       ]
     },
     {

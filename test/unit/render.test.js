@@ -256,3 +256,31 @@ test('[ELM-07] icon parts drawn in currentColor follow the icon color', () => {
   addElement(doc, 0, createIcon(filled.id, { x: 0, y: 0, w: 100, h: 100, color: '#ff006e' }));
   assert.match(renderPage(doc, 0, { measure: approxMeasure }), /<g [^>]*color="#ff006e"[^>]*stroke="#ff006e"/);
 });
+
+test('[IMG-14] frames clip photos to their shape and show a placeholder when empty', async () => {
+  const { createFrame, FRAME_MASKS } = await import('../../src/model/doc.js');
+  const { maskPath } = await import('../../src/model/shapes.js');
+  for (const mask of FRAME_MASKS) {
+    const d = maskPath({ w: 200, h: 300, mask, radius: 20 });
+    assert.match(d, /^M[\d.\s-]/, mask);
+    assert.match(d, /Z$/, mask);
+    assert.ok(!/NaN|undefined/.test(d), mask);
+  }
+  const doc = createDesign({ width: 400, height: 400 });
+  addElement(doc, 0, createFrame('heart', { x: 0, y: 0, w: 200, h: 200 }));
+  const svg = renderPage(doc, 0, { measure: approxMeasure });
+  assert.match(svg, /fill="#dcdce6"/, 'empty frames draw a placeholder');
+  assert.ok(!svg.includes('<image'), 'and no picture');
+});
+
+test('[IMG-15] grid cells tile the page with even gaps', async () => {
+  const { GRIDS, gridBoxes } = await import('../../src/model/grids.js');
+  assert.ok(GRIDS.length >= 10);
+  for (const g of GRIDS) {
+    const boxes = gridBoxes(g, 1000, 800, { margin: 40, gap: 20 });
+    assert.equal(boxes.length, g.cells.length);
+    const area = boxes.reduce((s, b) => s + b.w * b.h, 0);
+    assert.ok(area > 0.85 * 920 * 720 && area <= 920 * 720, `${g.id} covers the area inside the margin`);
+    for (const b of boxes) assert.ok(b.x >= 40 && b.y >= 40 && b.x + b.w <= 960 && b.y + b.h <= 760, `${g.id} stays inside the margin`);
+  }
+});

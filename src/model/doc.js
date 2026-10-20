@@ -117,7 +117,10 @@ export function createText(props = {}) {
   });
 }
 
-export const SHAPES = ['rect', 'ellipse', 'triangle', 'star', 'polygon', 'heart', 'arrow', 'bubble', 'diamond'];
+export const SHAPES = ['rect', 'ellipse', 'triangle', 'star', 'polygon', 'heart', 'arrow', 'bubble', 'diamond', 'arch', 'blob'];
+
+/** Shapes a photo can be framed in. 'none' is a plain (optionally rounded) rectangle. */
+export const FRAME_MASKS = ['none', 'circle', 'arch', 'blob', 'heart', 'star', 'polygon', 'triangle', 'diamond'];
 
 export function createShape(shape = 'rect', props = {}) {
   if (!SHAPES.includes(shape)) throw new Error(`Unknown shape: ${shape}`);
@@ -162,6 +165,11 @@ export function createImage(assetId, props = {}) {
     mask: 'none',
     ...props,
   });
+}
+
+/** A photo frame: an image in a shape, empty until a photo is dropped in. */
+export function createFrame(mask = 'none', props = {}) {
+  return createImage(null, { w: 500, h: 500, mask, ...props });
 }
 
 export function createIcon(iconId, props = {}) {

@@ -1,7 +1,7 @@
 // Turns a page into SVG markup. The editor and every export use this same
 // renderer, so what you see is exactly what you download.
 
-import { shapePath, dashArray } from './shapes.js';
+import { shapePath, dashArray, maskPath } from './shapes.js';
 import { layoutText, displayText, approxMeasure } from './text-layout.js';
 import { iconById, stickerById } from './graphics.js';
 import { qrMatrix, qrPath } from './qr.js';
@@ -125,16 +125,20 @@ function renderLine(ctx, el) {
 }
 
 function renderImage(ctx, el) {
-  const href = ctx.href(el.assetId);
-  if (!href) return `<rect width="${f(el.w)}" height="${f(el.h)}" fill="#e5e5ef"/>`;
+  const href = el.assetId ? ctx.href(el.assetId) : '';
+  const outline = maskPath(el);
+  if (!href) {
+    // An empty frame: a soft placeholder with a little picture in the middle.
+    const s = Math.min(el.w, el.h) * 0.22;
+    const ox = (el.w - s) / 2;
+    const oy = (el.h - s) / 2;
+    return `<path d="${outline}" fill="#dcdce6"/><g transform="translate(${f(ox)} ${f(oy)}) scale(${f(s / 24)})" fill="none" stroke="#9a9aab" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></g>`;
+  }
   const crop = el.crop || { x: 0, y: 0, w: 1, h: 1 };
   const iw = el.w / crop.w;
   const ih = el.h / crop.h;
   const clip = ctx.id('clip');
-  const shape = el.mask === 'circle'
-    ? `<ellipse cx="${f(el.w / 2)}" cy="${f(el.h / 2)}" rx="${f(el.w / 2)}" ry="${f(el.h / 2)}"/>`
-    : `<rect width="${f(el.w)}" height="${f(el.h)}" rx="${f(Math.min(el.radius || 0, el.w / 2, el.h / 2))}"/>`;
-  ctx.defs.push(`<clipPath id="${clip}">${shape}</clipPath>`);
+  ctx.defs.push(`<clipPath id="${clip}"><path d="${outline}"/></clipPath>`);
   const fx = imageFilter(ctx, el.filters);
   return `<g clip-path="url(#${clip})"><image href="${esc(href)}" x="${f(-crop.x * iw)}" y="${f(-crop.y * ih)}" width="${f(iw)}" height="${f(ih)}" preserveAspectRatio="none"${fx ? ` filter="url(#${fx})"` : ''}/></g>`;
 }

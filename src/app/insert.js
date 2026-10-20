@@ -5,7 +5,8 @@ import { colorButton, selectField, section } from './widgets.js';
 import { FONTS, FONT_PAIRS } from '../model/fonts.js';
 import { ALL_ICONS, ALL_STICKERS, searchGraphics } from '../model/graphics.js';
 import { renderPage, renderElementOnly } from '../model/render.js';
-import { createShape, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES } from '../model/doc.js';
+import { createShape, createFrame, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES } from '../model/doc.js';
+import { GRIDS, gridBoxes } from '../model/grids.js';
 import { collectColors } from '../model/commands.js';
 import { TEMPLATES, TEMPLATE_CATEGORIES, TEMPLATE_FORMATS, searchTemplates, templateFormatLabel } from '../templates/index.js';
 import { measure, ensureFont } from './fonts.js';
@@ -36,6 +37,21 @@ const SHAPE_ITEMS = [
   { label: 'Heart', shape: 'heart', props: {} },
   { label: 'Arrow', shape: 'arrow', props: { h: 180 } },
   { label: 'Speech bubble', shape: 'bubble', props: {} },
+  { label: 'Arch', shape: 'arch', props: {} },
+  { label: 'Blob', shape: 'blob', props: {} },
+];
+
+const FRAME_ITEMS = [
+  { label: 'Square frame', mask: 'none', props: {} },
+  { label: 'Rounded frame', mask: 'none', props: { radius: 60 } },
+  { label: 'Circle frame', mask: 'circle', props: {} },
+  { label: 'Arch frame', mask: 'arch', props: { h: 640 } },
+  { label: 'Blob frame', mask: 'blob', props: {} },
+  { label: 'Heart frame', mask: 'heart', props: {} },
+  { label: 'Star frame', mask: 'star', props: {} },
+  { label: 'Hexagon frame', mask: 'polygon', props: {} },
+  { label: 'Portrait frame', mask: 'none', props: { h: 640 } },
+  { label: 'Landscape frame', mask: 'none', props: { w: 640, h: 420 } },
 ];
 
 const LINE_ITEMS = [
@@ -175,6 +191,17 @@ export class InsertPanel {
         const el = createShape(s.shape, { ...s.props, w: 100, h: s.props.h ? 100 * (s.props.h / 300) : 100, radius: s.props.radius ? 20 : 0, fill: '#5b5bd6' });
         return h('button', { type: 'button', class: 'thumb', title: s.label, 'aria-label': s.label, 'data-testid': `shape-${s.label}`, onClick: () => ed.addShape(s.shape, s.props), html: renderElementOnly(PREVIEW_DOC, el) });
       }))),
+      section('Frames', h('p', { class: 'hint' }, 'Drop a photo onto a frame, or double-click it to pick one.'),
+        h('div', { class: 'thumb-grid', 'data-testid': 'frame-grid' }, FRAME_ITEMS.map((fr) => {
+          const el = createFrame(fr.mask, { ...fr.props });
+          const k = 100 / Math.max(el.w, el.h);
+          Object.assign(el, { w: el.w * k, h: el.h * k, radius: (el.radius || 0) * k });
+          return h('button', { type: 'button', class: 'thumb', title: fr.label, 'aria-label': fr.label, 'data-testid': `frame-${fr.label}`, onClick: () => ed.addFrame(fr.mask, fr.props), html: renderElementOnly(PREVIEW_DOC, el) });
+        }))),
+      section('Photo grids', h('div', { class: 'thumb-grid', 'data-testid': 'photo-grid-list' }, GRIDS.map((g) => h('button', {
+        type: 'button', class: 'thumb', title: g.name, 'aria-label': g.name, 'data-testid': `grid-${g.id}`, onClick: () => ed.addGrid(g),
+        html: `<svg viewBox="0 0 100 100">${gridBoxes(g, 100, 100, { margin: 6, gap: 4 }).map((b) => `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="2" fill="#dcdce6"/>`).join('')}</svg>`,
+      })))),
       section('Lines', h('div', { class: 'thumb-grid', 'data-testid': 'line-grid' }, LINE_ITEMS.map((l) => h('button', {
         type: 'button', class: 'thumb', title: l.label, 'aria-label': l.label, 'data-testid': `line-${l.label}`, onClick: () => ed.addLine(l.props),
         html: `<svg viewBox="0 0 100 40"><line x1="8" y1="20" x2="92" y2="20" stroke="currentColor" stroke-width="4" ${l.props.dash === 'dashed' ? 'stroke-dasharray="12 8"' : l.props.dash === 'dotted' ? 'stroke-dasharray="0 9" stroke-linecap="round"' : ''}/>${l.props.endCap ? '<path d="M94 20 82 12v16z" fill="currentColor"/>' : ''}${l.props.startCap ? '<path d="M6 20 18 12v16z" fill="currentColor"/>' : ''}</svg>`,
@@ -236,7 +263,11 @@ export class InsertPanel {
       if (!ups.length) grid.append(h('p', { class: 'empty-note' }, 'Images you add show up here, so you can use them again in any design.'));
       for (const u of ups) {
         grid.append(h('div', { class: 'upload' },
-          h('button', { type: 'button', class: 'upload-img', title: u.name, 'aria-label': `Add ${u.name}`, 'data-testid': 'upload-item', onClick: () => ed.addImage(u) }, h('img', { src: u.dataUrl, alt: '' })),
+          h('button', { type: 'button', class: 'upload-img', title: u.name, 'aria-label': `Add ${u.name}`, 'data-testid': 'upload-item', draggable: 'true', onClick: () => ed.addImage(u), onDragstart: (e) => {
+            // Drag onto the page to add it, or onto a frame to fill the frame.
+            e.dataTransfer.setData('application/x-paperwall-upload', u.id);
+            e.dataTransfer.effectAllowed = 'copy';
+          } }, h('img', { src: u.dataUrl, alt: '', draggable: 'false' })),
           iconButton('trash', 'Remove from uploads', async () => {
             await store.deleteUpload(u.id);
             load();

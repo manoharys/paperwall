@@ -4,7 +4,9 @@
 import { h, icon, iconButton, clear, toast, pickFile, readFileAsDataUrl, dialog, mod } from './ui.js';
 import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover, popoverOpen, PALETTES, fontPicker } from './widgets.js';
 import { FONTS, FONT_KINDS } from '../model/fonts.js';
-import { SHAPES, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, parseChartData, chartDataText, parseTable, tableText } from '../model/doc.js';
+import { SHAPES, FRAME_MASKS, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, parseChartData, chartDataText, parseTable, tableText } from '../model/doc.js';
+
+const MASK_LABELS = { none: 'Rectangle', circle: 'Circle', arch: 'Arch', blob: 'Blob', heart: 'Heart', star: 'Star', polygon: 'Hexagon', triangle: 'Triangle', diamond: 'Diamond', arch: 'Arch', blob: 'Blob' };
 import { collectColors, cropZoom } from '../model/commands.js';
 import { renderElementOnly } from '../model/render.js';
 import { measure, addCustomFont, customFontNames, ensureFont } from './fonts.js';
@@ -12,7 +14,7 @@ import { iconById, stickerById } from '../model/graphics.js';
 import { getSetting } from './store.js';
 
 const TYPE_NAMES = { text: 'Text', shape: 'Shape', line: 'Line', image: 'Image', icon: 'Icon', sticker: 'Sticker', qr: 'QR code', group: 'Group', chart: 'Chart', table: 'Table' };
-const SHAPE_NAMES = { rect: 'Rectangle', ellipse: 'Circle', triangle: 'Triangle', star: 'Star', polygon: 'Polygon', heart: 'Heart', arrow: 'Arrow', bubble: 'Speech bubble', diamond: 'Diamond' };
+const SHAPE_NAMES = { rect: 'Rectangle', ellipse: 'Circle', triangle: 'Triangle', star: 'Star', polygon: 'Polygon', heart: 'Heart', arrow: 'Arrow', bubble: 'Speech bubble', diamond: 'Diamond', arch: 'Arch', blob: 'Blob' };
 
 const FILTER_PRESETS = {
   original: { ...DEFAULT_FILTERS },
@@ -327,6 +329,19 @@ export class Inspector {
 
   imagePanel(el) {
     const ed = this.ed;
+    const shape = section('Shape',
+      selectField({ label: 'Frame shape', value: el.mask || 'none', testid: 'image-mask', options: FRAME_MASKS.map((m) => ({ value: m, label: MASK_LABELS[m] })), onChange: (mask) => this.up({ mask }) }),
+      !el.mask || el.mask === 'none'
+        ? slider({ label: 'Corner rounding', value: el.radius || 0, min: 0, max: Math.round(Math.min(el.w, el.h) / 2), testid: 'image-radius', onChange: this.live('radius') })
+        : null);
+    if (!el.assetId) {
+      return [
+        section('Frame',
+          h('p', { class: 'hint' }, 'Drop a photo onto the frame, drag one from Uploads, or pick one here.'),
+          h('button', { type: 'button', class: 'btn small wide primary', 'data-testid': 'frame-add-photo', onClick: () => this.canvas.pickPhotoFor(el) }, icon('image'), 'Add a photo')),
+        shape,
+      ];
+    }
     const f = { ...DEFAULT_FILTERS, ...el.filters };
     const asset = ed.doc.assets[el.assetId];
     const cropping = ed.cropId === el.id;
@@ -380,9 +395,7 @@ export class Inspector {
         slider({ label: 'Contrast', value: f.contrast, min: 0, max: 200, testid: 'contrast', onChange: filt('contrast') }),
         slider({ label: 'Saturation', value: f.saturation, min: 0, max: 200, testid: 'saturation', onChange: filt('saturation') }),
         slider({ label: 'Blur', value: f.blur, min: 0, max: 40, testid: 'blur', onChange: filt('blur') })),
-      section('Shape',
-        slider({ label: 'Corner rounding', value: el.radius || 0, min: 0, max: Math.round(Math.min(el.w, el.h) / 2), testid: 'image-radius', onChange: this.live('radius') }),
-        toggle({ label: 'Circle crop', checked: el.mask === 'circle', testid: 'circle-mask', onChange: (on) => this.up({ mask: on ? 'circle' : 'none' }) })),
+      shape,
     ];
   }
 
