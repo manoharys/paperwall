@@ -1,5 +1,5 @@
 name: Feature request
-description: Something you'd like Placard to do
+description: Something you'd like Paperwall to do
 labels: [feature]
 body:
   - type: textarea

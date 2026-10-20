@@ -17,4 +17,4 @@ body:
   - type: textarea
     attributes:
       label: Design file (optional)
-      description: Use "Save to file" and attach the .placard.json if it shows the problem.
+      description: Use "Save to file" and attach the .paperwall.json if it shows the problem.

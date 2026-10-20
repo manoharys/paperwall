@@ -1,6 +1,6 @@
 # Code of conduct
 
-Placard is for everyone who wants to make things. We want working on it to
+Paperwall is for everyone who wants to make things. We want working on it to
 feel the same way.
 
 **Expected:** be kind and patient, assume good intent, give feedback on the

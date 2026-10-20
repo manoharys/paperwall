@@ -1,4 +1,4 @@
-// Placard's templates. Every one was designed for this project from shapes,
+// Paperwall's templates. Every one was designed for this project from shapes,
 // text, icons and stickers, and is dedicated to the public domain (CC0).
 
 import { createDesign, createText, createShape, createLine, createIcon, createSticker, createQr, createPage, clone } from '../model/doc.js';

@@ -15,7 +15,7 @@ async function threeSquares() {
   for (const x of [100, 450, 800]) {
     const s = await addShape(app.page, 'Square');
     await app.page.evaluate(([id, px]) => {
-      const ed = window.placard.editor;
+      const ed = window.paperwall.editor;
       ed.change(() => Object.assign(ed.pageData.elements.find((e) => e.id === id), { x: px, y: 200, w: 150, h: 150 }));
     }, [s.id, x]);
     ids.push(s.id);
@@ -198,15 +198,15 @@ test('[EDIT-05] [EDIT-06] copy, cut and paste, including onto another page', asy
   await clickElement(page, ids[0]);
   await page.keyboard.press(`${mod}+c`);
   await page.keyboard.press(`${mod}+v`);
-  await page.waitForFunction(() => window.placard.editor.pageData.elements.length === 4);
+  await page.waitForFunction(() => window.paperwall.editor.pageData.elements.length === 4);
   await clickElement(page, ids[2]);
   await page.keyboard.press(`${mod}+x`);
-  await page.waitForFunction(() => window.placard.editor.pageData.elements.length === 3);
+  await page.waitForFunction(() => window.paperwall.editor.pageData.elements.length === 3);
   await page.click('[data-testid="strip-add-page"]');
-  await page.waitForFunction(() => window.placard.editor.page === 1);
+  await page.waitForFunction(() => window.paperwall.editor.page === 1);
   await page.locator('[data-testid="stage"]').click({ position: { x: 5, y: 5 } });
   await page.keyboard.press(`${mod}+v`);
-  await page.waitForFunction(() => window.placard.editor.doc.pages[1].elements.length === 1);
+  await page.waitForFunction(() => window.paperwall.editor.doc.pages[1].elements.length === 1);
   const pasted = (await state(page)).pages[1].elements[0];
   assert.equal(pasted.x, 800, 'pasted onto another page in the same place');
   await context.close();
@@ -293,7 +293,7 @@ test('[EDIT-12] align to the page', async () => {
 test('[EDIT-13] [EDIT-14] align several to each other, and space them evenly', async () => {
   const { page, context, ids } = await threeSquares();
   await page.evaluate((id) => {
-    const ed = window.placard.editor;
+    const ed = window.paperwall.editor;
     ed.change(() => Object.assign(ed.pageData.elements.find((e) => e.id === id), { x: 300, y: 500 }));
   }, ids[1]);
   for (const id of ids) await clickElement(page, id, ['Shift']);
@@ -329,7 +329,7 @@ test('[EDIT-15] [EDIT-16] flip and transparency', async () => {
 test('[EDIT-17] copy the style of one element onto another', async () => {
   const { page, context, ids } = await threeSquares();
   await page.evaluate((id) => {
-    const ed = window.placard.editor;
+    const ed = window.paperwall.editor;
     ed.change(() => Object.assign(ed.pageData.elements.find((e) => e.id === id), { fill: '#ff0055', stroke: '#000000', strokeWidth: 9, opacity: 0.5 }));
   }, ids[0]);
   await clickElement(page, ids[0]);

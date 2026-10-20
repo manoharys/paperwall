@@ -1,5 +1,5 @@
-// Builds Placard into self-contained files, with no bundler dependency:
-//   dist/placard.html  the whole app in one file; works when opened from disk
+// Builds Paperwall into self-contained files, with no bundler dependency:
+//   dist/paperwall.html  the whole app in one file; works when opened from disk
 //   dist/index.html    the same app for hosting, plus offline support (PWA)
 //   dist/sw.js, dist/manifest.webmanifest, dist/icons/*
 //
@@ -105,15 +105,15 @@ function csp(scriptHashes, pwa) {
 export function buildHtml({ pwa = false } = {}) {
   const { code, files } = bundle(join(root, 'src/app/main.js'));
   const css = readFileSync(join(root, 'src/app/styles.css'), 'utf8');
-  const assets = `globalThis.PLACARD_ASSETS = ${JSON.stringify({ fonts: fontData() })};\n` +
-    `globalThis.PLACARD_VERSION = ${JSON.stringify(pkg.version)};\n` +
-    (pwa ? 'globalThis.PLACARD_SW = "sw.js";\n' : '');
+  const assets = `globalThis.PAPERWALL_ASSETS = ${JSON.stringify({ fonts: fontData() })};\n` +
+    `globalThis.PAPERWALL_VERSION = ${JSON.stringify(pkg.version)};\n` +
+    (pwa ? 'globalThis.PAPERWALL_SW = "sw.js";\n' : '');
   const scripts = [assets, code];
   let html = readFileSync(join(root, 'src/app/index.html'), 'utf8');
   html = html.replace('<!--CSP-->', `<meta http-equiv="Content-Security-Policy" content="${csp(scripts.map(sha256), pwa)}">`);
   html = html.replace('<!--HEAD-->', pwa
     ? '<link rel="manifest" href="manifest.webmanifest">\n<link rel="apple-touch-icon" href="icons/icon-192.png">\n' +
-      '<meta property="og:title" content="Placard: design anything, free and offline">\n' +
+      '<meta property="og:title" content="Paperwall: design anything, free and offline">\n' +
       '<meta property="og:description" content="An open-source design tool that runs on your device. No account, no watermark, no paywall.">\n' +
       '<meta property="og:image" content="og.png">\n<meta name="twitter:card" content="summary_large_image">'
     : '');
@@ -124,8 +124,8 @@ export function buildHtml({ pwa = false } = {}) {
 }
 
 function serviceWorker(version) {
-  return `// Placard works offline: this caches the app on the first visit.
-const CACHE = 'placard-${version}';
+  return `// Paperwall works offline: this caches the app on the first visit.
+const CACHE = 'paperwall-${version}';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
@@ -146,8 +146,8 @@ self.addEventListener('fetch', (e) => {
 
 function manifest() {
   return JSON.stringify({
-    name: 'Placard',
-    short_name: 'Placard',
+    name: 'Paperwall',
+    short_name: 'Paperwall',
     description: 'Free design tool that works offline. No account, no watermark.',
     start_url: './',
     scope: './',
@@ -166,7 +166,7 @@ export function build() {
   mkdirSync(join(dist, 'icons'), { recursive: true });
   const single = buildHtml({ pwa: false });
   const hosted = buildHtml({ pwa: true });
-  writeFileSync(join(dist, 'placard.html'), single.html);
+  writeFileSync(join(dist, 'paperwall.html'), single.html);
   writeFileSync(join(dist, 'index.html'), hosted.html);
   writeFileSync(join(dist, 'sw.js'), serviceWorker(pkg.version));
   writeFileSync(join(dist, 'manifest.webmanifest'), manifest());
@@ -177,5 +177,5 @@ export function build() {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const { files, size } = build();
-  console.log(`Bundled ${files.length} modules. dist/placard.html is ${(size / 1024).toFixed(0)} KB.`);
+  console.log(`Bundled ${files.length} modules. dist/paperwall.html is ${(size / 1024).toFixed(0)} KB.`);
 }

@@ -1,7 +1,7 @@
 // Everything is stored in this browser, on this device: designs, the images
 // you've added, and your brand kit. Nothing is ever sent anywhere.
 
-const DB_NAME = 'placard';
+const DB_NAME = 'paperwall';
 const DB_VERSION = 1;
 const STORES = ['designs', 'uploads', 'settings'];
 

@@ -1,6 +1,6 @@
-# Contributing to Placard
+# Contributing to Paperwall
 
-Thanks for helping. Placard is small on purpose: plain JavaScript, no
+Thanks for helping. Paperwall is small on purpose: plain JavaScript, no
 framework, no runtime dependencies, and every feature proven by a test.
 
 ## The two rules
@@ -39,7 +39,7 @@ npm run scoreboard   # everything, and regenerates SCOREBOARD.md
 ## Good first contributions
 
 - **Templates.** The most visible gap. Add one to `src/templates/index.js`
-  using only Placard's shapes, text, icons and stickers and the bundled
+  using only Paperwall's shapes, text, icons and stickers and the bundled
   fonts. Check it with `node scripts/render-templates.mjs` (with `npm run dev`
   running) and make sure no headline wraps badly. Your template is released
   as CC0.

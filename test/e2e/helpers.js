@@ -14,7 +14,7 @@ let baseUrl = null;
 
 function needsBuild() {
   const out = join(root, 'dist/index.html');
-  return !existsSync(out) || process.env.PLACARD_FORCE_BUILD === '1';
+  return !existsSync(out) || process.env.PAPERWALL_FORCE_BUILD === '1';
 }
 
 export async function setup() {
@@ -65,7 +65,7 @@ export async function newDesign(presetId = 'square', opts) {
 }
 
 export async function waitForEditor(page) {
-  await page.waitForFunction(() => window.placard?.editor);
+  await page.waitForFunction(() => window.paperwall?.editor);
   await page.waitForSelector('[data-testid="page"] svg');
 }
 
@@ -73,7 +73,7 @@ export async function waitForEditor(page) {
 export function state(page, fn = (ed) => ed.doc, arg) {
   return page.evaluate(([src, a]) => {
     const f = new Function('ed', 'arg', `return (${src})(ed, arg)`);
-    return JSON.parse(JSON.stringify(f(window.placard.editor, a)));
+    return JSON.parse(JSON.stringify(f(window.paperwall.editor, a)));
   }, [fn.toString(), arg]);
 }
 
@@ -89,7 +89,7 @@ export async function selection(page) {
 export async function screenPoint(page, x, y) {
   return page.evaluate(([px, py]) => {
     const r = document.querySelector('[data-testid="page"]').getBoundingClientRect();
-    const z = window.placard.editor.zoom;
+    const z = window.paperwall.editor.zoom;
     return { x: r.left + px * z, y: r.top + py * z };
   }, [x, y]);
 }
@@ -177,7 +177,7 @@ export async function uploadImages(page, files) {
   const chooser = page.waitForEvent('filechooser');
   await page.click('[data-testid="upload-btn"]');
   await (await chooser).setFiles(files);
-  await page.waitForFunction((n) => window.placard.editor.pageData.elements.filter((e) => e.type === 'image').length >= n, files.length);
+  await page.waitForFunction((n) => window.paperwall.editor.pageData.elements.filter((e) => e.type === 'image').length >= n, files.length);
 }
 
 /** Click Download in the export dialog and return the saved file's bytes and name. */

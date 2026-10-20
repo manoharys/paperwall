@@ -113,7 +113,7 @@ test('[EXP-03] transparent render leaves out the background', () => {
 test('[EXP-09] exports never carry a watermark', () => {
   const doc = createDesign({ width: 100, height: 100 });
   const svg = renderPage(doc, 0);
-  assert.ok(!/placard/i.test(svg));
+  assert.ok(!/paperwall/i.test(svg));
 });
 
 test('esc escapes markup', () => {

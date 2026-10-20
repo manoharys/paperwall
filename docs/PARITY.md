@@ -1,7 +1,7 @@
-# Placard and Canva, honestly
+# Paperwall and Canva, honestly
 
 Canva is a huge product: a design editor, a content library, AI tools, video,
-whiteboards, documents, websites, team collaboration and printing. Placard is
+whiteboards, documents, websites, team collaboration and printing. Paperwall is
 one part of that: **a design editor for one person making static designs**
 (posters, posts, invitations, menus, thumbnails, slides), running entirely on
 your device.
@@ -11,26 +11,26 @@ So the honest answer to "do we have parity with Canva?" is:
 - **For making a static design on your own, start to finish: yes, the core
   is there**, and every piece of it is verified by a browser test
   ([SCOREBOARD.md](../SCOREBOARD.md)).
-- **For everything Canva does: no.** Placard has no stock photo library, no
+- **For everything Canva does: no.** Paperwall has no stock photo library, no
   AI, no video, no real-time collaboration and no cloud. Some of that is on
   the roadmap; some of it (the cloud) is left out on purpose.
 
 Below, 32 capability areas, compared at the level of what a person can do.
 Canva's side is described from its public product pages in general terms;
-check them for current details. "Partial" means Placard does the job in a
+check them for current details. "Partial" means Paperwall does the job in a
 smaller way.
 
 ## Count
 
 | | Areas |
 | --- | --- |
-| Placard does it | 19 |
+| Paperwall does it | 19 |
 | Partly | 5 |
 | Not yet | 8 |
 
 ## The core editor
 
-| Area | Placard | Notes |
+| Area | Paperwall | Notes |
 | --- | --- | --- |
 | Size presets and custom sizes (px, mm, in) | ✅ | 13 presets |
 | Text: fonts, size, styles, spacing, lists, effects, curved text | ✅ | 20 text features verified |
@@ -54,15 +54,15 @@ smaller way.
 
 ## Smaller than Canva
 
-| Area | Placard | Notes |
+| Area | Paperwall | Notes |
 | --- | --- | --- |
 | Templates | 🟡 | 16 original templates. Canva has a very large library. This is the biggest gap people will notice, and the easiest one for contributors to close. |
 | Fonts | 🟡 | 14 open-license families, plus your own font files |
-| Icons and graphics | 🟡 | 65 icons and 18 stickers drawn for Placard |
+| Icons and graphics | 🟡 | 65 icons and 18 stickers drawn for Paperwall |
 | Photo frames and grid layouts | 🟡 | rounded and circle crops only |
 | Presentations | 🟡 | present full screen; no speaker notes, transitions or recording |
 
-## Not in Placard (yet)
+## Not in Paperwall (yet)
 
 | Area | Plan |
 | --- | --- |

@@ -28,7 +28,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: placard
+          name: paperwall
           path: |
-            dist/placard.html
+            dist/paperwall.html
             test-results/

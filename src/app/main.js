@@ -1,4 +1,4 @@
-// Placard: boot, routing between the home screen and the editor, and the
+// Paperwall: boot, routing between the home screen and the editor, and the
 // editor's top bar.
 
 import { h, icon, iconButton, clear, toast, mod } from './ui.js';
@@ -28,8 +28,8 @@ window.addEventListener('beforeinstallprompt', (e) => {
 function quickTheme(value) {
   // A synchronous copy, so the theme survives closing the tab right after a switch.
   try {
-    if (value === undefined) return localStorage.getItem('placard-theme');
-    localStorage.setItem('placard-theme', value);
+    if (value === undefined) return localStorage.getItem('paperwall-theme');
+    localStorage.setItem('paperwall-theme', value);
   } catch {
     /* storage can be blocked; IndexedDB still has it */
   }
@@ -65,13 +65,13 @@ async function closeEditor() {
   const { editor, unbind } = current;
   current = null;
   unbind();
-  window.placard = null;
+  window.paperwall = null;
   await editor.flush();
 }
 
 async function showHome() {
   await closeEditor();
-  document.title = 'Placard: free design tool that works offline';
+  document.title = 'Paperwall: design without the paywall';
   renderHome(root, {
     openDesign: (id) => (location.hash = `#/d/${id}`),
     newDesign: async (doc, opts) => {
@@ -126,10 +126,10 @@ async function openEditor(id) {
     undoBtn.disabled = !editor.history.canUndo;
     redoBtn.disabled = !editor.history.canRedo;
     if (document.activeElement !== nameInput) nameInput.value = editor.doc.name;
-    document.title = `${editor.doc.name} · Placard`;
+    document.title = `${editor.doc.name} · Paperwall`;
   };
   const top = h('header', { class: 'topbar' },
-    h('a', { class: 'brand small', href: '#/', title: 'All designs', 'data-testid': 'home-link' }, h('span', { class: 'logo', 'aria-hidden': 'true' }), h('span', { class: 'brand-word' }, 'Placard')),
+    h('a', { class: 'brand small', href: '#/', title: 'All designs', 'data-testid': 'home-link' }, h('span', { class: 'logo', 'aria-hidden': 'true' }), h('span', { class: 'brand-word' }, 'Paperwall')),
     nameInput,
     h('div', { class: 'top-group' }, undoBtn, redoBtn),
     h('div', { class: 'top-group right' },
@@ -179,7 +179,7 @@ async function openEditor(id) {
     },
   };
   // Handy in the console, and used by the end-to-end tests.
-  window.placard = { editor, canvas, inspector, export: exportApi, store };
+  window.paperwall = { editor, canvas, inspector, export: exportApi, store };
 }
 
 window.addEventListener('hashchange', route);
@@ -192,8 +192,8 @@ async function boot() {
   await applyTheme();
   await loadFonts();
   route();
-  if ('serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:' && globalThis.PLACARD_SW) {
-    navigator.serviceWorker.register(globalThis.PLACARD_SW).catch(() => null);
+  if ('serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:' && globalThis.PAPERWALL_SW) {
+    navigator.serviceWorker.register(globalThis.PAPERWALL_SW).catch(() => null);
   }
   document.body.classList.add('ready');
 }

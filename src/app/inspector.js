@@ -45,7 +45,7 @@ export class Inspector {
       }
       this.render();
     });
-    document.addEventListener('placard:popover-closed', () => {
+    document.addEventListener('paperwall:popover-closed', () => {
       if (this.stale) this.render();
     });
     this.el.addEventListener('focusout', () => {
@@ -563,7 +563,7 @@ export function resizeDialog(editor) {
     go(w, hh);
   } }, wIn, h('span', null, '×'), hIn, unitSel, h('button', { type: 'submit', class: 'btn primary', 'data-testid': 'resize-go' }, 'Resize'));
   const d = dialog('Resize to another format', h('div', null,
-    h('p', { class: 'hint' }, 'Placard makes a resized copy and keeps everything in proportion. Your original stays as it is.'),
+    h('p', { class: 'hint' }, 'Paperwall makes a resized copy and keeps everything in proportion. Your original stays as it is.'),
     presets, h('h3', null, 'Custom size'), custom), { wide: true, testid: 'resize-dialog' });
   return d;
 }

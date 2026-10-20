@@ -70,10 +70,10 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, installPr
 
   root.append(
     h('header', { class: 'home-top' },
-      h('a', { class: 'brand', href: '#/' }, h('span', { class: 'logo', 'aria-hidden': 'true' }), 'Placard'),
+      h('a', { class: 'brand', href: '#/' }, h('span', { class: 'logo', 'aria-hidden': 'true' }), 'Paperwall'),
       h('div', { class: 'home-actions' },
         h('button', { type: 'button', class: 'btn', 'data-testid': 'open-file', onClick: async () => {
-          const [file] = await pickFile('.json,.placard,application/json');
+          const [file] = await pickFile('.json,.paperwall,application/json');
           if (!file) return;
           try {
             const doc = await readProjectFile(file);
@@ -88,8 +88,8 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, installPr
         iconButton('moon', 'Dark mode', toggleTheme, { 'data-testid': 'theme-toggle' }))),
     h('main', { class: 'home' },
       h('section', { class: 'hero' },
-        h('h1', null, 'Design anything.', h('br'), h('em', null, 'Free, offline, yours.')),
-        h('p', { class: 'lead' }, 'Posters, posts, invitations and slides. No account, no watermark, no paywall. Your work never leaves this device.')),
+        h('h1', null, 'Design without', h('br'), h('em', null, 'the paywall.')),
+        h('p', { class: 'lead' }, 'Posters, posts, invitations and slides. Free, offline and yours: no account, no watermark, and your work never leaves this device.')),
       h('section', { class: 'block' },
         h('h2', null, 'Create a design'),
         h('div', { class: 'preset-grid', 'data-testid': 'presets' }, PRESETS.map((p) => h('button', { type: 'button', class: 'preset', 'data-testid': `preset-${p.id}`, onClick: () => newDesign(createDesignFromPreset(p.id)) },
@@ -100,10 +100,10 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, installPr
       h('section', { class: 'block' },
         h('div', { class: 'block-head' }, h('h2', null, 'Start from a template'), h('div', { class: 'search' }, icon('search', 18), search)),
         chips, tplGrid,
-        h('p', { class: 'fine' }, 'Every template was made for Placard and is free for any use, including commercial (CC0).')),
+        h('p', { class: 'fine' }, 'Every template was made for Paperwall and is free for any use, including commercial (CC0).')),
       h('section', { class: 'block' }, h('h2', null, 'Your designs'), designsGrid)),
     h('footer', { class: 'home-foot' },
-      h('p', null, icon('lock', 16), ' Everything stays in this browser on this device. Placard makes no network requests.'),
+      h('p', null, icon('lock', 16), ' Everything stays in this browser on this device. Paperwall makes no network requests.'),
       h('p', null, 'Open source (MIT) · ', h('a', { href: 'https://github.com/manoharys/paperwall', rel: 'noopener', target: '_blank' }, 'Code and feature scoreboard'), ' · Not affiliated with Canva.')));
 
   fillTemplates();

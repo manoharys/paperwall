@@ -35,11 +35,11 @@ export class PageStrip {
         h('button', { type: 'button', class: 'page-thumb', title: `Page ${i + 1}`, 'aria-label': `Page ${i + 1}`, 'aria-current': String(i === ed.page), onClick: () => ed.setPage(i) },
           h('span', { class: 'page-img', style: { aspectRatio: `${ed.doc.width} / ${ed.doc.height}` }, html: renderPage(ed.doc, i, { measure, noSize: true, idPrefix: `ps${i}`, assetHref: this.canvas.assetHref }) }),
           h('span', { class: 'page-no' }, String(i + 1))));
-      item.addEventListener('dragstart', (e) => e.dataTransfer.setData('application/x-placard-page', String(i)));
+      item.addEventListener('dragstart', (e) => e.dataTransfer.setData('application/x-paperwall-page', String(i)));
       item.addEventListener('dragover', (e) => e.preventDefault());
       item.addEventListener('drop', (e) => {
         e.preventDefault();
-        const from = Number(e.dataTransfer.getData('application/x-placard-page'));
+        const from = Number(e.dataTransfer.getData('application/x-paperwall-page'));
         if (Number.isInteger(from) && from !== i) ed.movePage(from, i);
       });
       this.list.append(item);

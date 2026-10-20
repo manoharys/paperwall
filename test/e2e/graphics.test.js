@@ -126,7 +126,7 @@ test('[IMG-02] drag and drop images onto the page', async () => {
   const dt = await fileHandle(page, 'dropped.png');
   const box = await page.locator('[data-testid="page"]').boundingBox();
   await page.dispatchEvent('[data-testid="stage"]', 'drop', { dataTransfer: dt, clientX: box.x + box.width * 0.25, clientY: box.y + box.height * 0.25 });
-  await page.waitForFunction(() => window.placard.editor.pageData.elements.some((e) => e.type === 'image'));
+  await page.waitForFunction(() => window.paperwall.editor.pageData.elements.some((e) => e.type === 'image'));
   const img = await last(page);
   assert.ok(Math.abs(img.x + img.w / 2 - 270) < 2, 'centered where it was dropped');
   await context.close();
@@ -136,7 +136,7 @@ test('[IMG-03] paste an image from the clipboard', async () => {
   const { page, context } = await newDesign('square');
   const dt = await fileHandle(page, 'pasted.png');
   await page.evaluate((d) => document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: d, bubbles: true })), dt);
-  await page.waitForFunction(() => window.placard.editor.pageData.elements.some((e) => e.type === 'image'));
+  await page.waitForFunction(() => window.paperwall.editor.pageData.elements.some((e) => e.type === 'image'));
   await context.close();
 });
 
@@ -144,7 +144,7 @@ test('[IMG-04] reuse images you added before, in any design', async () => {
   const { page, context } = await withImage();
   await page.click('[data-testid="home-link"]');
   await page.click('[data-testid="preset-story"]');
-  await page.waitForFunction(() => window.placard?.editor?.doc.height === 1920);
+  await page.waitForFunction(() => window.paperwall?.editor?.doc.height === 1920);
   await openTab(page, 'uploads');
   await page.waitForSelector('[data-testid="upload-item"]');
   await page.click('[data-testid="upload-item"]');
@@ -201,7 +201,7 @@ test('[IMG-09] replace an image and keep its place and size', async () => {
   const chooser = page.waitForEvent('filechooser');
   await page.click('[data-testid="replace-image"]');
   await (await chooser).setFiles(await makePng(page, { w: 300, h: 600, color: '#ff006e', name: 'tall.png' }));
-  await page.waitForFunction((a) => window.placard.editor.single?.assetId !== a, img.assetId);
+  await page.waitForFunction((a) => window.paperwall.editor.single?.assetId !== a, img.assetId);
   const e = await last(page);
   assert.deepEqual([e.x, e.y, e.w, e.h], [img.x, img.y, img.w, img.h]);
   assert.ok(e.crop.h < 1, 'cropped to fit the frame without stretching');
@@ -305,7 +305,7 @@ test('[CLR-03] pick a color from anywhere on screen (browser eyedropper)', async
   await addShape(page, 'Square');
   await page.click('[data-testid="fill-color"]');
   await page.click('.color-pop [aria-label="Pick a color from the screen"]');
-  await page.waitForFunction(() => window.placard.editor.single.fill === '#abcdef');
+  await page.waitForFunction(() => window.paperwall.editor.single.fill === '#abcdef');
   await context.close();
 });
 
@@ -335,7 +335,7 @@ test('[BRD-01] [BRD-02] [BRD-03] brand kit: colors, fonts, apply in one click', 
   // The kit is remembered and shows in every color picker, in other designs too.
   await page.click('[data-testid="home-link"]');
   await page.click('[data-testid="preset-square"]');
-  await page.waitForFunction(() => window.placard?.editor);
+  await page.waitForFunction(() => window.paperwall?.editor);
   await addShape(page, 'Circle');
   await page.click('[data-testid="fill-color"]');
   assert.equal(await page.locator('.swatch-group', { hasText: 'Brand kit' }).locator('.swatch[title="#ee9b00"]').count(), 1);
@@ -402,7 +402,7 @@ test('[ELM-05] charts from your numbers', async () => {
   const chart = await last(page);
   assert.equal(chart.type, 'chart');
   await page.fill('[data-testid="chart-data"]', 'North, 40\nSouth, 25\nEast, 60\nWest, 10');
-  await page.waitForFunction(() => window.placard.editor.single.data.length === 4);
+  await page.waitForFunction(() => window.paperwall.editor.single.data.length === 4);
   assert.deepEqual((await last(page)).data.map((d) => d.value), [40, 25, 60, 10]);
   assert.equal(await dom(page, chart.id).locator('rect').count(), 4, 'one bar per value');
   assert.ok((await dom(page, chart.id).locator('text').allTextContents()).includes('East'));
@@ -424,7 +424,7 @@ test('[ELM-06] tables', async () => {
   const table = await last(page);
   assert.equal(table.type, 'table');
   await page.fill('[data-testid="table-data"]', 'Name, Role, City\nAda, Engineer, London\nGrace, Admiral, Arlington\nLinus, Maintainer, Portland');
-  await page.waitForFunction(() => window.placard.editor.single.rows.length === 4);
+  await page.waitForFunction(() => window.paperwall.editor.single.rows.length === 4);
   const t = await last(page);
   assert.deepEqual(t.rows[2], ['Grace', 'Admiral', 'Arlington']);
   assert.ok(t.h > table.h, 'the table grew for the new row');
@@ -434,7 +434,7 @@ test('[ELM-06] tables', async () => {
   await page.click('[data-testid="table-header"]');
   assert.equal((await last(page)).header, false);
   // It exports with its fonts like everything else.
-  const svg = await page.evaluate(async () => (await window.placard.export.exportSvg(window.placard.editor.doc, 0)).text());
+  const svg = await page.evaluate(async () => (await window.paperwall.export.exportSvg(window.paperwall.editor.doc, 0)).text());
   assert.match(svg, /font-family:"Inter";font-weight:700/);
   await context.close();
 });
@@ -442,10 +442,10 @@ test('[ELM-06] tables', async () => {
 test('[IMG-13] remove a plain background on your device', async () => {
   const { page, context, img } = await withImage();
   await page.click('[data-testid="remove-bg"]');
-  await page.waitForFunction((a) => window.placard.editor.single?.assetId !== a, img.assetId);
+  await page.waitForFunction((a) => window.paperwall.editor.single?.assetId !== a, img.assetId);
   // Export with a transparent page: the blue surround is gone, the white center stays.
   const png = await page.evaluate(async () => {
-    const { editor, export: ex } = window.placard;
+    const { editor, export: ex } = window.paperwall;
     const doc = structuredClone(editor.doc);
     const el = doc.pages[0].elements[0];
     Object.assign(el, { x: 0, y: 0, w: doc.width, h: doc.width / 2 });

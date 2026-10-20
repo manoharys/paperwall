@@ -16,10 +16,10 @@ const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: p
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
 await page.goto(url);
 await page.click('[data-testid="template-grand-opening"]');
-await page.waitForFunction(() => window.placard?.editor);
+await page.waitForFunction(() => window.paperwall?.editor);
 await page.waitForTimeout(400);
-const id = await page.evaluate(() => window.placard.editor.pageData.elements.find((e) => /GRAND/.test(e.text || '')).id);
-await page.evaluate((i) => window.placard.editor.select([i]), id);
+const id = await page.evaluate(() => window.paperwall.editor.pageData.elements.find((e) => /GRAND/.test(e.text || '')).id);
+await page.evaluate((i) => window.paperwall.editor.select([i]), id);
 await page.waitForTimeout(300);
 await page.screenshot({ path: join(assets, 'editor.png') });
 

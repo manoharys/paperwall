@@ -1,5 +1,5 @@
 {
-  "about": "Every feature Placard aims for, in our own words. A feature is verified only when a test whose name contains its id passes. scripts/scoreboard.mjs turns the test run into SCOREBOARD.md.",
+  "about": "Every feature Paperwall aims for, in our own words. A feature is verified only when a test whose name contains its id passes. scripts/scoreboard.mjs turns the test run into SCOREBOARD.md.",
   "areas": [
     {
       "id": "DOC",

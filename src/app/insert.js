@@ -207,7 +207,7 @@ export class InsertPanel {
       this.search(`Search ${ICONS.length} icons and ${STICKERS.length} stickers`, fill),
       section('Icons', h('p', { class: 'hint' }, 'Change the color of an icon after you add it.'), iconsGrid),
       section('Stickers', stickerGrid),
-      h('p', { class: 'hint' }, 'All drawn for Placard and free for any use (CC0).'),
+      h('p', { class: 'hint' }, 'All drawn for Paperwall and free for any use (CC0).'),
     ];
   }
 

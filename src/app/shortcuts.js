@@ -38,7 +38,7 @@ function typing(e) {
   return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
 }
 
-const MARKER = 'placard:elements';
+const MARKER = 'paperwall:elements';
 
 /** Wire up shortcuts. Returns a function that removes them. */
 export function bindShortcuts(editor, canvas, actions) {

@@ -1,5 +1,5 @@
 // Downloads: PNG, JPG, SVG, PDF, a zip of pages, printing, copying to the
-// clipboard, and Placard project files. All of it happens on your device.
+// clipboard, and Paperwall project files. All of it happens on your device.
 
 import { renderPage, textRuns } from '../model/render.js';
 import { buildPdf } from '../model/pdf.js';
@@ -119,7 +119,7 @@ export function projectBlob(doc) {
 }
 
 export function saveProjectFile(doc) {
-  download(projectBlob(doc), `${safeFilename(doc.name)}.placard.json`);
+  download(projectBlob(doc), `${safeFilename(doc.name)}.paperwall.json`);
 }
 
 export async function readProjectFile(file) {
@@ -127,7 +127,7 @@ export async function readProjectFile(file) {
   try {
     doc = JSON.parse(await readFileAsText(file));
   } catch {
-    throw new Error(`${file.name} isn't a Placard design file`);
+    throw new Error(`${file.name} isn't a Paperwall design file`);
   }
   validateDesign(doc);
   await registerDesignFonts(doc);

@@ -278,9 +278,9 @@ export function pruneAssets(doc) {
   return doc;
 }
 
-/** Check that a parsed file looks like a Placard design. Throws a readable error if not. */
+/** Check that a parsed file looks like a Paperwall design. Throws a readable error if not. */
 export function validateDesign(doc) {
-  if (!doc || typeof doc !== 'object') throw new Error('This file is not a Placard design');
+  if (!doc || typeof doc !== 'object') throw new Error('This file is not a Paperwall design');
   doc.width = Number(doc.width);
   doc.height = Number(doc.height);
   if (typeof doc.name !== 'string') doc.name = 'Untitled design';

@@ -1,4 +1,4 @@
-// Placard's own icons and stickers, drawn for this project and released as CC0.
+// Paperwall's own icons and stickers, drawn for this project and released as CC0.
 // Icons are line drawings on a 24 × 24 grid; they take the element's color.
 // Stickers are full-color drawings on a 100 × 100 grid.
 

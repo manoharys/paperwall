@@ -50,7 +50,7 @@ async function click(selector, wait = 350) {
 async function pagePoint(x, y) {
   return page.evaluate(([px, py]) => {
     const r = document.querySelector('[data-testid="page"]').getBoundingClientRect();
-    const z = window.placard.editor.zoom;
+    const z = window.paperwall.editor.zoom;
     return { x: r.left + px * z, y: r.top + py * z };
   }, [x, y]);
 }
@@ -63,10 +63,10 @@ await page.mouse.wheel(0, 650);
 await pause(600);
 await caption('Original templates, free for any use');
 await click('[data-testid="template-summer-sale"]', 1200);
-await page.waitForFunction(() => window.placard?.editor);
+await page.waitForFunction(() => window.paperwall?.editor);
 
 await caption('Double-click to edit text');
-const sale = await page.evaluate(() => window.placard.editor.pageData.elements.find((e) => e.text === 'SUMMER'));
+const sale = await page.evaluate(() => window.paperwall.editor.pageData.elements.find((e) => e.text === 'SUMMER'));
 const p = await pagePoint(sale.x + 200, sale.y + 70);
 await page.mouse.move(p.x, p.y, { steps: 12 });
 await page.mouse.dblclick(p.x, p.y);
@@ -90,11 +90,11 @@ await click('.swatch-group:has-text("Night") .swatch:nth-child(2)', 300);
 await page.keyboard.press('Escape');
 await pause(400);
 
-await caption('Icons and stickers, drawn for Placard');
+await caption('Icons and stickers, drawn for Paperwall');
 await click('[data-testid="rail-graphics"]', 300);
 await click('[data-testid="sticker-sparkles"]', 500);
 await page.evaluate(() => {
-  const ed = window.placard.editor;
+  const ed = window.paperwall.editor;
   ed.update({ x: 120, y: 260, w: 220, h: 220 });
 });
 await pause(600);

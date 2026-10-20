@@ -126,7 +126,7 @@ test('[TXT-12] all caps', async () => {
 
 test('[TXT-13] bulleted and numbered lists', async () => {
   const { page, context, t } = await heading();
-  await page.evaluate(() => window.placard.editor.update({ text: 'Eggs\nFlour\nSugar', size: 40 }));
+  await page.evaluate(() => window.paperwall.editor.update({ text: 'Eggs\nFlour\nSugar', size: 40 }));
   await page.click('[data-testid="text-list"] [data-value="number"]');
   let spans = await dom(page, t.id).locator('tspan').allTextContents();
   assert.ok(['1.', '2.', '3.'].every((n) => spans.includes(n)), spans.join('|'));
@@ -175,10 +175,10 @@ test('[TXT-20] use your own font file', async () => {
   await page.click('[data-testid="upload-font"]');
   const font = readFileSync(new URL('../../assets/fonts/caveat-400.woff2', import.meta.url));
   await (await chooser).setFiles({ name: 'My Hand.woff2', mimeType: 'font/woff2', buffer: font });
-  await page.waitForFunction(() => window.placard.editor.single?.font === 'My Hand');
+  await page.waitForFunction(() => window.paperwall.editor.single?.font === 'My Hand');
   const doc = await state(page);
   assert.ok(Object.values(doc.assets).some((a) => a.type === 'font' && a.family === 'My Hand'), 'stored inside the design');
-  const svg = await page.evaluate(async () => (await window.placard.export.exportSvg(window.placard.editor.doc, 0)).text());
+  const svg = await page.evaluate(async () => (await window.paperwall.export.exportSvg(window.paperwall.editor.doc, 0)).text());
   assert.ok(svg.includes('font-family:"My Hand"'), 'embedded in exports');
   await context.close();
 });

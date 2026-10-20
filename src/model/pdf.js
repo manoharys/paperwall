@@ -57,7 +57,7 @@ function textLayer(runs, pageHeight) {
  * pages: [{ jpeg: Uint8Array, pxWidth, pxHeight, ptWidth, ptHeight, text?: runs }]
  * Returns the PDF file as a Uint8Array.
  */
-export function buildPdf(pages, { title = 'Placard design' } = {}) {
+export function buildPdf(pages, { title = 'Paperwall design' } = {}) {
   if (!pages.length) throw new Error('A PDF needs at least one page');
   const chunks = [];
   const offsets = [];
@@ -80,7 +80,7 @@ export function buildPdf(pages, { title = 'Placard design' } = {}) {
   write('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
   obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
   obj(2, `<< /Type /Pages /Kids [${kids}] /Count ${pages.length} >>`);
-  obj(3, `<< /Title (${pdfString(title)}) /Producer (Placard) >>`);
+  obj(3, `<< /Title (${pdfString(title)}) /Producer (Paperwall) >>`);
   obj(4, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
   pages.forEach((p, i) => {
     const pageNo = first + i * 3;

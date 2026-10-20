@@ -37,7 +37,7 @@ test('[EXP-01] download as PNG, with the real fonts in the picture', async () =>
   assert.deepEqual([size.width, size.height], [1080, 1080]);
   // Same text in two fonts must come out different: fonts are embedded, not substituted.
   const shot = (font) => page.evaluate(async (f) => {
-    const { editor, export: ex } = window.placard;
+    const { editor, export: ex } = window.paperwall;
     const doc = structuredClone(editor.doc);
     doc.pages[0].elements[0].font = f;
     const blob = await ex.exportImage(doc, 0, { scale: 0.25 });
@@ -116,7 +116,7 @@ test('[EXP-06] download as PDF with all pages', async () => {
   assert.match(text, /^%PDF-1\.4/);
   assert.match(text, /\/Count 2/);
   if (hasPdftoppm()) {
-    const dir = mkdtempSync(join(tmpdir(), 'placard-pdf-'));
+    const dir = mkdtempSync(join(tmpdir(), 'paperwall-pdf-'));
     writeFileSync(join(dir, 'a.pdf'), bytes);
     execFileSync('pdftoppm', ['-r', '24', '-png', join(dir, 'a.pdf'), join(dir, 'p')]);
     const first = pngSize(readFileSync(join(dir, 'p-1.png')));
@@ -261,7 +261,7 @@ test('[TPL-05] every template is original and free for any use (CC0)', () => {
 test('[EXP-12] PDF with real, selectable and searchable text', async () => {
   const { page, context } = await newDesign('a4');
   await addText(page);
-  await page.evaluate(() => window.placard.editor.update({ text: 'Spring fair at Café Lumière', align: 'center' }));
+  await page.evaluate(() => window.paperwall.editor.update({ text: 'Spring fair at Café Lumière', align: 'center' }));
   const { bytes } = await downloadVia(page, () => page.click('[data-testid="export-format"] [data-value="pdf"]'));
   const raw = bytes.toString('latin1');
   assert.ok(raw.includes('Caf\xe9') && raw.includes('Lumi\xe8re'), 'accents survive as single bytes');
@@ -270,7 +270,7 @@ test('[EXP-12] PDF with real, selectable and searchable text', async () => {
   } catch {
     return context.close();
   }
-  const dir = mkdtempSync(join(tmpdir(), 'placard-pdf-'));
+  const dir = mkdtempSync(join(tmpdir(), 'paperwall-pdf-'));
   writeFileSync(join(dir, 'a.pdf'), bytes);
   const text = execFileSync('pdftotext', ['-enc', 'UTF-8', join(dir, 'a.pdf'), '-']).toString();
   assert.match(text.replace(/\s+/g, ' '), /Spring fair at Café Lumière/);

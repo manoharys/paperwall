@@ -15,10 +15,10 @@ const cells = [];
 for (const id of ids) {
   await page.goto(url);
   await page.click(`[data-testid="template-${id}"]`);
-  await page.waitForFunction(() => window.placard?.editor);
+  await page.waitForFunction(() => window.paperwall?.editor);
   await page.waitForTimeout(150);
   const data = await page.evaluate(async () => {
-    const { editor, export: ex } = window.placard;
+    const { editor, export: ex } = window.paperwall;
     const doc = editor.doc;
     const blob = await ex.exportImage(doc, 0, { format: 'png', scale: 600 / Math.max(doc.width, doc.height) });
     const buf = new Uint8Array(await blob.arrayBuffer());

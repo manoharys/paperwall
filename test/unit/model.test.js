@@ -55,7 +55,7 @@ test('[DOC-09] a saved design survives a round trip through JSON', () => {
   const back = validateDesign(JSON.parse(JSON.stringify(doc)));
   assert.equal(back.pages[0].elements[0].text, 'Hello');
   assert.throws(() => validateDesign({ version: 99 }), /Unsupported/);
-  assert.throws(() => validateDesign(null), /not a Placard design/);
+  assert.throws(() => validateDesign(null), /not a Paperwall design/);
 });
 
 test('[SEL-05] moving skips locked elements', () => {

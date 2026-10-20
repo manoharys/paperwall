@@ -1,4 +1,4 @@
-// Fonts bundled with Placard. All are open-license (SIL OFL 1.1, or Apache 2.0
+// Fonts bundled with Paperwall. All are open-license (SIL OFL 1.1, or Apache 2.0
 // for Roboto Slab); license files sit next to the font files in assets/fonts.
 
 export const FONTS = [

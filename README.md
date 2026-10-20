@@ -2,16 +2,18 @@
 
 <img src="assets/icons/icon.svg" width="88" alt="">
 
-# Placard
+# Paperwall
 
-### Design anything. Free, offline, yours.
+### Design without the paywall.
+
+Free, offline, yours.
 
 An open-source alternative to Canva that runs entirely on your device.
 No account. No upload. No watermark. No "Pro" wall.
 
-**[Open Placard](https://manoharys.github.io/paperwall/)** · [download the one-file app](https://github.com/manoharys/paperwall/releases/latest) · [scoreboard](SCOREBOARD.md)
+**[Open Paperwall](https://manoharys.github.io/paperwall/)** · [download the one-file app](https://github.com/manoharys/paperwall/releases/latest) · [scoreboard](SCOREBOARD.md)
 
-<img src="docs/assets/demo.gif" width="800" alt="Placard in use: pick a template, edit the headline, change the background gradient, add a sticker, resize the story to a square post, and download a transparent PNG with no watermark">
+<img src="docs/assets/demo.gif" width="800" alt="Paperwall in use: pick a template, edit the headline, change the background gradient, add a sticker, resize the story to a square post, and download a transparent PNG with no watermark">
 
 <sub>20 seconds, recorded from the real app by <code>scripts/record-demo.mjs</code> · <a href="docs/assets/demo.mp4">MP4</a></sub>
 
@@ -20,7 +22,7 @@ No account. No upload. No watermark. No "Pro" wall.
 ---
 
 Posters, social posts, invitations, menus, thumbnails and slides, made in
-your browser. Placard is **one HTML file**: open it once and it works offline,
+your browser. Paperwall is **one HTML file**: open it once and it works offline,
 on a plane, forever. Your photos never leave your computer, because the page
 is not allowed to send anything anywhere: its security policy blocks every
 network request, and the browser enforces that.
@@ -68,13 +70,13 @@ Not done yet: remove an image's background on your device.
 ## Use it
 
 - **In your browser:** [manoharys.github.io/paperwall](https://manoharys.github.io/paperwall/). Install it from the address bar to get an app that works offline.
-- **As one file:** download `placard.html` from the [latest release](https://github.com/manoharys/paperwall/releases/latest) and double-click it. That's the whole app (under 1 MB, fonts included).
+- **As one file:** download `paperwall.html` from the [latest release](https://github.com/manoharys/paperwall/releases/latest) and double-click it. That's the whole app (under 1 MB, fonts included).
 - **From source:**
 
   ```bash
-  git clone https://github.com/manoharys/paperwall placard && cd placard
+  git clone https://github.com/manoharys/paperwall paperwall && cd paperwall
   npm run dev        # http://127.0.0.1:5173, no install needed
-  npm run build      # dist/placard.html and the hostable site
+  npm run build      # dist/paperwall.html and the hostable site
   ```
 
 There are no dependencies. Node 20+ runs the dev server and the build; the
@@ -95,7 +97,7 @@ end-to-end tests use Playwright.
 
 ## Compared with Canva
 
-Placard covers making a static design on your own, start to finish. It has
+Paperwall covers making a static design on your own, start to finish. It has
 no stock library, AI, video, collaboration or cloud. The honest,
 area-by-area comparison is in [docs/PARITY.md](docs/PARITY.md).
 
@@ -106,20 +108,20 @@ Templates, icons and translations are the best place to start. See
 
 ## Clean room, on purpose
 
-Placard is built from scratch. We never look at, download, decompile or
+Paperwall is built from scratch. We never look at, download, decompile or
 analyze another company's code, network traffic or files, and we don't copy
 their templates, fonts, icons, illustrations, text or look. The rules are in
 [CLEAN_ROOM.md](CLEAN_ROOM.md). Every template, icon and sticker was made for
-Placard.
+Paperwall.
 
 
 ## License
 
-[MIT](LICENSE) © 2026 Manohar. Templates, icons and stickers made for Placard
+[MIT](LICENSE) © 2026 Manohar. Templates, icons and stickers made for Paperwall
 are dedicated to the public domain ([CC0](https://creativecommons.org/publicdomain/zero/1.0/)),
 so you can use them in anything, including commercial work. Bundled fonts keep
 their own open licenses ([assets/fonts/LICENSES.md](assets/fonts/LICENSES.md)).
 
-Canva is a trademark of Canva Pty Ltd. Placard is an independent project and
+Canva is a trademark of Canva Pty Ltd. Paperwall is an independent project and
 is not affiliated with, endorsed by, or sponsored by Canva. See
 [TRADEMARKS.md](TRADEMARKS.md).

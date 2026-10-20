@@ -98,7 +98,7 @@ test('[DOC-09] save a design to a file and open it again', async () => {
   const dl = page.waitForEvent('download');
   await page.click('[data-testid="save-file"]');
   const d = await dl;
-  assert.match(d.suggestedFilename(), /\.placard\.json$/);
+  assert.match(d.suggestedFilename(), /\.paperwall\.json$/);
   const file = readFileSync(await d.path());
   const saved = JSON.parse(file.toString());
   assert.equal(saved.pages[0].elements[0].type, 'text');
@@ -121,7 +121,7 @@ test('[DOC-10] resize a design to another format', async () => {
   await page.keyboard.press('Escape');
   await page.click('[data-testid="resize-design"]');
   await page.click('[data-testid="resize-preset-story"]');
-  await page.waitForFunction(() => window.placard?.editor?.doc.height === 1920);
+  await page.waitForFunction(() => window.paperwall?.editor?.doc.height === 1920);
   const doc = await state(page);
   assert.equal(doc.width, 1080);
   assert.equal(doc.pages[0].elements.length, 1);
@@ -145,14 +145,14 @@ test('[APP-04] no account and no sign-in anywhere', async () => {
 
 test('[APP-02] one HTML file that works when opened from disk', async () => {
   const { browser } = await setup();
-  const html = readFileSync(distFile('placard.html'), 'utf8');
+  const html = readFileSync(distFile('paperwall.html'), 'utf8');
   assert.ok(!/<script[^>]+src=/.test(html), 'no external scripts');
   assert.ok(!/<link[^>]+stylesheet/.test(html), 'no external styles');
   const context = await browser.newContext();
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(pathToFileURL(distFile('placard.html')).href);
+  await page.goto(pathToFileURL(distFile('paperwall.html')).href);
   await page.click('[data-testid="preset-square"]');
   await waitForEditor(page);
   await openTab(page, 'text');
@@ -168,12 +168,12 @@ test('[APP-05] makes no network requests after loading, enforced by the browser'
   const page = await context.newPage();
   const requests = [];
   page.on('request', (r) => requests.push(r.url()));
-  await page.goto(baseUrl + 'placard.html');
+  await page.goto(baseUrl + 'paperwall.html');
   await page.click('[data-testid="template-grand-opening"]');
   await waitForEditor(page);
   await openTab(page, 'graphics');
   await page.click('[data-testid="icon-heart"]');
-  const network = requests.filter((u) => u.startsWith('http') && !u.endsWith('/placard.html'));
+  const network = requests.filter((u) => u.startsWith('http') && !u.endsWith('/paperwall.html'));
   assert.deepEqual(network, []);
   // And the page's security policy forbids it outright.
   const csp = await page.getAttribute('meta[http-equiv="Content-Security-Policy"]', 'content');

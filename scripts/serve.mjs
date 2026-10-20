@@ -1,4 +1,4 @@
-// A tiny static server for working on Placard. `npm run dev` serves the
+// A tiny static server for working on Paperwall. `npm run dev` serves the
 // source; `node scripts/serve.mjs dist` serves the built site.
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
@@ -38,5 +38,5 @@ export function startServer({ dir = mode, listenPort = port } = {}) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   await startServer();
-  console.log(`Placard (${mode}) on http://${host}:${port}/`);
+  console.log(`Paperwall (${mode}) on http://${host}:${port}/`);
 }

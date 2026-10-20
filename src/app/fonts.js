@@ -4,7 +4,7 @@
 import { FONTS, fontFile, fontsUsed } from '../model/fonts.js';
 import { bytesToBase64 } from './ui.js';
 
-const inlined = () => globalThis.PLACARD_ASSETS?.fonts || null;
+const inlined = () => globalThis.PAPERWALL_ASSETS?.fonts || null;
 const dataCache = new Map();
 const customFonts = new Map(); // family -> dataUrl
 

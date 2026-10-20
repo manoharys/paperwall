@@ -29,7 +29,7 @@ export function closePopover() {
   if (!openPopover) return;
   openPopover.remove();
   openPopover = null;
-  document.dispatchEvent(new Event('placard:popover-closed'));
+  document.dispatchEvent(new Event('paperwall:popover-closed'));
 }
 
 export function popoverOpen() {

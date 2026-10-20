@@ -1,6 +1,6 @@
 # Bundled fonts
 
-Every font Placard ships is open-license. The license text for each family
+Every font Paperwall ships is open-license. The license text for each family
 sits next to its files (`<family>.LICENSE.txt`). Files come from the
 Fontsource packages (Latin subset), version 5.3.0.
 
