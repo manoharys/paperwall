@@ -7,9 +7,11 @@ import { ALL_ICONS, ALL_STICKERS, searchGraphics } from '../model/graphics.js';
 import { renderPage, renderElementOnly } from '../model/render.js';
 import { createShape, createFrame, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES } from '../model/doc.js';
 import { GRIDS, gridBoxes } from '../model/grids.js';
-import { collectColors } from '../model/commands.js';
+import { collectColors, scaleElement } from '../model/commands.js';
 import { TEMPLATES, TEMPLATE_CATEGORIES, TEMPLATE_FORMATS, searchTemplates, templateFormatLabel } from '../templates/index.js';
-import { measure, ensureFont } from './fonts.js';
+import { measure, ensureFont, ensureDesignFonts } from './fonts.js';
+import { TEXT_COMBOS, comboGroup } from '../model/text-combos.js';
+import { approxMeasure } from '../model/text-layout.js';
 import { readyTemplate } from './templates.js';
 import * as store from './store.js';
 
@@ -159,11 +161,31 @@ export class InsertPanel {
     const add = (style) => h('button', { type: 'button', class: `text-add ${style}`, 'data-testid': `add-${style}`, onClick: () => ed.addText(style) }, TEXT_STYLES[style].text);
     return [
       section('Add text', add('heading'), add('subheading'), add('body'), h('p', { class: 'hint' }, `Shortcut: T. Double-click text on the page to edit it.`)),
+      section('Combinations', h('div', { class: 'combo-grid', 'data-testid': 'text-combos' }, TEXT_COMBOS.map((c) => {
+        const b = h('button', { type: 'button', class: 'combo', title: c.name, 'aria-label': c.name, 'data-testid': `combo-${c.id}`, onClick: () => this.addCombo(c) });
+        lazily(b, async () => {
+          await ensureDesignFonts({ pages: [{ elements: [comboGroup(c, approxMeasure)] }] });
+          const g = comboGroup(c, measure);
+          b.innerHTML = renderElementOnly(PREVIEW_DOC, g, { measure, idPrefix: `cb-${c.id}` });
+        });
+        return b;
+      }))),
       section('Font pairs',
         h('div', { class: 'pair-grid', 'data-testid': 'font-pairs' }, FONT_PAIRS.map((p) => h('button', { type: 'button', class: 'pair', 'data-testid': `pair-${p.name}`, onClick: () => this.addPair(p) },
           h('b', { style: { fontFamily: `"${p.heading}"` } }, p.name),
           h('small', { style: { fontFamily: `"${p.body}"` } }, `${p.heading} + ${p.body}`))))),
     ];
+  }
+
+  /** Add a text combination, sized to suit the page, once its fonts have loaded. */
+  async addCombo(combo) {
+    const ed = this.ed;
+    await ensureDesignFonts({ pages: [{ elements: [comboGroup(combo, approxMeasure)] }] });
+    if (ed.closed) return;
+    const g = comboGroup(combo, measure);
+    const s = Math.min((ed.doc.width * 0.7) / g.w, (ed.doc.height * 0.6) / g.h);
+    scaleElement(g, s, s);
+    ed.insert(g);
   }
 
   async addPair(pair) {

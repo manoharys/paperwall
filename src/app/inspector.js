@@ -4,11 +4,13 @@
 import { h, icon, iconButton, clear, toast, pickFile, readFileAsDataUrl, dialog, mod } from './ui.js';
 import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover, popoverOpen, PALETTES, fontPicker } from './widgets.js';
 import { FONTS, FONT_KINDS } from '../model/fonts.js';
-import { SHAPES, FRAME_MASKS, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, parseChartData, chartDataText, parseTable, tableText } from '../model/doc.js';
+import { SHAPES, FRAME_MASKS, createText, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, parseChartData, chartDataText, parseTable, tableText } from '../model/doc.js';
 
 const MASK_LABELS = { none: 'Rectangle', circle: 'Circle', arch: 'Arch', blob: 'Blob', heart: 'Heart', star: 'Star', polygon: 'Hexagon', triangle: 'Triangle', diamond: 'Diamond', arch: 'Arch', blob: 'Blob' };
 import { collectColors, cropZoom } from '../model/commands.js';
-import { renderElementOnly } from '../model/render.js';
+import { renderElementOnly, TEXT_EFFECTS } from '../model/render.js';
+
+const EFFECT_NAMES = { none: 'None', lift: 'Lift', hollow: 'Hollow', splice: 'Splice', echo: 'Echo', glitch: 'Glitch', glow: 'Glow', neon: 'Neon' };
 import { measure, addCustomFont, customFontNames, ensureFont } from './fonts.js';
 import { iconById, stickerById } from '../model/graphics.js';
 import { getSetting } from './store.js';
@@ -258,6 +260,7 @@ export class Inspector {
         slider({ label: 'Line spacing', value: el.lineHeight, min: 0.6, max: 3, step: 0.05, testid: 'line-height', onChange: this.live('lineHeight') }),
         slider({ label: 'Letter spacing', value: el.letterSpacing, min: -Math.round(el.size * 0.1), max: Math.round(el.size * 0.8), step: 0.5, testid: 'letter-spacing', onChange: this.live('letterSpacing') })),
       section('Text effects',
+        this.textEffects(el),
         toggle({ label: 'Outline', checked: !!el.outline, testid: 'outline-toggle', onChange: (on) => this.up({ outline: on ? { width: Math.max(1, Math.round(el.size * 0.04)), color: '#ffffff' } : null }) }),
         el.outline ? h('div', { class: 'sub' },
           slider({ label: 'Outline width', value: el.outline.width, min: 0.5, max: Math.max(4, Math.round(el.size * 0.2)), step: 0.5, onChange: (v, l) => this.up({ outline: { ...el.outline, width: v } }, l ? 'outline' : null) }),
@@ -268,6 +271,30 @@ export class Inspector {
           slider({ label: 'Roundness', value: el.highlight.radius ?? 0, min: 0, max: Math.round(el.size * 0.6), onChange: (v, l) => this.up({ highlight: { ...el.highlight, radius: v } }, l ? 'hl' : null) })) : null,
         slider({ label: 'Curve', value: el.curve || 0, min: -100, max: 100, testid: 'curve', onChange: this.live('curve') })),
     ];
+  }
+
+  /** Effect styles shown as little "Ag" previews, plus the effect's own settings. */
+  textEffects(el) {
+    const fx = el.effect || { type: 'none' };
+    const set = (patch, live) => this.up({ effect: { ...fx, ...patch } }, live ? 'effect' : null);
+    const preview = (type) => renderElementOnly(this.ed.doc, createText({
+      text: 'Ag', w: 64, h: 44, size: 32, weight: 800, font: el.font, color: type === 'neon' ? '#ff2d95' : '#1a1a2e', align: 'center', lineHeight: 1.2,
+      effect: { type, color: type === 'splice' ? '#ffb703' : type === 'glow' ? '#ffb703' : undefined },
+    }), { measure, idPrefix: `fx-${type}` });
+    const uses = {
+      color: ['splice', 'glitch', 'glow', 'neon'].includes(fx.type),
+      offset: ['splice', 'echo', 'glitch'].includes(fx.type),
+      thickness: ['hollow', 'splice'].includes(fx.type),
+    };
+    return h('div', null,
+      h('div', { class: 'fx-grid', role: 'group', 'aria-label': 'Text effect', 'data-testid': 'text-effects' }, TEXT_EFFECTS.map((type) => h('button', {
+        type: 'button', class: `fx${fx.type === type ? ' on' : ''}`, 'aria-pressed': String(fx.type === type), title: EFFECT_NAMES[type], 'data-testid': `effect-${type}`,
+        onClick: () => this.up({ effect: type === 'none' ? null : { type, color: fx.color, offset: fx.offset, thickness: fx.thickness } }),
+      }, h('span', { class: 'fx-img', html: preview(type) }), h('small', null, EFFECT_NAMES[type])))),
+      fx.type !== 'none' ? h('div', { class: 'sub' },
+        uses.color ? h('div', { class: 'field inline' }, h('span', null, 'Effect color'), colorButton({ label: 'Effect color', testid: 'effect-color', value: fx.color || el.color, getContext: this.colorContext, onChange: (c, l) => set({ color: c }, l) })) : null,
+        uses.offset ? slider({ label: 'Offset', value: Math.round((fx.offset ?? 0.08) * 100), min: 0, max: 40, testid: 'effect-offset', onChange: (v, l) => set({ offset: v / 100 }, l) }) : null,
+        uses.thickness ? slider({ label: 'Thickness', value: Math.round((fx.thickness ?? 0.035) * 1000), min: 5, max: 120, testid: 'effect-thickness', onChange: (v, l) => set({ thickness: v / 1000 }, l) }) : null) : null);
   }
 
   shapePanel(el) {

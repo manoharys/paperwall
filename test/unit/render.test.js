@@ -284,3 +284,41 @@ test('[IMG-15] grid cells tile the page with even gaps', async () => {
     for (const b of boxes) assert.ok(b.x >= 40 && b.y >= 40 && b.x + b.w <= 960 && b.y + b.h <= 760, `${g.id} stays inside the margin`);
   }
 });
+
+test('[TXT-22] text effects draw the right layers', async () => {
+  const { TEXT_EFFECTS } = await import('../../src/model/render.js');
+  const svgFor = (effect) => {
+    const doc = createDesign({ width: 600, height: 300 });
+    addElement(doc, 0, createText({ text: 'Hello', x: 0, y: 0, w: 600, size: 80, color: '#123456', effect }));
+    return renderPage(doc, 0, { measure: approxMeasure });
+  };
+  const texts = (svg) => (svg.match(/<text /g) || []).length;
+  assert.equal(texts(svgFor(null)), 1);
+  assert.match(svgFor({ type: 'hollow' }), /<text [^>]*fill="none" stroke="#123456"/);
+  assert.equal(texts(svgFor({ type: 'splice', color: '#ff0000' })), 2);
+  assert.equal(texts(svgFor({ type: 'echo' })), 3);
+  assert.equal(texts(svgFor({ type: 'glitch' })), 3);
+  assert.match(svgFor({ type: 'glow' }), /<feGaussianBlur/);
+  assert.match(svgFor({ type: 'neon', color: '#ff2d95' }), /fill="#ffb0d5"|fill="#ff[0-9a-f]{4}"/);
+  assert.match(svgFor({ type: 'lift' }), /<feDropShadow/);
+  for (const type of TEXT_EFFECTS) assert.ok(!/NaN|undefined/.test(svgFor({ type })), type);
+});
+
+test('[TXT-23] text combinations use bundled fonts and stack without overlapping', async () => {
+  const { TEXT_COMBOS, comboGroup } = await import('../../src/model/text-combos.js');
+  const { fontByName } = await import('../../src/model/fonts.js');
+  assert.ok(TEXT_COMBOS.length >= 12);
+  for (const c of TEXT_COMBOS) {
+    const g = comboGroup(c, approxMeasure, { cx: 500, cy: 500 });
+    assert.equal(g.type, 'group');
+    assert.equal(g.children.length, c.items.length);
+    let bottom = -1;
+    for (const el of g.children) {
+      if (el.type === 'text') assert.ok(fontByName(el.font), `${c.id}: ${el.font}`);
+      assert.ok(el.y >= bottom - 0.5, `${c.id}: stacked`);
+      bottom = el.y + el.h;
+      assert.ok(!('flow' in el) && !('fit' in el));
+    }
+    assert.ok(Math.abs(g.x + g.w / 2 - 500) <= 1 && Math.abs(g.y + g.h / 2 - 500) <= 1, `${c.id}: centered`);
+  }
+});

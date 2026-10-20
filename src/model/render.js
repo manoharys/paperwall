@@ -205,8 +205,64 @@ function renderCurvedText(ctx, el) {
     offset = '25%';
   }
   ctx.defs.push(`<path id="${id}" d="${d}" fill="none"/>`);
-  const stroke = el.outline ? ` stroke="${esc(el.outline.color)}" stroke-width="${f(el.outline.width * 2)}" stroke-linejoin="round" paint-order="stroke fill"` : '';
-  return `<text ${textAttrs(el)} fill="${esc(el.color)}"${stroke}><textPath href="#${id}" startOffset="${offset}" text-anchor="middle">${esc(text)}</textPath></text>`;
+  return textEffect(ctx, el, (paint) => `<text ${textAttrs(el)}${paint}><textPath href="#${id}" startOffset="${offset}" text-anchor="middle">${esc(text)}</textPath></text>`);
+}
+
+export const TEXT_EFFECTS = ['none', 'lift', 'hollow', 'splice', 'echo', 'glitch', 'glow', 'neon'];
+
+/** Mix a #rrggbb color toward white by t (0..1). */
+function lighten(hex, t) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(v + (255 - v) * t));
+  return `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * Draw text with its effect. `draw(paint)` returns the <text> element with
+ * the given fill/stroke attributes; effects layer copies of it.
+ * el.effect = { type, color, offset (share of font size), thickness }.
+ */
+function textEffect(ctx, el, draw) {
+  const outline = el.outline ? ` stroke="${esc(el.outline.color)}" stroke-width="${f(el.outline.width * 2)}" stroke-linejoin="round" paint-order="stroke fill"` : '';
+  const plain = ` fill="${esc(el.color)}"${outline}`;
+  const fx = el.effect;
+  if (!fx || !fx.type || fx.type === 'none') return draw(plain);
+  const s = el.size;
+  const color = esc(fx.color || el.color);
+  const off = (fx.offset ?? 0.08) * s;
+  const thick = Math.max(1, (fx.thickness ?? 0.035) * s);
+  const hollow = ` fill="none" stroke="${esc(el.color)}" stroke-width="${f(thick)}" stroke-linejoin="round"`;
+  const at = (dx, dy, paint, extra = '') => `<g transform="translate(${f(dx)} ${f(dy)})"${extra}>${draw(paint)}</g>`;
+  const glowFilter = (blur, strength) => {
+    const id = ctx.id('glow');
+    const blurs = strength > 1 ? `<feGaussianBlur in="SourceAlpha" stdDeviation="${f(blur)}" result="b1"/><feGaussianBlur in="SourceAlpha" stdDeviation="${f(blur / 3)}" result="b2"/>` : `<feGaussianBlur in="SourceAlpha" stdDeviation="${f(blur)}" result="b1"/>`;
+    const merge = strength > 1 ? '<feMergeNode in="g1"/><feMergeNode in="g2"/>' : '<feMergeNode in="g1"/>';
+    ctx.defs.push(`<filter id="${id}" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">${blurs}` +
+      `<feFlood flood-color="${color}" flood-opacity="0.9"/><feComposite in2="b1" operator="in" result="g1"/>` +
+      (strength > 1 ? `<feFlood flood-color="${color}"/><feComposite in2="b2" operator="in" result="g2"/>` : '') +
+      `<feMerge>${merge}<feMergeNode in="SourceGraphic"/></feMerge></filter>`);
+    return id;
+  };
+  switch (fx.type) {
+    case 'lift':
+      return `<g filter="url(#${shadowFilter(ctx, { x: 0, y: s * 0.06, blur: s * 0.25, color: '#000000', opacity: 0.3 })})">${draw(plain)}</g>`;
+    case 'hollow':
+      return draw(hollow);
+    case 'splice':
+      return at(off, off, ` fill="${color}"`) + draw(hollow);
+    case 'echo':
+      return at(off * 2, off * 2, plain, ' opacity="0.25"') + at(off, off, plain, ' opacity="0.5"') + draw(plain);
+    case 'glitch':
+      return at(-off / 2, 0, ` fill="${esc(fx.color || '#00e5ff')}"`) + at(off / 2, 0, ` fill="${esc(fx.color2 || '#ff2d95')}"`) + draw(plain);
+    case 'glow':
+      return `<g filter="url(#${glowFilter(s * 0.12, 1)})">${draw(plain)}</g>`;
+    case 'neon':
+      return `<g filter="url(#${glowFilter(s * 0.2, 2)})">${draw(` fill="${esc(lighten(fx.color || el.color, 0.65))}"`)}</g>`;
+    default:
+      return draw(plain);
+  }
 }
 
 function renderText(ctx, el) {
@@ -236,8 +292,7 @@ function renderText(ctx, el) {
     if (el.strike && line.width) deco.push(`<rect x="${f(x)}" y="${f(baseline - el.size * 0.3)}" width="${f(line.width)}" height="${f(thick)}" fill="${esc(el.color)}"/>`);
   });
   parts.push(...marks);
-  const stroke = el.outline ? ` stroke="${esc(el.outline.color)}" stroke-width="${f(el.outline.width * 2)}" stroke-linejoin="round" paint-order="stroke fill"` : '';
-  parts.push(`<text ${textAttrs(el)} fill="${esc(el.color)}"${stroke} xml:space="preserve">${tspans.join('')}</text>`);
+  parts.push(textEffect(ctx, el, (paint) => `<text ${textAttrs(el)}${paint} xml:space="preserve">${tspans.join('')}</text>`));
   parts.push(...deco);
   return parts.join('');
 }

@@ -145,6 +145,7 @@ export function scaleElement(el, sx, sy) {
   el.h *= sy;
   if (el.type === 'text') {
     el.size = Math.max(1, round(el.size * s));
+    if (el.letterSpacing) el.letterSpacing = round(el.letterSpacing * s);
     if (el.outline) el.outline = { ...el.outline, width: el.outline.width * s };
     if (el.highlight) el.highlight = { ...el.highlight, padding: (el.highlight.padding ?? 0) * s };
   }
