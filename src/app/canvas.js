@@ -126,6 +126,7 @@ export class Canvas {
         this.drawRulers(); // switching rulers on or off shows at once (cheap: cached)
         return void this.scheduleOverlay();
       }
+      if (what === 'strip' || what === 'stop-drawing') return; // nothing on the canvas changed
       // Discrete changes draw right away; drags are batched per frame.
       if (this.frame) cancelAnimationFrame(this.frame);
       this.frame = 0;

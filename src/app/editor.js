@@ -32,6 +32,24 @@ function loadView() {
   }
 }
 
+/**
+ * An element anywhere in the design, inside groups too, in one pass:
+ * { page, el, top } (top is the page-level element holding it). Its own
+ * page, if it's still there, else wherever it is now.
+ */
+function locate(doc, id, pageId) {
+  let other = null;
+  for (const page of doc.pages) {
+    for (const top of page.elements) {
+      const el = deepFind([top], id);
+      if (!el) continue;
+      if (page.id === pageId) return { page, el, top };
+      other ||= { page, el, top };
+    }
+  }
+  return other;
+}
+
 /** An element anywhere on a page, inside groups too. */
 function deepFind(els, id) {
   for (const el of els) {
@@ -112,7 +130,11 @@ export class Editor {
   // ---------- changes ----------
 
   /** Run a change as one undo step. `key` merges rapid repeats (typing, nudging). */
-  change(fn, { key = null, quiet = false } = {}) {
+  /**
+   * Make a change as one undo step. `unchanged(result)` says when fn turned
+   * out to change nothing: then no step is left and nothing is saved.
+   */
+  change(fn, { key = null, quiet = false, unchanged = null } = {}) {
     // A change that comes in mid-drag (a field committing as focus leaves it,
     // a button, a timer) gets its own undo step, never the drag's: the canvas
     // either lets a drag that hasn't moved carry on afterwards, or finishes one
@@ -122,7 +144,8 @@ export class Editor {
     this.changing = (this.changing || 0) + 1;
     try {
       const result = fn();
-      this.afterChange(quiet);
+      if (unchanged?.(result)) this.history.discard();
+      else this.afterChange(quiet);
       return result;
     } finally {
       this.changing -= 1;
@@ -395,8 +418,8 @@ export class Editor {
     // The frame's own page (it may not be in view any more: the page can change
     // while a photo is being picked), else wherever it is now.
     // Frames inside groups count too (a grouped photo grid).
-    const page = this.doc.pages.find((p) => p.id === pageId && deepFind(p.elements, id)) || this.doc.pages.find((p) => deepFind(p.elements, id));
-    const el = page && deepFind(page.elements, id);
+    const found = locate(this.doc, id, pageId);
+    const { page, el, top } = found || {};
     if (!el || el.type !== 'image' || (el.locked && !evenLocked)) return null;
     this.change(() => {
       el.assetId = addAsset(this.doc, upload);
@@ -404,7 +427,7 @@ export class Editor {
       cmd.coverCrop(el, upload.width, upload.height);
     });
     // A frame in a group: the group is what's selected.
-    if (page === this.pageData) this.select([cmd.findElement(page, id) ? el.id : page.elements.find((g) => deepFind([g], id)).id]);
+    if (page === this.pageData) this.select([top.id]);
     return el;
   }
 
@@ -570,8 +593,7 @@ export class Editor {
     g.putImageData(pixels, 0, 0);
     const dataUrl = canvas.toDataURL('image/png');
     // Found again by id: the design may have changed (undo, a restore) while the photo was worked on.
-    const page = this.doc.pages.find((p) => deepFind(p.elements, el.id));
-    const now = page && deepFind(page.elements, el.id);
+    const now = locate(this.doc, el.id)?.el;
     if (!now || now.assetId !== el.assetId || this.closed) return 0;
     this.change(() => {
       now.assetId = addAsset(this.doc, { mime: 'image/png', dataUrl, width: canvas.width, height: canvas.height, name: `${asset.name || 'image'} (no background)` });

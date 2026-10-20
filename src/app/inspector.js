@@ -58,7 +58,7 @@ export class Inspector {
     this.stale = false;
     editor.on((what) => {
       if (what === 'live') return this.refreshGeometry();
-      if (what === 'aids' || what === 'tool' || what === 'stop-drawing') return; // not about the selection
+      if (what === 'aids' || what === 'tool' || what === 'stop-drawing' || what === 'strip') return; // not about the selection
       // Don't pull the rug out from under a field or color picker in use.
       const busy = (this.el.contains(document.activeElement) && document.activeElement.tagName !== 'BUTTON') || popoverOpen();
       if (what === 'doc' && busy) {

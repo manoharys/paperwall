@@ -50,12 +50,11 @@ export function findDialog(editor) {
     if (at < 0) return show(0);
     const hit = matches[at];
     // An undo step only if something was replaced (the place may be locked by now).
-    editor.history.record(editor.doc);
-    const r = replaceText(editor.doc, find.value, repl.value, { ...opts, onlyId: hit.id, onlyPage: hit.page, nth: hit.nth });
-    if (r.count) {
-      refit(r.changed);
-      editor.afterChange();
-    } else editor.history.discard();
+    const r = editor.change(() => {
+      const res = replaceText(editor.doc, find.value, repl.value, { ...opts, onlyId: hit.id, onlyPage: hit.page, nth: hit.nth });
+      refit(res.changed);
+      return res;
+    }, { unchanged: (res) => !res.count });
     // Move on to the next match. It slides into this one's place, unless the
     // new text contains the query too: then step past it, or it never ends.
     // (Worked out before the list shrinks, so the last match wraps to the first.)
@@ -65,15 +64,12 @@ export function findDialog(editor) {
     if (matches.length) show(next);
   };
   const replaceAll = () => {
-    // One walk over the design: record an undo step, replace, and drop the
-    // step again if nothing matched.
-    editor.history.record(editor.doc);
-    const r = replaceText(editor.doc, find.value, repl.value, opts);
-    const count = r.count;
-    if (count) {
-      refit(r.changed);
-      editor.afterChange();
-    } else editor.history.discard();
+    // One walk over the design, one undo step (none if nothing matched).
+    const { count } = editor.change(() => {
+      const res = replaceText(editor.doc, find.value, repl.value, opts);
+      refit(res.changed);
+      return res;
+    }, { unchanged: (res) => !res.count });
     refresh();
     toast(count ? `Replaced ${count} time${count === 1 ? '' : 's'}. Undo to put it back.` : 'Nothing to replace.');
   };

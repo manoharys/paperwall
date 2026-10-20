@@ -188,9 +188,9 @@ let versionQueue = Promise.resolve();
 
 /** Keep a copy of the design as it is now. The oldest beyond MAX_VERSIONS are dropped. */
 export function saveVersion(doc, opts) {
-  const run = versionQueue.then(() => writeVersion(doc, opts));
-  versionQueue = run.catch(() => null);
-  return run;
+  const job = versionQueue.then(() => writeVersion(doc, opts));
+  versionQueue = job.catch(() => null);
+  return job;
 }
 
 let lastAt = 0;
@@ -282,9 +282,9 @@ export async function versionDoc(version) {
 
 function deleteVersions(designId) {
   // After any version still being saved, so it can't land once the rest is gone.
-  const run = versionQueue.then(async () => batch('versions', (await keysIn(`${designId}|`)).map((k) => [k, undefined])));
-  versionQueue = run.catch(() => null);
-  return run;
+  const job = versionQueue.then(async () => batch('versions', (await keysIn(`${designId}|`)).map((k) => [k, undefined])));
+  versionQueue = job.catch(() => null);
+  return job;
 }
 
 // ---------- uploads (reusable across designs) ----------

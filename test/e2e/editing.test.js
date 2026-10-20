@@ -569,3 +569,13 @@ test('[EDIT-04] a command that lands after a drag has moved finishes the drag fi
   assert.notEqual(back.x, s.x, 'the finished move stays');
   await context.close();
 });
+
+test('[PAGE-09] typing a page title key by key keeps the field and adds nothing', async () => {
+  const { page, context } = await newDesign('square');
+  await page.click('[data-testid="page-title"]');
+  await page.keyboard.type('Cover', { delay: 30 });
+  assert.equal(await page.evaluate(() => document.activeElement?.dataset.testid), 'page-title', 'still typing in the field');
+  assert.equal(await state(page, (ed) => ed.pageData.title), 'Cover');
+  assert.equal((await elements(page)).length, 0, 'no shortcuts fired');
+  await context.close();
+});

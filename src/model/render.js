@@ -3,7 +3,7 @@
 
 import { shapePath, dashArray, maskPath, drawPath } from './shapes.js';
 import { connectorGeometry, arrowHead } from './connectors.js';
-import { hexToRgb, mixHex } from './lint.js';
+import { hexToRgb, mixHex } from './color.js';
 import { layoutText, displayText, approxMeasure } from './text-layout.js';
 import { iconById, stickerById } from './graphics.js';
 import { qrMatrix, qrPath } from './qr.js';

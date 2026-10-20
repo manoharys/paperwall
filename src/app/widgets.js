@@ -1,7 +1,7 @@
 // Form controls used by the panels: color picker, sliders, number fields.
 
 import { h, icon, iconButton } from './ui.js';
-import { mixHex } from '../model/lint.js';
+import { mixHex } from '../model/color.js';
 
 export const PALETTES = [
   { name: 'Ink', colors: ['#16161d', '#3d3d4e', '#8a8a9e', '#d9d9e3', '#ffffff'] },

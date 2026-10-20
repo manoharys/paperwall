@@ -125,7 +125,7 @@ async function openEditor(id) {
   // that, the next version comes after a few minutes of work. The original is
   // copied now (text measured), before any edit can land while storage answers.
   const original = versionSnapshot(doc);
-  store.hasVersions(doc.id).then((has) => (has ? (editor.versionAt = Date.now()) : editor.saveVersion('Original', { snapshot: original }))).catch(() => {
+  store.hasVersions(doc.id).then((has) => (has ? (editor.versionAt = Date.now()) : (editor.closed ? null : editor.saveVersion('Original', { snapshot: original })))).catch(() => {
     editor.versionAt = Date.now(); // can't tell: carry on keeping versions every few minutes
   });
   const meta = (await store.listDesigns()).find((d) => d.id === doc.id);
