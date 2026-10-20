@@ -1,7 +1,7 @@
 // Form controls used by the panels: color picker, sliders, number fields.
 
 import { h, icon, iconButton } from './ui.js';
-import { mixHex, sortedStops } from '../model/color.js';
+import { mixHex, sortedStops, normalizeHex } from '../model/color.js';
 
 export const PALETTES = [
   { name: 'Ink', colors: ['#16161d', '#3d3d4e', '#8a8a9e', '#d9d9e3', '#ffffff'] },
@@ -13,16 +13,6 @@ export const PALETTES = [
   { name: 'Berry', colors: ['#590d22', '#a4133c', '#ff4d6d', '#ffb3c1', '#fff0f3'] },
   { name: 'Mono pop', colors: ['#000000', '#ffffff', '#ffe600', '#ff2e63', '#08d9d6'] },
 ];
-
-const HEX = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i;
-
-export function normalizeHex(v) {
-  const m = String(v).trim().match(HEX);
-  if (!m) return null;
-  let hex = m[1].toLowerCase();
-  if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
-  return `#${hex}`;
-}
 
 let openPopover = null;
 

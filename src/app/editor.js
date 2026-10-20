@@ -61,15 +61,19 @@ function deepFind(els, id) {
 }
 
 let maskCtx = null;
+const maskPaths = new WeakMap();
 
 /** Whether page point p falls inside a frame's shape (a circle frame's corners don't count). */
 function inMask(el, p) {
   if (!el.mask || el.mask === 'none' || el.mask === 'rect') return true;
   maskCtx ||= document.createElement('canvas').getContext('2d');
   if (!maskCtx || typeof Path2D === 'undefined') return true;
-  // Into the frame's own box.
+  // Into the frame's own box. Its outline is kept until the frame changes shape.
   const q = toLocal(el, p);
-  return maskCtx.isPointInPath(new Path2D(maskPath(el)), q.x - el.x, q.y - el.y);
+  const key = `${el.w},${el.h},${el.mask},${el.sides},${el.innerRatio},${el.radius}`;
+  let shape = maskPaths.get(el);
+  if (shape?.key !== key) maskPaths.set(el, (shape = { key, path: new Path2D(maskPath(el)) }));
+  return maskCtx.isPointInPath(shape.path, q.x - el.x, q.y - el.y);
 }
 
 let clipboard = null; // shared between designs, like a real clipboard

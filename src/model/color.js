@@ -1,11 +1,17 @@
 // Color maths shared by the renderer, the color picker and the design checks.
 
-export function hexToRgb(hex) {
-  // #rrggbb, or the short #rgb (as files from elsewhere may have).
-  const m = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i.exec(String(hex).trim());
+/** #rrggbb, or the short #rgb (as files from elsewhere may have), as lowercase #rrggbb; anything else as null. */
+export function normalizeHex(v) {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(v ?? '').trim());
   if (!m) return null;
-  const full = m[1].length === 3 ? [...m[1]].map((c) => c + c).join('') : m[1];
-  const n = parseInt(full, 16);
+  const hex = m[1].toLowerCase();
+  return `#${hex.length === 3 ? [...hex].map((c) => c + c).join('') : hex}`;
+}
+
+export function hexToRgb(hex) {
+  const full = normalizeHex(hex);
+  if (!full) return null;
+  const n = parseInt(full.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 

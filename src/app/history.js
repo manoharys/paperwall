@@ -38,7 +38,7 @@ export function historyDialog(editor) {
       if (v.thumb) img.append(h('img', { src: v.thumb, alt: '' }));
       else lazily(img, () => store.versionDoc(v).then(async (doc) => {
         await ensureDesignFonts(doc);
-        img.innerHTML = renderPage(doc, 0, { measure, noSize: true, placeholders: true, idPrefix: `v${v.at}` });
+        img.innerHTML = renderPage(doc, 0, { measure, noSize: true, placeholders: true, idPrefix: `v${v.key.replace(/\W/g, '')}` });
       }).catch(() => img.classList.add('broken')));
       list.append(h('li', { class: 'version', 'data-testid': 'version' },
         img,
