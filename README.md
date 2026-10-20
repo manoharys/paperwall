@@ -93,6 +93,17 @@ end-to-end tests use Playwright.
   small and tested.
 - **Fonts:** 14 open-license families (SIL OFL / Apache 2.0), bundled.
 
+## Compared with Canva
+
+Placard covers making a static design on your own, start to finish. It has
+no stock library, AI, video, collaboration or cloud. The honest,
+area-by-area comparison is in [docs/PARITY.md](docs/PARITY.md).
+
+## Contributing
+
+Templates, icons and translations are the best place to start. See
+[CONTRIBUTING.md](CONTRIBUTING.md); the clean-room rules apply to everyone.
+
 ## Clean room, on purpose
 
 Placard is built from scratch. We never look at, download, decompile or

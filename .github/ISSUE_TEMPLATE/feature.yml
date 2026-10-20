@@ -1,0 +1,16 @@
+name: Feature request
+description: Something you'd like Placard to do
+labels: [feature]
+body:
+  - type: textarea
+    attributes:
+      label: What are you trying to make?
+      description: Tell us the design and the step that's missing. "I make weekly menus and need…" helps more than a feature name.
+    validations:
+      required: true
+  - type: checkboxes
+    attributes:
+      label: Clean room
+      options:
+        - label: I'm describing what I need in my own words, not sharing another product's code, files or screenshots of its internals.
+          required: true

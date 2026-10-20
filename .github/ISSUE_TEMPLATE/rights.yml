@@ -1,0 +1,13 @@
+name: Rights request
+description: You believe something in this repository belongs to you
+labels: [rights]
+body:
+  - type: textarea
+    attributes:
+      label: What is it, and where is it in the repository?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: How can we reach you?
+      description: We respond within 48 hours and remove anything that shouldn't be here.

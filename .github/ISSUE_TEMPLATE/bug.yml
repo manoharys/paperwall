@@ -1,0 +1,20 @@
+name: Bug report
+description: Something doesn't work the way it should
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: What did you do, and what happened?
+      description: Steps, what you expected, and what happened instead. Screenshots help.
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Browser and device
+      placeholder: Chrome 140 on Windows, Safari on iPhone…
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Design file (optional)
+      description: Use "Save to file" and attach the .placard.json if it shows the problem.
