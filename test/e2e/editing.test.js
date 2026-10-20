@@ -579,3 +579,23 @@ test('[PAGE-09] typing a page title key by key keeps the field and adds nothing'
   assert.equal((await elements(page)).length, 0, 'no shortcuts fired');
   await context.close();
 });
+
+test('[EDIT-01] a change that fails halfway is put back, with no undo step', async () => {
+  const { page, context } = await newDesign('square');
+  const s = await addShape(page, 'Square');
+  const r = await page.evaluate((id) => {
+    const ed = window.paperwall.editor;
+    const steps = ed.history.past.length;
+    try {
+      ed.change(() => {
+        ed.pageData.elements.find((e) => e.id === id).x = 999;
+        throw new Error('broken');
+      });
+    } catch {
+      /* expected */
+    }
+    return { x: ed.pageData.elements.find((e) => e.id === id).x, same: ed.history.past.length === steps };
+  }, s.id);
+  assert.deepEqual(r, { x: s.x, same: true });
+  await context.close();
+});

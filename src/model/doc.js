@@ -34,7 +34,6 @@ export function presetById(id) {
   return PRESETS.find((p) => p.id === id) || null;
 }
 
-/** Convert a print size to pixels at 300 DPI. */
 /** How a page is named in lists: its number, and its title if it has one. */
 export function pageName(page, i) {
   return page.title ? `Page ${i + 1}: ${page.title}` : `Page ${i + 1}`;
@@ -50,6 +49,7 @@ export function printDpi(doc) {
   return doc.unit === 'mm' || doc.unit === 'in' ? DPI : 96;
 }
 
+/** Convert a print size to pixels at 300 DPI. */
 export function toPx(value, unit = 'px', dpi = DPI) {
   if (unit === 'mm') return Math.round((value / 25.4) * dpi);
   if (unit === 'in') return Math.round(value * dpi);

@@ -11,9 +11,9 @@ import { fitHeight } from '../model/text-layout.js';
 import { curveGeometry } from '../model/render.js';
 import { unionBounds, pointInBox, rotatePoint, boxCenter } from '../model/geometry.js';
 import { gridBoxes } from '../model/grids.js';
-import { createConnector, updateConnectors } from '../model/connectors.js';
+import { createConnector, updateConnectors, connectorHit } from '../model/connectors.js';
 import { gridLines, marginSize } from '../model/view.js';
-import { maskPath } from '../model/shapes.js';
+import { maskPath, drawHit } from '../model/shapes.js';
 
 import { measure, ensureFont } from './fonts.js';
 import { removePlainBackground } from '../model/bgremove.js';
@@ -147,7 +147,10 @@ export class Editor {
       try {
         result = fn();
       } catch (e) {
-        this.history.discard(); // no empty step left behind
+        // Put back whatever fn changed before it failed, and leave no step.
+        const back = this.history.revert(this.doc);
+        if (back) this.doc = back;
+        this.emit('doc');
         throw e;
       }
       if (unchanged?.(result)) this.history.discard();
@@ -240,7 +243,8 @@ export class Editor {
 
   /** Put the design back the way a version had it, as one undo step. */
   restoreVersion(versionDoc) {
-    // Images aren't copied: they never change once added.
+    // Copied: without IndexedDB, versions live in memory and would share
+    // their pages with the design. (Images aren't copied: they never change.)
     const v = versionSnapshot(versionDoc);
     this.change(() => {
       // Keep today's images too: undo snapshots share the design's assets.
@@ -452,6 +456,11 @@ export class Editor {
         if (el.hidden) continue;
         const at = { ...el, x: el.x + ox, y: el.y + oy };
         if (!pointInBox(p.x, p.y, at)) continue;
+        // Lines you draw or connect only cover what's near the line (as for clicks).
+        if (el.type === 'connector' || (el.type === 'draw' && !el.rotation)) {
+          const tol = (el.strokeWidth || 0) / 2 + 8 / this.zoom;
+          if (!(el.type === 'connector' ? connectorHit(at, p, tol) : drawHit(at, p, tol))) continue;
+        }
         if (el.type === 'group') {
           if (el.locked || el.rotation || el.flipX || el.flipY) return BLOCKED;
           const hit = find(el.children, ox + el.x, oy + el.y);

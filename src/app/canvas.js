@@ -626,8 +626,10 @@ export class Canvas {
       // A new guide that was only clicked goes again too.
       const drop = off || (d.isNew && !d.moved);
       if (drop) ed.pageData.guides.splice(d.index, 1);
-      // Dragged back to where it started counts as not moved.
-      if ((d.isNew && drop) || !d.moved || (!off && !d.isNew && g.pos === d.orig)) {
+      // Nothing happened: a new guide that didn't stay, or one that stays
+      // where it was (not moved, or dragged back). Removing one is a change.
+      const nothing = d.isNew ? drop : !drop && (!d.moved || g.pos === d.orig);
+      if (nothing) {
         ed.history.discard();
         ed.emit('aids');
       } else ed.afterChange();
