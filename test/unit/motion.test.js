@@ -419,3 +419,15 @@ test('[MOT-02] a whole page never loops, and a video whose file is missing doesn
   doc.assets.gone = { type: 'video', dataUrl: 'data:video/webm;base64,AA==' };
   assert.equal(designMoves(doc, [0]), true);
 });
+
+test('[MOT-02] a page\'s elements all come in within its time; a delay past it is caught', async () => {
+  const { startsTooLate } = await import('../../src/model/motion.js');
+  const page = createPage();
+  for (let i = 0; i < 40; i++) page.elements.push(createShape('rect', { x: 0, y: i * 20 }));
+  page.anim = { type: 'rise', stagger: 0.15 };
+  const last = animationOf(page, page.elements[39]);
+  assert.ok(last.delay + last.duration <= pageDuration(page) + 1e-9, `ends at ${last.delay + last.duration}`);
+  assert.equal(startsTooLate(page), false);
+  page.elements[0].anim = { type: 'fade', delay: 8 };
+  assert.equal(startsTooLate(page), true);
+});

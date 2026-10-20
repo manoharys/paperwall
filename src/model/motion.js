@@ -86,7 +86,9 @@ export function animationOf(page, el, order = readingOrder(page), { nested = fal
   if (!anim) return null;
   const duration = clampNum(anim.duration, ...LIMITS.duration, DEFAULT_ANIM_DURATION);
   const at = Math.max(0, order.indexOf(el.id));
-  const delay = own ? clampNum(own.delay, ...LIMITS.delay, 0) : at * clampNum(pageAnim.stagger, ...LIMITS.stagger, DEFAULT_STAGGER);
+  // A page's elements all come in within its time: with many of them, closer together.
+  const fit = order.length > 1 ? Math.max(0, pageDuration(page) - duration) / (order.length - 1) : Infinity;
+  const delay = own ? clampNum(own.delay, ...LIMITS.delay, 0) : at * Math.min(fit, clampNum(pageAnim.stagger, ...LIMITS.stagger, DEFAULT_STAGGER));
   return { type: anim.type, duration, delay };
 }
 
@@ -168,6 +170,11 @@ function animations(page) {
   };
   walk(page.elements, false);
   return out;
+}
+
+/** Whether something on a page starts coming in only after the page's time is up (so it never shows). */
+export function startsTooLate(page) {
+  return animations(page).some((a) => a.delay >= pageDuration(page));
 }
 
 /** When a page's animations are all done (loops aside), in seconds. */

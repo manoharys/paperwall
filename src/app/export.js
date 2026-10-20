@@ -10,7 +10,7 @@ import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrl
 import { section, segmented, slider, toggle } from './widgets.js';
 import { exportGif, exportVideo, canMakeVideo } from './motion-export.js';
 import { dataUrlBlob } from './media.js';
-import { designMoves, timeline } from '../model/motion.js';
+import { designMoves, startsTooLate, timeline } from '../model/motion.js';
 
 const MAX_SIDE = 16000;
 const MAX_PIXELS = 120e6;
@@ -145,7 +145,10 @@ const MOVING = new Set(['gif', 'mp4', 'webm']);
 function motionNote(doc, pages) {
   const { total } = timeline(doc, pages);
   const length = `${Math.round(total * 10) / 10} seconds`;
-  return designMoves(doc, pages) ? `${length} long. Set each page's time and transition with nothing selected.` : `${length} long. Nothing moves yet: pick an animation in the Animate panel.`;
+  if (!designMoves(doc, pages)) return `${length} long. Nothing moves yet: pick an animation in the Animate panel.`;
+  const late = pages.find((i) => startsTooLate(doc.pages[i]));
+  if (late !== undefined) return `${length} long. On page ${late + 1}, something is set to come in after the page's time is up, so it won't show: shorten its delay or show the page for longer.`;
+  return `${length} long. Set each page's time and transition with nothing selected.`;
 }
 
 /** The design's soundtrack, decoded, or null. (Soundtracks come with video elements and audio.) */

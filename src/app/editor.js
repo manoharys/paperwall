@@ -468,7 +468,8 @@ export class Editor {
     checkSize(file, kind);
     const [dataUrl, info] = await Promise.all([readFileAsDataUrl(file), kind === 'video' ? videoInfo(file) : audioInfo(file)]);
     const upload = { id: uid('u'), name: file.name, mime: file.type, dataUrl, kind, ...info, addedAt: Date.now() };
-    await store.saveUpload(upload).catch(() => null);
+    // It's used either way; Uploads just can't keep a copy when storage is full.
+    await store.saveUpload(upload).catch(() => toast(`${file.name} couldn't be kept in Uploads: this browser's storage is full.`, 'error'));
     return upload;
   }
 

@@ -143,7 +143,7 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
   const soundFrom = tl.parts[at].start;
   // Videos are taken at the size they show on screen (the slide fits the
   // screen both ways), and at most 30 times a second, however fast the screen.
-  const shownScale = () => Math.min(window.innerWidth / doc.width, window.innerHeight / doc.height);
+  const shownScale = () => Math.min(window.innerWidth / doc.width, window.innerHeight / doc.height) * (window.devicePixelRatio || 1);
   const taken = new Map(); // element id → { at, picture }
   const capture = (el) => {
     const now = performance.now();
@@ -180,6 +180,13 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
         if (!v) continue;
         v.className = 'slide-video';
         box.append(v);
+        // The picture under it goes once the video shows (it'd show through
+        // a see-through video).
+        const under = box.parentNode.querySelector(`image[data-under="${CSS.escape(box.dataset.video)}"]`);
+        if (under) {
+          if (v.readyState >= 2) under.remove();
+          else v.addEventListener('loadeddata', () => under.remove(), { once: true });
+        }
       }
     } else if (live) {
       // Nothing to draw: the videos play themselves.

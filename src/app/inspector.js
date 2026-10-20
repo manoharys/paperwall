@@ -4,7 +4,7 @@
 import { h, icon, iconButton, clear, toast, pickFile, readFileAsDataUrl, dialog, mod } from './ui.js';
 import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover, popoverOpen, PALETTES, fontPicker, gradientEditor } from './widgets.js';
 import { FONTS, FONT_KINDS } from '../model/fonts.js';
-import { ANIMATIONS, TRANSITIONS, DEFAULT_ANIM_DURATION, DEFAULT_STAGGER, DEFAULT_TRANSITION_DURATION, pageDuration } from '../model/motion.js';
+import { ANIMATIONS, TRANSITIONS, DEFAULT_ANIM_DURATION, DEFAULT_STAGGER, DEFAULT_TRANSITION_DURATION, LIMITS, pageDuration } from '../model/motion.js';
 import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, isEmptyFrame, parseChartData, chartDataText, parseTable, tableText } from '../model/doc.js';
 import { collectColors, cropZoom } from '../model/commands.js';
 import { renderElementOnly, TEXT_EFFECTS } from '../model/render.js';
@@ -255,8 +255,8 @@ export class Inspector {
       }, name))),
       a.type === 'none' && pageAnim && pageAnim !== 'none' ? h('p', { class: 'hint' }, `Comes in with the page's ${ANIMATIONS[pageAnim].name.toLowerCase()} animation.`) : null,
       a.type !== 'none' ? h('div', { class: 'sub' },
-        slider({ label: 'Duration', value: a.duration ?? DEFAULT_ANIM_DURATION, min: 0.2, max: 3, step: 0.1, unit: 's', testid: 'anim-duration', onChange: (v, l) => this.up({ anim: { ...now(), duration: v } }, l ? 'anim' : null) }),
-        slider({ label: 'Delay', value: a.delay ?? 0, min: 0, max: 10, step: 0.1, unit: 's', testid: 'anim-delay', onChange: (v, l) => this.up({ anim: { ...now(), delay: v } }, l ? 'anim' : null) })) : null,
+        slider({ label: 'Duration', value: a.duration ?? DEFAULT_ANIM_DURATION, min: LIMITS.duration[0], max: LIMITS.duration[1], step: 0.1, unit: 's', testid: 'anim-duration', onChange: (v, l) => this.up({ anim: { ...now(), duration: v } }, l ? 'anim' : null) }),
+        slider({ label: 'Delay', value: a.delay ?? 0, min: LIMITS.delay[0], max: LIMITS.delay[1], step: 0.1, unit: 's', testid: 'anim-delay', onChange: (v, l) => this.up({ anim: { ...now(), delay: v } }, l ? 'anim' : null) })) : null,
       h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'anim-play', onClick: () => this.onPlay?.({ only: true }) }, icon('play'), 'Play this page'));
   }
 
@@ -281,7 +281,7 @@ export class Inspector {
     const set = (patch, key) => ed.setPageMotion(at, patch, key);
     return section('Motion',
       selectField({ label: 'Animate the page', value: pa.type, testid: 'page-anim', options: Object.entries(ANIMATIONS).filter(([, v]) => !v.loop).map(([value, { name }]) => ({ value, label: name })), onChange: (type) => set({ anim: type === 'none' ? undefined : { type, stagger: pa.stagger ?? DEFAULT_STAGGER } }) }),
-      slider({ label: 'Show for', value: pageDuration(page), min: 1, max: 30, step: 0.5, unit: 's', testid: 'page-duration', onChange: (v, l) => set({ duration: v }, l ? `duration:${at}` : null) }),
+      slider({ label: 'Show for', value: pageDuration(page), min: LIMITS.page[0], max: LIMITS.page[1], step: 0.5, unit: 's', testid: 'page-duration', onChange: (v, l) => set({ duration: v }, l ? `duration:${at}` : null) }),
       selectField({ label: 'Transition into this page', value: tr.type, testid: 'page-transition', options: Object.entries(TRANSITIONS).map(([value, { name }]) => ({ value, label: name })), onChange: (type) => set({ transition: type === 'none' ? undefined : { type, duration: tr.duration ?? DEFAULT_TRANSITION_DURATION } }) }),
       at === 0 && tr.type !== 'none' ? h('p', { class: 'hint' }, 'Shows when this page follows another, as when pages are moved.') : null,
       this.soundtrackRow(),

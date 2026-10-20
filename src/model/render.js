@@ -195,7 +195,8 @@ function renderPicture(ctx, el, href, as = 'image') {
   }
   const at = `x="${f(-crop.x * iw)}" y="${f(-crop.y * ih)}" width="${f(iw)}" height="${f(ih)}"`;
   const media = as === 'slot'
-    ? `${href ? `<image href="${esc(href)}" ${at} preserveAspectRatio="none"/>` : ''}<foreignObject ${at} data-video="${esc(el.id)}"${fx ? ` filter="url(#${fx})"` : ''}></foreignObject>`
+    // Under the live video, its picture until the video shows (then taken away).
+    ? `${href ? `<image data-under="${esc(el.id)}" href="${esc(href)}" ${at} preserveAspectRatio="none"${fx ? ` filter="url(#${fx})"` : ''}/>` : ''}<foreignObject ${at} data-video="${esc(el.id)}"${fx ? ` filter="url(#${fx})"` : ''}></foreignObject>`
     : `<image href="${esc(href)}" ${at} preserveAspectRatio="none"${fx ? ` filter="url(#${fx})"` : ''}/>`;
   return `<g clip-path="url(#${clip})">${media}${shade}</g>`;
 }
