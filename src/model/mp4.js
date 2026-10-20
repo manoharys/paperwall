@@ -4,18 +4,9 @@
 
 import { opusPreSkip } from './webm.js';
 
-const enc = new TextEncoder();
+import { concat } from './bytes.js';
 
-function concat(parts) {
-  const n = parts.reduce((s, p) => s + p.length, 0);
-  const out = new Uint8Array(n);
-  let at = 0;
-  for (const p of parts) {
-    out.set(p, at);
-    at += p.length;
-  }
-  return out;
-}
+const enc = new TextEncoder();
 
 const u8 = (...v) => Uint8Array.from(v);
 const u16 = (v) => u8((v >> 8) & 255, v & 255);
@@ -76,26 +67,43 @@ function trak(t, id, offsets, duration) {
   const tkhd = full('tkhd', 0, 3, u32(0), u32(0), u32(id), u32(0), u32(Math.round(duration * 1000)), zeros(8), u16(0), u16(video ? 0 : 1), u16(video ? 0 : 0x0100), u16(0), MATRIX,
     u32(video ? t.width << 16 : 0), u32(video ? t.height << 16 : 0));
   const ticks = (us) => Math.round((us / 1e6) * t.timescale);
-  const total = t.chunks.reduce((s, c) => s + ticks(c.duration ?? 0), 0) || Math.round(duration * t.timescale);
+  const total = Math.round(duration * t.timescale);
   const mdhd = full('mdhd', 0, 0, u32(0), u32(0), u32(t.timescale), u32(total), u16(0x55c4), u16(0));
   const hdlr = full('hdlr', 0, 0, u32(0), fourcc(video ? 'vide' : 'soun'), zeros(12), enc.encode(video ? 'VideoHandler\0' : 'SoundHandler\0'));
   const header = video ? full('vmhd', 0, 1, zeros(8)) : full('smhd', 0, 0, u16(0), u16(0));
   const dinf = box('dinf', full('dref', 0, 0, u32(1), full('url ', 0, 1)));
-  // Sample times: runs of equal durations.
+  // Sample times from the encoder's timestamps (display times, chunks in
+  // decode order): decode times are those times in order; a frame shown
+  // later than it's decoded gets an offset (ctts). Gaps (dropped frames)
+  // stay gaps. The last sample lasts its own duration.
+  const pts = t.chunks.map((c) => ticks(c.timestamp ?? 0));
+  const dts = [...pts].sort((a, b) => a - b);
+  const deltas = dts.map((d, i) => (i + 1 < dts.length ? dts[i + 1] - d : Math.max(1, ticks(t.chunks[i].duration ?? 0) || (i ? dts[i] - dts[i - 1] : 1))));
   const runs = [];
-  for (const c of t.chunks) {
-    const d = ticks(c.duration ?? 0);
+  for (const d of deltas) {
     const last = runs[runs.length - 1];
     if (last && last[1] === d) last[0]++;
     else runs.push([1, d]);
   }
   const stts = full('stts', 0, 0, u32(runs.length), ...runs.map(([n, d]) => concat([u32(n), u32(d)])));
+  const shifts = pts.map((p, i) => p - dts[i]);
+  let ctts = null;
+  if (shifts.some((o) => o !== 0)) {
+    const oruns = [];
+    for (const o of shifts) {
+      const last = oruns[oruns.length - 1];
+      if (last && last[1] === o) last[0]++;
+      else oruns.push([1, o]);
+    }
+    // Version 1: offsets may be negative.
+    ctts = full('ctts', 1, 0, u32(oruns.length), ...oruns.map(([n, o]) => concat([u32(n), u32(o >>> 0)])));
+  }
   const keys = t.chunks.map((c, i) => (c.key ? i + 1 : 0)).filter(Boolean);
   const stss = video ? full('stss', 0, 0, u32(keys.length), ...keys.map(u32)) : null;
   const stsc = full('stsc', 0, 0, u32(1), u32(1), u32(1), u32(1)); // a chunk per sample
   const stsz = full('stsz', 0, 0, u32(0), u32(t.chunks.length), ...t.chunks.map((c) => u32(c.data.length)));
   const stco = full('stco', 0, 0, u32(offsets.length), ...offsets.map(u32));
-  const stbl = box('stbl', full('stsd', 0, 0, u32(1), video ? videoEntry(t) : audioEntry(t)), stts, ...(stss ? [stss] : []), stsc, stsz, stco);
+  const stbl = box('stbl', full('stsd', 0, 0, u32(1), video ? videoEntry(t) : audioEntry(t)), stts, ...(ctts ? [ctts] : []), ...(stss ? [stss] : []), stsc, stsz, stco);
   return box('trak', tkhd, box('mdia', mdhd, hdlr, box('minf', header, dinf, stbl)));
 }
 

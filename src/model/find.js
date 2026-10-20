@@ -38,7 +38,9 @@ function wordMatcher(re) {
         continue;
       }
       if (m.index === 0 || !WORD_CHAR.test(charBefore(text, m.index))) out.push(m);
-      re.lastIndex = m.index + 1;
+      // On by one whole character (an emoji is two units: half of one would
+      // land the search back on the same match, for ever).
+      re.lastIndex = m.index + (text.codePointAt(m.index) > 0xffff ? 2 : 1);
     }
     // Overlapping matches (a query like "--" in "---") count once, left first:
     // each is checked against the last one kept.

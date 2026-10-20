@@ -136,7 +136,8 @@ export function present(editor, canvas, { autoplay = false } = {}) {
   // plays from where the shown page starts in the whole design.
   const videos = new VideoFrames(doc);
   const tl = timeline(doc, shown);
-  const sound = soundtrackPlayer(doc);
+  // The soundtrack plays with Play (as the panel says), not plain presenting.
+  const sound = autoplay ? soundtrackPlayer(doc) : null;
   // Videos are taken at the size they show on screen, not bigger.
   const shownScale = () => (slide.clientWidth || doc.width) / doc.width;
   const opts = { measure, noSize: true, assetHref: canvas.assetHref, videoFrame: (el) => videos.capture(el, shownScale()) };
@@ -163,7 +164,7 @@ export function present(editor, canvas, { autoplay = false } = {}) {
     slide.innerHTML = renderFrame(doc, pageFrame(doc, i, local, from), { ...opts, idPrefix: `pr${i}` });
     root.dataset.time = local.toFixed(2);
     if (autoplay && local >= pageDuration(page)) {
-      if (at < shown.length - 1) return go(at + 1, true);
+      if (at < shown.length - 1) return go(at + 1, true, { auto: true });
       // The end: the last page stays, and sound and videos stop with it (as in a download).
       videos.pauseAll();
       sound?.pause();
@@ -180,7 +181,8 @@ export function present(editor, canvas, { autoplay = false } = {}) {
       }, Math.max(0, (pageDuration(page) - local) * 1000));
     }
   };
-  const go = (to, forward) => {
+  // `auto`: moving on by itself, when the sound is already in the right place.
+  const go = (to, forward, { auto = false } = {}) => {
     cancelAnimationFrame(frame);
     clearTimeout(wait);
     from = forward && to !== at ? shown[at] : null;
@@ -191,7 +193,7 @@ export function present(editor, canvas, { autoplay = false } = {}) {
     info = { end: animationsEnd(page), keeps: keepsMoving(page) };
     videos.pauseAll();
     videos.start(videosOn(doc, [shown[at]]));
-    sound?.seek(tl.parts[at].start);
+    if (!auto) sound?.seek(tl.parts[at].start);
     slide.style.aspectRatio = `${doc.width} / ${doc.height}`;
     counter.textContent = `${at + 1} / ${shown.length}`;
     draw(started);

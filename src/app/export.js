@@ -155,7 +155,9 @@ export async function soundtrackBuffer(doc) {
   if (!Ctx) return null;
   const ctx = new Ctx();
   try {
-    return await ctx.decodeAudioData(dataUrlToBytes(a.dataUrl).bytes.buffer);
+    // The browser turns the stored text back into bytes (fetch), not a loop here.
+    const bytes = await fetch(a.dataUrl).then((r) => r.arrayBuffer()).catch(() => dataUrlToBytes(a.dataUrl).bytes.buffer);
+    return await ctx.decodeAudioData(bytes);
   } finally {
     ctx.close?.();
   }
@@ -240,6 +242,9 @@ export function exportDialog(editor) {
     btn.lastChild.textContent = 'Preparing…';
     state.busy = true;
     body.classList.add('busy');
+    // Everything waits (Copy and Print too: they'd close the dialog and stop
+    // it); closing the dialog is how to stop.
+    for (const c of body.querySelectorAll('input, select, button')) c.disabled = true;
     try {
       if (MOVING.has(state.format)) {
         // Frames take a while: say how far along it is. They're drawn from the
@@ -272,6 +277,7 @@ export function exportDialog(editor) {
       if (stopper.signal.aborted) return; // closed while making it: nothing to say
       state.busy = false;
       body.classList.remove('busy');
+      draw(); // everything back as it was, ready to try again
       toast(e.message || 'Export failed', 'error');
       btn.disabled = false;
       btn.lastChild.textContent = 'Download';

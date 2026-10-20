@@ -159,3 +159,29 @@ test('[MOT-06] WebM with VP9 and Opus decodes cleanly, with cues', { skip: !ffmp
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('[MOT-06] MP4 keeps frames in order when the encoder reorders them (B-frames)', { skip: !ffmpeg && 'ffmpeg is not installed' }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pw-bf-'));
+  try {
+    // H.264 with B-frames: packets come in decode order, each with its own display time.
+    run(['-f', 'lavfi', '-i', 'testsrc=size=320x240:rate=30:duration=2', '-c:v', 'libx264', '-g', '60', '-bf', '2', '-pix_fmt', 'yuv420p', '-x264-params', 'aud=1', join(dir, 'b.mp4')]);
+    const probe = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'packet=pts_time', '-of', 'csv=p=0', join(dir, 'b.mp4')], { encoding: 'utf8' });
+    const pts = probe.stdout.trim().split('\n').map(Number);
+    run(['-i', join(dir, 'b.mp4'), '-c:v', 'copy', '-bsf:v', 'h264_mp4toannexb', '-f', 'h264', join(dir, 'b.h264')]);
+    const v = annexB(new Uint8Array(readFileSync(join(dir, 'b.h264'))));
+    assert.equal(v.units.length, pts.length);
+    assert.ok(pts.some((p, i) => i && p < pts[i - 1]), 'the encoder did reorder frames');
+    const frame = 1e6 / 30;
+    const mp4 = buildMp4({ video: { codec: 'avc', width: 320, height: 240, description: v.avcC, chunks: v.units.map((u, i) => ({ ...u, timestamp: Math.round(pts[i] * 1e6), duration: frame })) }, duration: 2 });
+    writeFileSync(join(dir, 'out.mp4'), mp4);
+    // Shown in order, every frame, no errors.
+    const frames = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'frame=pts_time', '-of', 'csv=p=0', join(dir, 'out.mp4')], { encoding: 'utf8' });
+    assert.equal(frames.stderr, '');
+    const shown = frames.stdout.trim().split('\n').map(Number);
+    assert.equal(shown.length, 60);
+    assert.ok(shown.every((t, i) => !i || t > shown[i - 1]), 'display times only go forward');
+    assert.ok(Math.abs(shown.at(-1) - 59 / 30) < 0.02, `last frame at ${shown.at(-1)}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

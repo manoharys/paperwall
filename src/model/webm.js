@@ -2,18 +2,9 @@
 // VP8) and audio (Opus); this puts the pieces in a Matroska/WebM file, with
 // a seek head and cues so players can jump around in it.
 
-const enc = new TextEncoder();
+import { concat } from './bytes.js';
 
-function concat(parts) {
-  const n = parts.reduce((s, p) => s + p.length, 0);
-  const out = new Uint8Array(n);
-  let at = 0;
-  for (const p of parts) {
-    out.set(p, at);
-    at += p.length;
-  }
-  return out;
-}
+const enc = new TextEncoder();
 
 /** An element ID's bytes (IDs carry their own length marker). */
 function idBytes(id) {
@@ -108,7 +99,8 @@ export function buildWebmParts({ video, audio = null, duration }) {
   for (const b of blocks) {
     const ms = Math.round(b.timestamp / 1000);
     if (!cur || (b.track === 1 && b.key) || ms - cur.start > 30000) {
-      cur = { start: ms, blocks: [] };
+      // A cluster that opens on a video key frame is a place to jump to.
+      cur = { start: ms, blocks: [], key: b.track === 1 && b.key };
       clusters.push(cur);
     }
     const head = new Uint8Array(4);
@@ -128,7 +120,8 @@ export function buildWebmParts({ video, audio = null, duration }) {
   let at = tracksAt + tracksEl.length;
   const cuePoints = [];
   clusters.forEach((c, i) => {
-    cuePoints.push(el(ID.CuePoint, uint(ID.CueTime, c.start), el(ID.CueTrackPositions, uint(ID.CueTrack, 1), uint(ID.CueClusterPosition, at, 8))));
+    // Cues only where a key frame starts the cluster: video decodes from there.
+    if (c.key) cuePoints.push(el(ID.CuePoint, uint(ID.CueTime, c.start), el(ID.CueTrackPositions, uint(ID.CueTrack, 1), uint(ID.CueClusterPosition, at, 8))));
     at += clusterEls[i].length;
   });
   const cues = el(ID.Cues, ...cuePoints);

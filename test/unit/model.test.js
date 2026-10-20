@@ -628,3 +628,10 @@ test('[EDIT-19] whole words without look-behind keep every non-overlapping match
   assert.deepEqual('----'.match(m()), ['--', '--']);
   assert.equal('----'.replace(m(), () => 'X'), 'XX');
 });
+
+test('[EDIT-19] whole words without look-behind: a query starting with an emoji ends', async () => {
+  const { wordMatcher } = await import('../../src/model/find.js');
+  const m = () => wordMatcher(/😀(?![\p{L}\p{N}])/gu);
+  assert.deepEqual('a 😀😀 b'.match(m()), ['😀', '😀']);
+  assert.equal('😀'.replace(m(), () => 'X'), 'X');
+});

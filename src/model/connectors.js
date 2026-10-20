@@ -184,9 +184,9 @@ export function updateConnectors(page, { refit = true } = {}) {
       moved = true;
     }
     if (!sTarget && !eTarget) return moved;
-    // Both elements inside the same turned group: both ends would land on the
-    // group's one box. Leave the line as it is until the group is undone.
-    if (sTarget && sTarget === eTarget) return moved;
+    // Both ends on the same element: they'd land on one point. Leave the
+    // line as it is.
+    if (sTarget && el.start.id === el.end.id) return moved;
     const a = sTarget ? anchorOn(sTarget, eTarget ? center(eTarget) : b0) : null;
     const b = eTarget ? anchorOn(eTarget, sTarget ? center(sTarget) : a0) : null;
     // Attached ends take the side they meet; loose ends keep the one they had.
