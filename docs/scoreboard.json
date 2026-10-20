@@ -1,14 +1,14 @@
 {
   "summary": {
     "date": "2026-10-20",
-    "total": 132,
-    "verified": 131,
+    "total": 139,
+    "verified": 138,
     "failing": 0,
     "todo": 1,
-    "e2eTests": 100,
-    "e2ePassing": 100,
-    "unitTests": 50,
-    "unitPassing": 50
+    "e2eTests": 106,
+    "e2ePassing": 106,
+    "unitTests": 58,
+    "unitPassing": 58
   },
   "areas": [
     {
@@ -419,6 +419,11 @@
           "id": "TXT-20",
           "title": "Use your own font file",
           "status": "verified"
+        },
+        {
+          "id": "TXT-21",
+          "title": "90+ open-license font families in a searchable picker, loaded only when used",
+          "status": "verified"
         }
       ]
     },
@@ -572,6 +577,16 @@
           "id": "ELM-06",
           "title": "Tables",
           "status": "verified"
+        },
+        {
+          "id": "ELM-07",
+          "title": "1,500+ icons you can search",
+          "status": "verified"
+        },
+        {
+          "id": "ELM-08",
+          "title": "150+ stickers and illustrations",
+          "status": "verified"
         }
       ]
     },
@@ -649,6 +664,26 @@
         {
           "id": "TPL-05",
           "title": "Every template is original and free for any use (CC0)",
+          "status": "verified"
+        },
+        {
+          "id": "TPL-06",
+          "title": "300+ templates across 30+ categories",
+          "status": "verified"
+        },
+        {
+          "id": "TPL-07",
+          "title": "Multi-page templates: decks, calendars, menus, planners",
+          "status": "verified"
+        },
+        {
+          "id": "TPL-08",
+          "title": "Every template passes a quality check: no overflow, no broken words, readable contrast",
+          "status": "verified"
+        },
+        {
+          "id": "TPL-09",
+          "title": "Filter templates by size",
           "status": "verified"
         }
       ]

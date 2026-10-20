@@ -27,9 +27,32 @@ let openPopover = null;
 
 export function closePopover() {
   if (!openPopover) return;
+  openPopover.cleanup?.();
   openPopover.remove();
   openPopover = null;
   document.dispatchEvent(new Event('paperwall:popover-closed'));
+}
+
+/**
+ * Show a popover under the button that opened it, kept on screen. Escape
+ * closes it and puts focus back on the button.
+ */
+function showPopover(pop, btn, { alignRight = false } = {}) {
+  pop.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      closePopover();
+      btn.focus();
+    }
+  });
+  document.body.append(pop);
+  const r = btn.getBoundingClientRect();
+  const left = alignRight ? r.left - pop.offsetWidth + r.width : r.left;
+  Object.assign(pop.style, {
+    top: `${Math.max(8, Math.min(window.innerHeight - pop.offsetHeight - 8, r.bottom + 6))}px`,
+    left: `${Math.max(8, Math.min(window.innerWidth - pop.offsetWidth - 8, left))}px`,
+  });
+  openPopover = pop;
 }
 
 export function popoverOpen() {
@@ -37,7 +60,8 @@ export function popoverOpen() {
 }
 
 document.addEventListener('pointerdown', (e) => {
-  if (openPopover && !openPopover.contains(e.target) && !e.target.closest?.('.swatch-btn')) closePopover();
+  // A popover's own button toggles it on click, so leave those clicks to it.
+  if (openPopover && !openPopover.contains(e.target) && !e.target.closest?.('.swatch-btn, .font-btn')) closePopover();
 });
 
 /**
@@ -93,19 +117,7 @@ export function colorButton({ label, value, onChange, getContext = () => ({}), t
       row('In this design', ctx.used),
       row('Brand kit', ctx.brand),
       PALETTES.map((p) => row(p.name, p.colors)));
-    pop.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        closePopover();
-        btn.focus();
-      }
-    });
-    document.body.append(pop);
-    const r = btn.getBoundingClientRect();
-    const top = Math.min(window.innerHeight - pop.offsetHeight - 8, r.bottom + 6);
-    const left = Math.min(window.innerWidth - pop.offsetWidth - 8, Math.max(8, r.left - pop.offsetWidth + r.width));
-    Object.assign(pop.style, { top: `${Math.max(8, top)}px`, left: `${left}px` });
-    openPopover = pop;
+    showPopover(pop, btn, { alignRight: true });
   });
   return btn;
 }
@@ -191,4 +203,56 @@ function round(v) {
 
 function clamp(v, a, b) {
   return Math.max(a, Math.min(b, v));
+}
+
+/**
+ * A font chooser: a button showing the current font, opening a searchable
+ * list where every name is drawn in its own font (loaded as it scrolls by).
+ */
+export function fontPicker({ label = 'Font', value, fonts, kinds, onChange, testid, extra = [] }) {
+  const btn = h('button', { type: 'button', class: 'font-btn', 'aria-label': `${label}: ${value}`, 'data-testid': testid, style: { fontFamily: `"${value}"` } }, value, icon('down', 16));
+  btn.addEventListener('click', () => {
+    if (openPopover?.dataset.for === label) return closePopover();
+    closePopover();
+    let kind = 'All';
+    const list = h('div', { class: 'font-list', role: 'listbox', 'aria-label': label });
+    const search = h('input', { type: 'search', placeholder: `Search ${fonts.length + extra.length} fonts`, 'aria-label': 'Search fonts', 'data-testid': 'font-search' });
+    const seen = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        e.target.style.fontFamily = `"${e.target.dataset.font}"`;
+        seen.unobserve(e.target);
+      }
+    }, { root: list, rootMargin: '200px' });
+    const fill = () => {
+      list.replaceChildren();
+      const q = search.value.trim().toLowerCase();
+      const all = [...extra.map((name) => ({ name, kind: 'Yours' })), ...fonts];
+      for (const f of all.filter((f) => (kind === 'All' || f.kind === kind) && (!q || f.name.toLowerCase().includes(q)))) {
+        const item = h('button', { type: 'button', class: `font-item${f.name === value ? ' on' : ''}`, role: 'option', 'aria-selected': String(f.name === value), 'data-font': f.name, 'data-testid': `font-option-${f.name}`, onClick: () => {
+          value = f.name;
+          btn.firstChild.textContent = f.name;
+          btn.style.fontFamily = `"${f.name}"`;
+          closePopover();
+          onChange(f.name);
+        } }, f.name, h('small', null, f.kind));
+        list.append(item);
+        seen.observe(item);
+      }
+      if (!list.children.length) list.append(h('p', { class: 'empty-note' }, 'No fonts match.'));
+    };
+    search.addEventListener('input', fill);
+    const chips = h('div', { class: 'chips small' }, ['All', ...kinds].map((k) => h('button', { type: 'button', class: k === kind ? 'chip on' : 'chip', onClick: (e) => {
+      kind = k;
+      for (const c of chips.children) c.classList.toggle('on', c === e.currentTarget);
+      fill();
+    } }, k)));
+    const pop = h('div', { class: 'popover font-pop', 'data-for': label, 'data-testid': 'font-popover' }, search, chips, list);
+    pop.cleanup = () => seen.disconnect();
+    fill();
+    showPopover(pop, btn);
+    search.focus();
+    list.querySelector('.on')?.scrollIntoView({ block: 'center' });
+  });
+  return h('div', { class: 'field' }, h('span', null, label), btn);
 }

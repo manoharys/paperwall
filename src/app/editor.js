@@ -10,7 +10,7 @@ import {
 import { fitHeight } from '../model/text-layout.js';
 import { curveGeometry } from '../model/render.js';
 import { unionBounds } from '../model/geometry.js';
-import { measure } from './fonts.js';
+import { measure, ensureFont } from './fonts.js';
 import { removePlainBackground } from '../model/bgremove.js';
 import { readFileAsDataUrl, loadImage, toast, debounce } from './ui.js';
 import * as store from './store.js';
@@ -282,12 +282,25 @@ export class Editor {
 
   // ---------- editing ----------
 
-  update(props, key = null) {
+  /** Switch the selected text to another font, once it has loaded. */
+  async setFont(font) {
+    // Remember what was selected, and where: either can change while the font loads.
     const ids = this.selection;
+    const pageId = this.pageData.id;
+    const weights = new Set(this.selected.map((el) => el.weight || 400));
+    await Promise.all([...weights].map((w) => ensureFont(font, w)));
+    this.update({ font }, null, ids, pageId);
+  }
+
+  /** Change elements (the selection by default) on a page (the current one by default). */
+  update(props, key = null, ids = this.selection, pageId = this.pageData.id) {
+    const page = this.doc.pages.findIndex((p) => p.id === pageId);
+    if (page < 0) return;
+    ids = ids.filter((id) => cmd.findElement(this.doc.pages[page], id));
     if (!ids.length) return;
     this.change(() => {
-      cmd.updateElements(this.doc, this.page, ids, props);
-      for (const el of this.selected) if (el.type === 'text') this.fitText(el);
+      cmd.updateElements(this.doc, page, ids, props);
+      for (const el of cmd.selectElements(this.doc.pages[page], ids)) if (el.type === 'text') this.fitText(el);
     }, { key: key ? `${key}:${ids.join(',')}` : null });
   }
 
@@ -304,14 +317,21 @@ export class Editor {
     el.h = fitHeight(el, measure);
   }
 
-  refitAllText() {
+  /** Measure text again (all of it, or the boxes `which` picks). Returns whether any height changed. */
+  refitAllText(which = () => true) {
+    let changed = false;
     const visit = (els) => {
       for (const el of els) {
-        if (el.type === 'text') this.fitText(el);
+        if (el.type === 'text' && which(el)) {
+          const before = [el.w, el.h];
+          this.fitText(el);
+          if (el.w !== before[0] || el.h !== before[1]) changed = true;
+        }
         if (el.type === 'group') visit(el.children);
       }
     };
     this.doc.pages.forEach((p) => visit(p.elements));
+    return changed;
   }
 
   deleteSelection() {
@@ -474,16 +494,26 @@ export class Editor {
     this.change(() => cmd.setBackground(this.doc, this.page, bg), { key: key ? `bg:${key}:${this.page}` : null });
   }
 
+  /**
+   * Add every page of a template after the current page, resized to fit.
+   * Its fonts must already be loaded (see readyTemplate).
+   */
   addTemplatePage(templateDoc) {
     const resized = cmd.resizeDesign(templateDoc, this.doc.width, this.doc.height);
-    const page = clone(resized.pages[0]);
-    page.id = uid('p');
-    const i = this.change(() => {
+    const first = this.change(() => {
       for (const [id, a] of Object.entries(resized.assets || {})) this.doc.assets[id] = a;
-      return cmd.addPage(this.doc, this.page, page);
+      let at = this.page;
+      let firstAdded = -1;
+      for (const p of resized.pages) {
+        const page = clone(p);
+        page.id = uid('p');
+        at = cmd.addPage(this.doc, at, page);
+        if (firstAdded < 0) firstAdded = at;
+      }
+      return firstAdded;
     });
     this.refitAllText();
-    this.setPage(i);
+    this.setPage(first);
   }
 
   // ---------- whole design ----------
@@ -506,7 +536,8 @@ export class Editor {
     return copy;
   }
 
-  applyBrand(brand) {
+  async applyBrand(brand) {
+    await Promise.all([brand.headingFont, brand.bodyFont].filter(Boolean).flatMap((f) => [ensureFont(f, 400), ensureFont(f, 700)]));
     this.change(() => {
       cmd.applyBrand(this.doc, brand);
       this.refitAllText();

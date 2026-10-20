@@ -45,7 +45,7 @@ end-to-end test in a real browser** or listed as **not done yet**. This table
 is generated from the test run, never written by hand.
 
 <!-- scoreboard:start -->
-**131 of 132 features verified** by browser tests · 1 not done yet · [full scoreboard](SCOREBOARD.md)
+**138 of 139 features verified** by browser tests · 1 not done yet · [full scoreboard](SCOREBOARD.md)
 
 | Area | Verified |
 | --- | --- |
@@ -54,13 +54,13 @@ is generated from the test run, never written by hand.
 | Viewing | 5 / 5 |
 | Selecting and moving | 13 / 13 |
 | Editing | 18 / 18 |
-| Text | 20 / 20 |
+| Text | 21 / 21 |
 | Shapes and lines | 8 / 8 |
 | Images | 12 / 13 |
-| Graphics | 6 / 6 |
+| Graphics | 8 / 8 |
 | Color | 4 / 4 |
 | Brand kit | 3 / 3 |
-| Templates | 5 / 5 |
+| Templates | 9 / 9 |
 | Export | 12 / 12 |
 | The app | 6 / 6 |
 
@@ -70,7 +70,7 @@ Not done yet: remove an image's background on your device.
 ## Use it
 
 - **In your browser:** [manoharys.github.io/paperwall](https://manoharys.github.io/paperwall/). Install it from the address bar to get an app that works offline.
-- **As one file:** download `paperwall.html` from the [latest release](https://github.com/manoharys/paperwall/releases/latest) and double-click it. That's the whole app (under 1 MB, fonts included).
+- **As one file:** download `paperwall.html` from the [latest release](https://github.com/manoharys/paperwall/releases/latest) and double-click it. That's the whole app (about 5 MB, all 92 fonts included).
 - **From source:**
 
   ```bash
@@ -93,7 +93,10 @@ end-to-end tests use Playwright.
   your browser's storage. PNG, JPG, PDF and zip files are made in the page.
   There's a QR code generator, a PDF writer and a zip writer in here, all
   small and tested.
-- **Fonts:** 14 open-license families (SIL OFL / Apache 2.0), bundled.
+- **Library:** 397 templates in 44 categories (each one passes a quality
+  check in a real browser: no overflow, no broken words, readable contrast),
+  92 open-license font families (SIL OFL / Apache 2.0) loaded only when used,
+  1,956 icons (Paperwall's own plus Lucide, ISC) and 198 stickers.
 
 ## Compared with Canva
 

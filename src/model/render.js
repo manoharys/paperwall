@@ -145,7 +145,9 @@ function renderIcon(ctx, el) {
   const s = Math.min(el.w, el.h) / 24;
   const ox = (el.w - 24 * s) / 2;
   const oy = (el.h - 24 * s) / 2;
-  return `<g transform="translate(${f(ox)} ${f(oy)}) scale(${f(s)})" fill="none" stroke="${esc(el.color || '#000000')}" stroke-width="${f(el.strokeWidth || 1.8)}" stroke-linecap="round" stroke-linejoin="round">${icon.body}</g>`;
+  // color= lets icon parts drawn with currentColor (dots, filled shapes) match the stroke.
+  const color = esc(el.color || '#000000');
+  return `<g transform="translate(${f(ox)} ${f(oy)}) scale(${f(s)})" color="${color}" fill="none" stroke="${color}" stroke-width="${f(el.strokeWidth || 1.8)}" stroke-linecap="round" stroke-linejoin="round">${icon.body}</g>`;
 }
 
 function renderSticker(ctx, el) {

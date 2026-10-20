@@ -1,7 +1,7 @@
 // Loading fonts in the browser, measuring text with them, and embedding them
 // in exports. In the one-file build the font files are inlined as data URLs.
 
-import { FONTS, fontFile, fontsUsed } from '../model/fonts.js';
+import { FONTS, fontFiles, fontsUsed, nearestWeight } from '../model/fonts.js';
 import { bytesToBase64 } from './ui.js';
 
 const inlined = () => globalThis.PAPERWALL_ASSETS?.fonts || null;
@@ -12,17 +12,51 @@ export function fontUrl(file) {
   return inlined()?.[file] || `/assets/fonts/${file}`;
 }
 
-/** Register every bundled font. Resolves when they are ready to draw. */
-export async function loadFonts() {
-  const faces = [];
+const faces = new Map(); // "Family|weight" -> [FontFace]
+
+/**
+ * Register every bundled font without downloading it. A font is fetched the
+ * first time something needs it; call ensureFont() before measuring text.
+ */
+export function registerFonts() {
+  if (faces.size) return;
   for (const font of FONTS) {
     for (const w of font.weights) {
-      const face = new FontFace(font.name, `url(${fontUrl(fontFile(font.slug, w))})`, { weight: String(w), display: 'block' });
-      document.fonts.add(face);
-      faces.push(face.load().catch(() => null));
+      const list = fontFiles(font, w).map(({ file, range }) => {
+        const desc = { weight: String(w), display: 'block' };
+        if (range) desc.unicodeRange = range;
+        const face = new FontFace(font.name, `url(${fontUrl(file)})`, desc);
+        document.fonts.add(face);
+        return face;
+      });
+      faces.set(`${font.name}|${w}`, list);
     }
   }
-  await Promise.all(faces);
+}
+
+/** Make sure a font is downloaded and ready to measure and draw. */
+export async function ensureFont(name, weight = 400) {
+  const w = nearestWeight(name, weight);
+  const list = faces.get(`${name}|${w}`);
+  if (!list) return;
+  await Promise.all(list.map((f) => (f.status === 'loaded' ? null : f.load().catch(() => null))));
+}
+
+/** Whether a font is downloaded and usable (false if it failed to load). */
+export function fontLoaded(name, weight = 400) {
+  const list = faces.get(`${name}|${nearestWeight(name, weight)}`);
+  return !list || list.every((f) => f.status === 'loaded');
+}
+
+/** Every font a design uses, ready before its text is measured. */
+export async function ensureDesignFonts(doc) {
+  await Promise.all(fontsUsed(doc).map(({ font, weight }) => ensureFont(font.name, weight)));
+}
+
+/** Boot: register everything, load the interface font. */
+export async function loadFonts() {
+  registerFonts();
+  await Promise.all([ensureFont('Inter', 400), ensureFont('Inter', 700)]);
 }
 
 /** Add a font from a file the user picked. Returns its family name. */
@@ -85,12 +119,43 @@ async function fileAsDataUrl(file) {
   return url;
 }
 
+/** Every distinct character of text in a design, as code points. */
+function designChars(doc) {
+  const set = new Set();
+  const add = (s) => {
+    for (const ch of String(s ?? '')) set.add(ch.codePointAt(0));
+  };
+  const visit = (els) => {
+    for (const el of els) {
+      if (el.type === 'text') add(el.text);
+      if (el.type === 'table') el.rows.flat().forEach(add);
+      if (el.type === 'chart') el.data.forEach((d) => add(d.label));
+      if (el.type === 'group') visit(el.children);
+    }
+  };
+  doc.pages.forEach((p) => visit(p.elements));
+  return [...set];
+}
+
+/** Whether a code point is inside a CSS unicode-range like "U+0900-097F, U+20B9". */
+function inRange(cp, range) {
+  return range.split(',').some((part) => {
+    const [a, b = a] = part.trim().replace(/^U\+/i, '').split('-').map((x) => parseInt(x, 16));
+    return cp >= a && cp <= b;
+  });
+}
+
 /** @font-face rules for just the fonts a design uses, with the files inlined. */
 export async function fontCssFor(doc) {
   const rules = [];
+  const chars = designChars(doc);
   for (const { font, weight } of fontsUsed(doc)) {
-    const url = await fileAsDataUrl(fontFile(font.slug, weight));
-    rules.push(`@font-face{font-family:"${font.name}";font-weight:${weight};src:url(${url}) format("woff2");}`);
+    for (const { file, range } of fontFiles(font, weight)) {
+      // Files for other scripts go in only if the design uses that script.
+      if (range && !chars.some((c) => inRange(c, range))) continue;
+      const url = await fileAsDataUrl(file);
+      rules.push(`@font-face{font-family:"${font.name}";font-weight:${weight};src:url(${url}) format("woff2");${range ? `unicode-range:${range};` : ''}}`);
+    }
   }
   for (const a of Object.values(doc.assets || {})) {
     if (a.type === 'font') rules.push(`@font-face{font-family:"${a.family}";src:url(${a.dataUrl});}`);

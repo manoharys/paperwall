@@ -56,9 +56,9 @@ smaller way.
 
 | Area | Paperwall | Notes |
 | --- | --- | --- |
-| Templates | 🟡 | 16 original templates. Canva has a very large library. This is the biggest gap people will notice, and the easiest one for contributors to close. |
-| Fonts | 🟡 | 14 open-license families, plus your own font files |
-| Icons and graphics | 🟡 | 65 icons and 18 stickers drawn for Paperwall |
+| Templates | 🟡 | 397 original templates in 44 categories, including multi-page decks, calendars, menus and planners. Canva's library is still far larger. |
+| Fonts | 🟡 | 92 open-license families with a searchable picker, plus your own font files |
+| Icons and graphics | 🟡 | 1,956 icons (our own plus Lucide) and 198 stickers; no photo library yet |
 | Photo frames and grid layouts | 🟡 | rounded and circle crops only |
 | Presentations | 🟡 | present full screen; no speaker notes, transitions or recording |
 

@@ -38,6 +38,7 @@ export function layoutText(el, measure) {
   const m = measureWith(measure, el);
   const lineHeight = el.size * (el.lineHeight || 1.2);
   const lines = [];
+  let brokeWord = false;
   const paragraphs = displayText(el).split('\n');
   let number = 0;
   for (const para of paragraphs) {
@@ -73,6 +74,7 @@ export function layoutText(el, measure) {
       if (/^\s+$/.test(word)) continue;
       if (m(word) > avail) {
         const parts = breakWord(word, avail, m);
+        brokeWord = true;
         for (let i = 0; i < parts.length - 1; i++) push(parts[i]);
         cur = parts[parts.length - 1];
       } else {
@@ -81,7 +83,7 @@ export function layoutText(el, measure) {
     }
     push(cur);
   }
-  return { lines, lineHeight, height: Math.max(lineHeight, lines.length * lineHeight) };
+  return { lines, lineHeight, height: Math.max(lineHeight, lines.length * lineHeight), brokeWord };
 }
 
 /** Height a text box needs to show all its text (plus highlight padding). */

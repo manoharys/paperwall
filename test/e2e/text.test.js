@@ -58,11 +58,15 @@ test('[TXT-03] text wraps inside its box', async () => {
   await context.close();
 });
 
-test('[TXT-04] [TXT-05] choose a bundled font and a size', async () => {
+test('[TXT-04] [TXT-05] [TXT-21] choose a bundled font and a size', async () => {
   const { page, context, t } = await heading();
-  const fonts = await page.$$eval('[data-testid="font-select"] option', (o) => o.map((x) => x.value));
-  assert.ok(fonts.length >= 14);
-  await page.selectOption('[data-testid="font-select"]', 'Playfair Display');
+  await page.click('[data-testid="font-select"]');
+  await page.waitForSelector('[data-testid="font-popover"]');
+  assert.ok((await page.locator('.font-item').count()) >= 90, 'about 90 font families');
+  await page.fill('[data-testid="font-search"]', 'playfair');
+  assert.equal(await page.locator('.font-item').count(), 1);
+  await page.click('[data-testid="font-option-Playfair Display"]');
+  await page.waitForFunction(() => window.paperwall.editor.single?.font === 'Playfair Display');
   await page.fill('[data-testid="font-size"]', '120');
   await page.press('[data-testid="font-size"]', 'Enter');
   const e = await el(page);
@@ -71,6 +75,9 @@ test('[TXT-04] [TXT-05] choose a bundled font and a size', async () => {
   assert.match(await dom(page, t.id).locator('text').getAttribute('font-family'), /Playfair Display/);
   const loaded = await page.evaluate(() => document.fonts.check('700 40px "Playfair Display"'));
   assert.equal(loaded, true, 'the font file is loaded, not a fallback');
+  // Fonts download only when used: a font nobody picked is still not loaded.
+  const untouched = await page.evaluate(() => [...document.fonts].find((f) => f.family === 'Monoton')?.status);
+  assert.equal(untouched, 'unloaded');
   await context.close();
 });
 
@@ -180,5 +187,15 @@ test('[TXT-20] use your own font file', async () => {
   assert.ok(Object.values(doc.assets).some((a) => a.type === 'font' && a.family === 'My Hand'), 'stored inside the design');
   const svg = await page.evaluate(async () => (await window.paperwall.export.exportSvg(window.paperwall.editor.doc, 0)).text());
   assert.ok(svg.includes('font-family:"My Hand"'), 'embedded in exports');
+  await context.close();
+});
+
+test('the font button opens and closes its list', async () => {
+  const { page, context } = await newDesign('square');
+  await addText(page);
+  await page.click('[data-testid="font-select"]');
+  assert.equal(await page.locator('[data-testid="font-popover"]').count(), 1);
+  await page.click('[data-testid="font-select"]');
+  assert.equal(await page.locator('[data-testid="font-popover"]').count(), 0);
   await context.close();
 });

@@ -1,22 +1,11 @@
-// Fonts bundled with Paperwall. All are open-license (SIL OFL 1.1, or Apache 2.0
-// for Roboto Slab); license files sit next to the font files in assets/fonts.
+// Fonts bundled with Paperwall. All are open-license (SIL OFL 1.1 or Apache
+// 2.0); license files sit next to the font files in assets/fonts.
 
-export const FONTS = [
-  { name: 'Inter', slug: 'inter', weights: [400, 700], kind: 'Sans' },
-  { name: 'Poppins', slug: 'poppins', weights: [400, 700], kind: 'Sans' },
-  { name: 'Montserrat', slug: 'montserrat', weights: [400, 700], kind: 'Sans' },
-  { name: 'Space Grotesk', slug: 'space-grotesk', weights: [400, 700], kind: 'Sans' },
-  { name: 'Oswald', slug: 'oswald', weights: [400, 700], kind: 'Condensed' },
-  { name: 'Bebas Neue', slug: 'bebas-neue', weights: [400], kind: 'Display' },
-  { name: 'Archivo Black', slug: 'archivo-black', weights: [400], kind: 'Display' },
-  { name: 'Playfair Display', slug: 'playfair-display', weights: [400, 700], kind: 'Serif' },
-  { name: 'DM Serif Display', slug: 'dm-serif-display', weights: [400], kind: 'Serif' },
-  { name: 'Lora', slug: 'lora', weights: [400, 700], kind: 'Serif' },
-  { name: 'Roboto Slab', slug: 'roboto-slab', weights: [400, 700], kind: 'Slab' },
-  { name: 'Pacifico', slug: 'pacifico', weights: [400], kind: 'Script' },
-  { name: 'Dancing Script', slug: 'dancing-script', weights: [400, 700], kind: 'Script' },
-  { name: 'Caveat', slug: 'caveat', weights: [400, 700], kind: 'Handwriting' },
-];
+import { FONT_CATALOG } from './font-catalog.js';
+
+export const FONTS = FONT_CATALOG;
+
+export const FONT_KINDS = ['Sans', 'Serif', 'Display', 'Script', 'Mono'];
 
 /** Heading + body pairings that look good together. */
 export const FONT_PAIRS = [
@@ -30,6 +19,19 @@ export const FONT_PAIRS = [
   { name: 'Tech', heading: 'Space Grotesk', body: 'Space Grotesk' },
   { name: 'Headline', heading: 'Archivo Black', body: 'Roboto Slab' },
   { name: 'Wedding', heading: 'Dancing Script', body: 'Playfair Display' },
+  { name: 'Elegant', heading: 'Cormorant Garamond', body: 'Raleway' },
+  { name: 'Startup', heading: 'Plus Jakarta Sans', body: 'DM Sans' },
+  { name: 'Playful', heading: 'Fredoka', body: 'Nunito' },
+  { name: 'Magazine', heading: 'Abril Fatface', body: 'Lato' },
+  { name: 'Retro', heading: 'Righteous', body: 'Work Sans' },
+  { name: 'Luxury', heading: 'Cinzel', body: 'Marcellus' },
+  { name: 'Notebook', heading: 'Permanent Marker', body: 'Patrick Hand' },
+  { name: 'Impact', heading: 'Anton', body: 'Barlow' },
+  { name: 'Clean', heading: 'Outfit', body: 'Manrope' },
+  { name: 'Bookish', heading: 'EB Garamond', body: 'Crimson Pro' },
+  { name: 'Calligraphy', heading: 'Great Vibes', body: 'Josefin Sans' },
+  { name: 'Arcade', heading: 'Press Start 2P', body: 'Space Mono' },
+  { name: 'Hindi friendly', heading: 'Mukta', body: 'Hind' },
 ];
 
 export function fontByName(name) {
@@ -45,6 +47,13 @@ export function nearestWeight(name, weight) {
 
 export function fontFile(slug, weight) {
   return `${slug}-${weight}.woff2`;
+}
+
+/** Every file of a family at one weight: the Latin file plus any extra scripts, with their character ranges. */
+export function fontFiles(font, weight) {
+  const files = [{ file: fontFile(font.slug, weight), range: null }];
+  for (const x of font.extra || []) if (x.weight === weight) files.push({ file: x.file, range: x.range });
+  return files;
 }
 
 /** Every (font, weight) file a design uses, so exports can embed just those. */

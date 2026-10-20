@@ -5,14 +5,15 @@ import { h, icon, iconButton, clear, toast, mod } from './ui.js';
 import { Editor } from './editor.js';
 import { Canvas } from './canvas.js';
 import { Inspector, resizeDialog } from './inspector.js';
-import { InsertPanel } from './insert.js';
+import { InsertPanel, forget } from './insert.js';
 import { PageStrip, present } from './pages.js';
 import { bindShortcuts, cheatSheet } from './shortcuts.js';
 import { exportDialog, saveProjectFile, thumbnail, api as exportApi } from './export.js';
 import { renderHome } from './home.js';
-import { loadFonts, registerDesignFonts, clearMeasureCache } from './fonts.js';
+import { loadFonts, registerDesignFonts, ensureDesignFonts, clearMeasureCache } from './fonts.js';
 import * as store from './store.js';
 import { validateDesign } from '../model/doc.js';
+import { fontsUsed } from '../model/fonts.js';
 
 const root = document.getElementById('app');
 let current = null; // { editor, unbind }
@@ -64,6 +65,7 @@ async function closeEditor() {
   if (!current) return;
   const { editor, unbind } = current;
   current = null;
+  editor.closed = true;
   unbind();
   window.paperwall = null;
   await editor.flush();
@@ -105,6 +107,7 @@ async function openEditor(id) {
     return;
   }
   await registerDesignFonts(doc);
+  await ensureDesignFonts(doc);
   const editor = new Editor(doc, {
     onOpenDesign: (newId) => (location.hash = `#/d/${newId}`),
     makeThumb: thumbnail,
@@ -159,6 +162,7 @@ async function openEditor(id) {
   inspector.el.prepend(closeSheet);
   insert.el.querySelector('.insert-panel').prepend(closeSheet.cloneNode(true));
   insert.el.querySelector('.insert-panel .sheet-close').addEventListener('click', () => setSheet('none'));
+  forget(root);
   clear(root);
   root.append(h('div', { class: 'editor' }, top, workspace, strip.el));
   const unbindKeys = bindShortcuts(editor, canvas, { exportDialog: () => exportDialog(editor) });
@@ -169,14 +173,24 @@ async function openEditor(id) {
   inspector.render();
   canvas.zoomToFit();
   canvas.render();
-  // Fonts can finish loading after the first paint; re-measure then.
-  document.fonts.ready.then(() => {
+  // A font can finish loading after the first paint (a slow device, a font
+  // picked from the list). When one this design uses arrives, measure its
+  // text again and redraw. Fonts loading for previews elsewhere are ignored.
+  const onFontsLoaded = (e) => {
+    const used = new Set(fontsUsed(editor.doc).map(({ font, weight }) => `${font.name}|${weight}`));
+    const loaded = new Set((e.fontfaces || []).map((f) => `${f.family.replace(/^["']|["']$/g, '')}|${f.weight}`).filter((k) => used.has(k)));
+    if (!loaded.size) return;
     clearMeasureCache();
+    const families = new Set([...loaded].map((k) => k.split('|')[0]));
+    // A correction to measurements, not an edit: saved, but not an undo step.
+    if (editor.refitAllText((el) => families.has(el.font))) editor.afterChange(true);
     canvas.render();
-  });
+  };
+  document.fonts.addEventListener('loadingdone', onFontsLoaded);
   current = {
     editor,
     unbind: () => {
+      document.fonts.removeEventListener('loadingdone', onFontsLoaded);
       unbindKeys();
       offTop();
       window.removeEventListener('resize', onResize);

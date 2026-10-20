@@ -109,7 +109,8 @@
         { "id": "TXT-17", "title": "Curved text" },
         { "id": "TXT-18", "title": "Text box grows as you type" },
         { "id": "TXT-19", "title": "Ready-made heading and body font pairs" },
-        { "id": "TXT-20", "title": "Use your own font file" }
+        { "id": "TXT-20", "title": "Use your own font file" },
+        { "id": "TXT-21", "title": "90+ open-license font families in a searchable picker, loaded only when used" }
       ]
     },
     {
@@ -154,7 +155,9 @@
         { "id": "ELM-03", "title": "Original decorative stickers" },
         { "id": "ELM-04", "title": "QR code generator" },
         { "id": "ELM-05", "title": "Charts from your numbers" },
-        { "id": "ELM-06", "title": "Tables" }
+        { "id": "ELM-06", "title": "Tables" },
+        { "id": "ELM-07", "title": "1,500+ icons you can search" },
+        { "id": "ELM-08", "title": "150+ stickers and illustrations" }
       ]
     },
     {
@@ -184,7 +187,11 @@
         { "id": "TPL-02", "title": "Search templates" },
         { "id": "TPL-03", "title": "Start a design from a template" },
         { "id": "TPL-04", "title": "Add a template as a new page in your design" },
-        { "id": "TPL-05", "title": "Every template is original and free for any use (CC0)" }
+        { "id": "TPL-05", "title": "Every template is original and free for any use (CC0)" },
+        { "id": "TPL-06", "title": "300+ templates across 30+ categories" },
+        { "id": "TPL-07", "title": "Multi-page templates: decks, calendars, menus, planners" },
+        { "id": "TPL-08", "title": "Every template passes a quality check: no overflow, no broken words, readable contrast" },
+        { "id": "TPL-09", "title": "Filter templates by size" }
       ]
     },
     {
