@@ -134,10 +134,10 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
   const root = h('div', { class: 'presenter', 'data-testid': 'presenter', tabindex: '-1' }, slide, counter,
     h('button', { type: 'button', class: 'presenter-close', 'aria-label': 'Stop presenting', onClick: () => close() }, icon('close')));
   // Videos play along, and with Play the soundtrack too.
-  const videos = new VideoFrames(doc, { hrefFor: canvas.assetHref });
+  const videos = new VideoFrames(doc);
   const tl = timeline(doc, shown);
   // The soundtrack plays with Play (as the panel says), not plain presenting.
-  const sound = autoplay && !only ? soundtrackPlayer(doc, canvas.assetHref) : null;
+  const sound = autoplay && !only ? soundtrackPlayer(doc) : null;
   // The sound starts with the page Play starts on (as in a download of the
   // pages from there); moving to another page moves it along with them.
   let soundFrom = tl.parts[at].start;
@@ -289,17 +289,14 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
 const LIVE_VIDEO = typeof navigator === 'undefined' || !(/AppleWebKit/.test(navigator.userAgent) && !/Chrome\/|Chromium\//.test(navigator.userAgent));
 
 /** The design's soundtrack as something to play from a point, or null if it has none. */
-function soundtrackPlayer(doc, hrefFor) {
+function soundtrackPlayer(doc) {
   const asset = soundtrackOf(doc);
   if (!asset) return null;
   const audio = new Audio();
   let url = '';
   try {
-    // The canvas's copy of the file where it has one (not ours to let go of).
-    const shared = hrefFor?.(doc.audio.assetId) || '';
-    url = shared || blobUrlFor(asset.dataUrl);
+    url = blobUrlFor(asset.dataUrl); // let go of when presenting ends
     audio.src = url;
-    if (shared) url = '';
   } catch {
     /* a damaged sound: the slides play in silence */
   }

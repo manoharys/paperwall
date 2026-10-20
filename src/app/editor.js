@@ -462,21 +462,15 @@ export class Editor {
 
   /** A picture, video or sound from this device, kept in Uploads too. */
   async importMediaFile(file) {
-    let kind = mediaKind(file);
+    const kind = mediaKind(file);
     if (kind === 'image') return this.importImageFile(file);
     if (!kind) throw new Error(`${file.name} isn't a picture, video or sound`);
     checkSize(file, kind);
-    let [dataUrl, info] = await Promise.all([readFileAsDataUrl(file), kind === 'video' ? videoInfo(file) : audioInfo(file)]);
-    // A "video" with no picture this browser can show: a QuickTime movie is
-    // a video it can't play (an iPhone's HEVC, say); anything else is taken as
-    // a sound (music saved as .webm or .mp4), and said so.
-    if (info.sound) {
-      if (file.type === 'video/quicktime') throw new Error(`${file.name} can't be played in this browser. Try saving it as MP4 (H.264) or WebM.`);
-      if (file.size > 25e6) throw new Error(`This browser can't show a picture in ${file.name}, and as a sound it's over the 25 MB limit.`);
-      kind = 'audio';
-      info = { duration: info.duration };
-      toast(`This browser shows no picture in ${file.name}, so it's used as a sound.`);
-    }
+    const [dataUrl, info] = await Promise.all([readFileAsDataUrl(file), kind === 'video' ? videoInfo(file) : audioInfo(file)]);
+    // A "video" with no picture this browser can show: either a video it
+    // can't play (an iPhone's HEVC, say) or music in a video file. There's no
+    // telling which, so neither is guessed (a guess could replace the soundtrack).
+    if (info.noPicture) throw new Error(`This browser can't show a picture in ${file.name}. A video plays here as MP4 (H.264) or WebM; a sound as MP3, M4A, OGG or WAV.`);
     const upload = { id: uid('u'), name: file.name, mime: file.type, dataUrl, kind, ...info, addedAt: Date.now() };
     // It's used either way; Uploads just can't keep a copy when storage is full.
     await store.saveUpload(upload).catch(() => toast(`${file.name} couldn't be kept in Uploads: this browser's storage is full.`, 'error'));

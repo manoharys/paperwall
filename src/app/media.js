@@ -69,10 +69,12 @@ export async function videoInfo(file) {
       const known = once(v, 'durationchange', 'error', 5000).catch(() => null);
       v.currentTime = 1e101;
       await known;
+      // That trip to the end finishes before the poster's seek starts.
+      if (v.seeking) await once(v, 'seeked', 'error', 5000).catch(() => null);
     }
     const duration = Number.isFinite(v.duration) ? v.duration : 0;
-    // `sound`: a file with no picture at all (music saved as .webm or .mp4).
-    if (!v.videoWidth || !v.videoHeight) return { sound: true, duration };
+    // No picture this browser can show (a video it can't decode, or sound only).
+    if (!v.videoWidth || !v.videoHeight) return { noPicture: true, duration };
     v.currentTime = Math.min(0.2, duration / 2 || 0);
     await once(v, 'seeked').catch(() => null);
     const s = Math.min(1, 640 / Math.max(v.videoWidth, v.videoHeight, 1));
@@ -116,10 +118,8 @@ export function blobUrlFor(dataUrl) {
  * data: URL of the picture, sized for the element.
  */
 export class VideoFrames {
-  /** `hrefFor(assetId)`: a blob: URL kept elsewhere (the canvas's), used instead of making another. */
-  constructor(doc, { hrefFor = null } = {}) {
+  constructor(doc) {
     this.doc = doc;
-    this.hrefFor = hrefFor;
     // One player per element (two elements may show the same file from
     // different points): element id → { video, url, ready (resolves to whether it loaded) }.
     this.players = new Map();
@@ -132,8 +132,7 @@ export class VideoFrames {
       const asset = this.doc.assets[assetId];
       let url = '';
       try {
-        url = asset ? this.hrefFor?.(assetId) || blobUrlFor(asset.dataUrl) : '';
-        if (url && url === this.hrefFor?.(assetId)) this.borrowed = (this.borrowed || new Set()).add(url);
+        url = asset ? blobUrlFor(asset.dataUrl) : '';
       } catch {
         /* a damaged file: its poster shows */
       }
@@ -256,7 +255,7 @@ export class VideoFrames {
       video.load();
     }
     this.players.clear();
-    for (const url of this.urls.values()) if (url && !this.borrowed?.has(url)) URL.revokeObjectURL(url);
+    for (const url of this.urls.values()) if (url) URL.revokeObjectURL(url);
     this.urls.clear();
   }
 }
