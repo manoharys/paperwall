@@ -28,7 +28,7 @@ export function historyDialog(editor) {
       // Previews load as they scroll into view, each with its own images.
       lazily(img, () => store.versionDoc(v).then(async (doc) => {
         await ensureDesignFonts(doc);
-        img.innerHTML = renderPage(doc, 0, { measure, noSize: true, idPrefix: `v${v.at}` });
+        img.innerHTML = renderPage(doc, 0, { measure, noSize: true, placeholders: true, idPrefix: `v${v.at}` });
       }).catch(() => img.classList.add('broken')));
       list.append(h('li', { class: 'version', 'data-testid': 'version' },
         img,

@@ -36,7 +36,7 @@ export class PageStrip {
       const name = pageName(p, i);
       const item = h('li', { class: `${i === ed.page ? 'on' : ''}${p.hidden ? ' hidden-page' : ''}`, draggable: 'true', 'data-testid': 'page-thumb' },
         h('button', { type: 'button', class: 'page-thumb', title: p.hidden ? `${name} (hidden)` : name, 'aria-label': p.hidden ? `${name} (hidden)` : name, 'aria-current': String(i === ed.page), onClick: () => ed.setPage(i) },
-          h('span', { class: 'page-img', style: { aspectRatio: `${ed.doc.width} / ${ed.doc.height}` }, html: renderPage(ed.doc, i, { measure, noSize: true, idPrefix: `ps${i}`, assetHref: this.canvas.assetHref }) }),
+          h('span', { class: 'page-img', style: { aspectRatio: `${ed.doc.width} / ${ed.doc.height}` }, html: renderPage(ed.doc, i, { measure, noSize: true, placeholders: true, idPrefix: `ps${i}`, assetHref: this.canvas.assetHref }) }),
           h('span', { class: 'page-no' }, String(i + 1)),
           p.hidden ? h('span', { class: 'page-hidden-mark', 'aria-hidden': 'true' }, icon('eyeOff', 14)) : null),
         p.title ? h('span', { class: 'page-title', 'data-testid': 'page-title-label' }, p.title) : null);
@@ -73,7 +73,7 @@ export function pageGrid(editor, canvas) {
         h('button', { type: 'button', class: 'pg-open', 'aria-label': `Open ${pageName(p, i)}`, onClick: () => {
           editor.setPage(i);
           d.close();
-        } }, h('span', { class: 'page-img', style: { aspectRatio: `${editor.doc.width} / ${editor.doc.height}` }, html: renderPage(editor.doc, i, { measure, noSize: true, idPrefix: `pg${i}`, assetHref: canvas.assetHref }) })),
+        } }, h('span', { class: 'page-img', style: { aspectRatio: `${editor.doc.width} / ${editor.doc.height}` }, html: renderPage(editor.doc, i, { measure, noSize: true, placeholders: true, idPrefix: `pg${i}`, assetHref: canvas.assetHref }) })),
         h('div', { class: 'pg-meta' },
           h('b', null, String(i + 1)),
           h('span', null, p.title || ''),
@@ -99,7 +99,8 @@ export function present(editor, canvas) {
   const doc = editor.doc;
   const shown = visiblePages(doc);
   if (!shown.length) return toast('Every page is hidden. Show a page to present it.');
-  let at = Math.max(0, shown.indexOf(editor.page));
+  // Start on the page in view, or the next visible one after it.
+  let at = Math.max(0, shown.findIndex((k) => k >= editor.page));
   const slide = h('div', { class: 'slide' });
   const counter = h('div', { class: 'slide-count' });
   const root = h('div', { class: 'presenter', 'data-testid': 'presenter', tabindex: '-1' }, slide, counter,

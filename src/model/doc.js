@@ -349,7 +349,7 @@ export function validateDesign(doc) {
     if (el.type === 'draw' || el.type === 'connector') el.points = (Array.isArray(el.points) ? el.points : []).filter((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite));
     if (el.type === 'connector') {
       if (el.points.length !== 2) el.points = [[0, 0], [1, 1]];
-      for (const k of ['start', 'end']) el[k] = { id: typeof el[k]?.id === 'string' ? el[k].id : null };
+      for (const k of ['start', 'end']) el[k] = { id: typeof el[k]?.id === 'string' ? el[k].id : null, side: ['l', 'r', 't', 'b'].includes(el[k]?.side) ? el[k].side : undefined };
     }
     return el;
   });

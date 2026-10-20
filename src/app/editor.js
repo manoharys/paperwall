@@ -106,7 +106,8 @@ export class Editor {
       await store.saveDesign(this.doc);
       // Every few minutes of work, keep a version to go back to.
       // Not awaited: saving the design itself shouldn't wait on history.
-      if (Date.now() - (this.versionAt || 0) > VERSION_EVERY) this.saveVersion();
+      // (versionAt is set once we know whether the design has versions yet.)
+      if (this.changedSinceVersion && this.versionAt && Date.now() - this.versionAt > VERSION_EVERY) this.saveVersion();
     } catch (e) {
       toast(`Couldn't save on this device: ${e.message}`, 'error');
     }

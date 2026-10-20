@@ -5,9 +5,20 @@ function escapeRe(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Older browsers (Safari before 16.4) can't look behind; they get \b, which
+// only knows Latin letters but still works.
+const LOOKBEHIND = (() => {
+  try {
+    return new RegExp('(?<!a)b').test('b');
+  } catch {
+    return false;
+  }
+})();
+
 function matcher(query, { matchCase = false, wholeWord = false } = {}) {
   if (!query) return null;
   const body = escapeRe(query);
+  if (wholeWord && !LOOKBEHIND) return new RegExp(`\\b${body}\\b`, `g${matchCase ? '' : 'i'}u`);
   return new RegExp(wholeWord ? `(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])` : body, `g${matchCase ? '' : 'i'}u`);
 }
 

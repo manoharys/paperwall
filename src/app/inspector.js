@@ -7,7 +7,7 @@ import { FONTS, FONT_KINDS } from '../model/fonts.js';
 import { SHAPES, FRAME_MASKS, createText, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, parseChartData, chartDataText, parseTable, tableText } from '../model/doc.js';
 import { collectColors, cropZoom } from '../model/commands.js';
 import { renderElementOnly, TEXT_EFFECTS } from '../model/render.js';
-import { measure, addCustomFont, customFontNames, ensureFont } from './fonts.js';
+import { measure, addCustomFont, customFontNames, ensureFont, fontLoaded } from './fonts.js';
 import { iconById, stickerById } from '../model/graphics.js';
 import { getSetting } from './store.js';
 
@@ -20,9 +20,11 @@ const DUOTONES = [
 
 // Effect previews depend only on the font, so each is drawn once.
 const previews = new Map();
-function cached(key, make) {
-  if (!previews.has(key)) previews.set(key, make());
-  return previews.get(key);
+function cached(key, keep, make) {
+  if (previews.has(key)) return previews.get(key);
+  const v = make();
+  if (keep) previews.set(key, v);
+  return v;
 }
 
 const EFFECT_NAMES = { none: 'None', lift: 'Lift', hollow: 'Hollow', splice: 'Splice', echo: 'Echo', glitch: 'Glitch', glow: 'Glow', neon: 'Neon' };
@@ -303,7 +305,8 @@ export class Inspector {
     const fx = el.effect || { type: 'none' };
     // Start from the effect as it is now: the panel isn't redrawn while a slider is in use.
     const set = (patch, live) => this.up({ effect: { ...(this.ed.single?.effect || fx), ...patch } }, live ? 'effect' : null);
-    const preview = (type) => cached(`${el.font}|${type}`, () => renderElementOnly(this.ed.doc, createText({
+    // Kept only once the font has loaded, so a preview never sticks with stand-in letters.
+    const preview = (type) => cached(`${el.font}|${type}`, fontLoaded(el.font, 800), () => renderElementOnly(this.ed.doc, createText({
       text: 'Ag', w: 64, h: 44, size: 32, weight: 800, font: el.font, color: type === 'neon' ? '#ff2d95' : '#1a1a2e', align: 'center', lineHeight: 1.2,
       effect: { type, color: type === 'splice' ? '#ffb703' : type === 'glow' ? '#ffb703' : undefined },
     }), { measure, idPrefix: `fx-${type}` }));

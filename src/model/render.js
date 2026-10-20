@@ -24,6 +24,8 @@ function makeCtx(doc, opts) {
     measure: opts.measure || approxMeasure,
     href: opts.assetHref || ((assetId) => doc.assets[assetId]?.dataUrl || ''),
     editor: !!opts.editor,
+    // Empty-frame placeholders: while editing and in page previews, never in downloads.
+    placeholders: !!(opts.editor || opts.placeholders),
     skip: opts.skip || null,
   };
 }
@@ -146,7 +148,7 @@ function renderImage(ctx, el) {
   if (el.assetId && !href) return `<path d="${outline}" fill="#e5e5ef"/>`;
   if (!href) {
     // An empty frame shows a soft placeholder while editing; downloads leave it out.
-    if (!ctx.editor) return '';
+    if (!ctx.placeholders) return '';
     const s = Math.min(el.w, el.h) * 0.22;
     const ox = (el.w - s) / 2;
     const oy = (el.h - s) / 2;
@@ -294,7 +296,7 @@ function textEffect(ctx, el, draw) {
     case 'glow':
       return `<g filter="url(#${glowFilter(s * 0.12, 1)})">${draw(plain)}</g>`;
     case 'neon':
-      return `<g filter="url(#${glowFilter(s * 0.2, 2)})">${draw(` fill="${esc(lighten(fx.color || el.color, 0.65))}"`)}</g>`;
+      return `<g filter="url(#${glowFilter(s * 0.2, 2)})">${draw(` fill="${esc(lighten(fx.color || el.color, 0.65))}"${outline}`)}</g>`;
     default:
       return draw(plain);
   }

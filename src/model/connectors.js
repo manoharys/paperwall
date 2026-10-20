@@ -122,8 +122,9 @@ export function updateConnectors(page, { refit = true } = {}) {
     const [a0, b0] = endsOf(el).map(([x, y]) => [x + ox, y + oy]);
     const sTarget = el.start?.id ? byId.get(el.start.id) : null;
     const eTarget = el.end?.id ? byId.get(el.end.id) : null;
-    if (el.start?.id && !sTarget) el.start = { id: null };
-    if (el.end?.id && !eTarget) el.end = { id: null };
+    // A deleted target frees the end where it was, keeping the side it left from.
+    if (el.start?.id && !sTarget) el.start = { id: null, side: el.start.side };
+    if (el.end?.id && !eTarget) el.end = { id: null, side: el.end.side };
     if (!sTarget && !eTarget) return moved;
     const a = sTarget ? anchorOn(sTarget, eTarget ? center(eTarget) : b0) : null;
     const b = eTarget ? anchorOn(eTarget, sTarget ? center(sTarget) : a0) : null;
