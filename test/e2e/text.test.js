@@ -60,9 +60,13 @@ test('[TXT-03] text wraps inside its box', async () => {
 
 test('[TXT-04] [TXT-05] choose a bundled font and a size', async () => {
   const { page, context, t } = await heading();
-  const fonts = await page.$$eval('[data-testid="font-select"] option', (o) => o.map((x) => x.value));
-  assert.ok(fonts.length >= 14);
-  await page.selectOption('[data-testid="font-select"]', 'Playfair Display');
+  await page.click('[data-testid="font-select"]');
+  await page.waitForSelector('[data-testid="font-popover"]');
+  assert.ok((await page.locator('.font-item').count()) >= 90, 'about 90 font families');
+  await page.fill('[data-testid="font-search"]', 'playfair');
+  assert.equal(await page.locator('.font-item').count(), 1);
+  await page.click('[data-testid="font-option-Playfair Display"]');
+  await page.waitForFunction(() => window.paperwall.editor.single?.font === 'Playfair Display');
   await page.fill('[data-testid="font-size"]', '120');
   await page.press('[data-testid="font-size"]', 'Enter');
   const e = await el(page);
@@ -71,6 +75,9 @@ test('[TXT-04] [TXT-05] choose a bundled font and a size', async () => {
   assert.match(await dom(page, t.id).locator('text').getAttribute('font-family'), /Playfair Display/);
   const loaded = await page.evaluate(() => document.fonts.check('700 40px "Playfair Display"'));
   assert.equal(loaded, true, 'the font file is loaded, not a fallback');
+  // Fonts download only when used: a font nobody picked is still not loaded.
+  const untouched = await page.evaluate(() => [...document.fonts].find((f) => f.family === 'Monoton')?.status);
+  assert.equal(untouched, 'unloaded');
   await context.close();
 });
 

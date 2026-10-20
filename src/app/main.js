@@ -10,7 +10,7 @@ import { PageStrip, present } from './pages.js';
 import { bindShortcuts, cheatSheet } from './shortcuts.js';
 import { exportDialog, saveProjectFile, thumbnail, api as exportApi } from './export.js';
 import { renderHome } from './home.js';
-import { loadFonts, registerDesignFonts, clearMeasureCache } from './fonts.js';
+import { loadFonts, registerDesignFonts, ensureDesignFonts, clearMeasureCache } from './fonts.js';
 import * as store from './store.js';
 import { validateDesign } from '../model/doc.js';
 
@@ -105,6 +105,7 @@ async function openEditor(id) {
     return;
   }
   await registerDesignFonts(doc);
+  await ensureDesignFonts(doc);
   const editor = new Editor(doc, {
     onOpenDesign: (newId) => (location.hash = `#/d/${newId}`),
     makeThumb: thumbnail,
@@ -169,14 +170,18 @@ async function openEditor(id) {
   inspector.render();
   canvas.zoomToFit();
   canvas.render();
-  // Fonts can finish loading after the first paint; re-measure then.
-  document.fonts.ready.then(() => {
+  // A font can finish loading after the first paint (a slow device, a font
+  // picked from the list); measure again and redraw when it does.
+  const onFontsLoaded = () => {
     clearMeasureCache();
+    editor.refitAllText();
     canvas.render();
-  });
+  };
+  document.fonts.addEventListener('loadingdone', onFontsLoaded);
   current = {
     editor,
     unbind: () => {
+      document.fonts.removeEventListener('loadingdone', onFontsLoaded);
       unbindKeys();
       offTop();
       window.removeEventListener('resize', onResize);

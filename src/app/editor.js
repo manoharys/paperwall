@@ -10,7 +10,7 @@ import {
 import { fitHeight } from '../model/text-layout.js';
 import { curveGeometry } from '../model/render.js';
 import { unionBounds } from '../model/geometry.js';
-import { measure } from './fonts.js';
+import { measure, ensureDesignFonts, ensureFont } from './fonts.js';
 import { removePlainBackground } from '../model/bgremove.js';
 import { readFileAsDataUrl, loadImage, toast, debounce } from './ui.js';
 import * as store from './store.js';
@@ -282,6 +282,13 @@ export class Editor {
 
   // ---------- editing ----------
 
+  /** Switch the selected text to another font, once it has loaded. */
+  async setFont(font) {
+    const weights = new Set(this.selected.map((el) => el.weight || 400));
+    await Promise.all([...weights].map((w) => ensureFont(font, w)));
+    this.update({ font });
+  }
+
   update(props, key = null) {
     const ids = this.selection;
     if (!ids.length) return;
@@ -474,7 +481,8 @@ export class Editor {
     this.change(() => cmd.setBackground(this.doc, this.page, bg), { key: key ? `bg:${key}:${this.page}` : null });
   }
 
-  addTemplatePage(templateDoc) {
+  async addTemplatePage(templateDoc) {
+    await ensureDesignFonts(templateDoc);
     const resized = cmd.resizeDesign(templateDoc, this.doc.width, this.doc.height);
     const page = clone(resized.pages[0]);
     page.id = uid('p');
@@ -506,7 +514,8 @@ export class Editor {
     return copy;
   }
 
-  applyBrand(brand) {
+  async applyBrand(brand) {
+    await Promise.all([brand.headingFont, brand.bodyFont].filter(Boolean).flatMap((f) => [ensureFont(f, 400), ensureFont(f, 700)]));
     this.change(() => {
       cmd.applyBrand(this.doc, brand);
       this.refitAllText();

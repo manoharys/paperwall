@@ -8,7 +8,7 @@ import { renderPage, renderElementOnly } from '../model/render.js';
 import { createShape, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES } from '../model/doc.js';
 import { collectColors } from '../model/commands.js';
 import { TEMPLATES, TEMPLATE_CATEGORIES, templateDoc } from '../templates/index.js';
-import { measure } from './fonts.js';
+import { measure, ensureFont, ensureDesignFonts } from './fonts.js';
 import * as store from './store.js';
 
 const TABS = [
@@ -130,10 +130,10 @@ export class InsertPanel {
     ];
   }
 
-  useTemplate(t) {
+  async useTemplate(t) {
     const ed = this.ed;
     const blank = ed.doc.pages.length === 1 && !ed.pageData.elements.length;
-    ed.addTemplatePage(templateDoc(t));
+    await ed.addTemplatePage(templateDoc(t));
     if (blank) {
       ed.change(() => ed.doc.pages.splice(0, 1));
       ed.page = -1;
@@ -156,8 +156,9 @@ export class InsertPanel {
     ];
   }
 
-  addPair(pair) {
+  async addPair(pair) {
     const ed = this.ed;
+    await Promise.all([ensureFont(pair.heading, 700), ensureFont(pair.body, 400)]);
     const k = Math.max(0.3, Math.min(ed.doc.width, ed.doc.height) / 1080);
     const w = Math.round(ed.doc.width * 0.7);
     const head = createText({ text: pair.name === 'Wedding' ? 'Save the date' : 'Make it yours', font: pair.heading, size: Math.round(88 * k), weight: 700, align: 'center', w });
@@ -328,8 +329,8 @@ export class InsertPanel {
         section('Brand fonts',
           selectField({ label: 'Headings', value: brand.headingFont || '', options: fontOpts, testid: 'brand-heading-font', onChange: (v) => save({ headingFont: v || null }) }),
           selectField({ label: 'Body text', value: brand.bodyFont || '', options: fontOpts, testid: 'brand-body-font', onChange: (v) => save({ bodyFont: v || null }) })),
-        h('button', { type: 'button', class: 'btn primary wide', 'data-testid': 'brand-apply', disabled: !(brand.colors?.length || brand.headingFont || brand.bodyFont), onClick: () => {
-          ed.applyBrand(brand);
+        h('button', { type: 'button', class: 'btn primary wide', 'data-testid': 'brand-apply', disabled: !(brand.colors?.length || brand.headingFont || brand.bodyFont), onClick: async () => {
+          await ed.applyBrand(brand);
           toast('Brand kit applied. Undo if you don\'t like it.');
         } }, 'Apply to this design'),
         h('p', { class: 'hint' }, 'Your brand kit is saved on this device and works in every design.'));
@@ -339,10 +340,35 @@ export class InsertPanel {
   }
 }
 
+/** A template preview. It's drawn when it scrolls into view, once its fonts have loaded. */
 export function templateCard(t, onClick) {
   const doc = templateDoc(t);
-  const svg = renderPage(doc, 0, { measure, noSize: true, idPrefix: `tp-${t.id}` });
+  const img = h('span', { class: 'tpl-img', style: { aspectRatio: `${doc.width} / ${doc.height}` } });
+  const draw = async () => {
+    await ensureDesignFonts(doc);
+    img.innerHTML = renderPage(doc, 0, { measure, noSize: true, idPrefix: `tp-${t.id}` });
+  };
+  lazily(img, draw);
   return h('button', { type: 'button', class: 'tpl', title: t.name, 'data-testid': `template-${t.id}`, onClick },
-    h('span', { class: 'tpl-img', style: { aspectRatio: `${doc.width} / ${doc.height}` }, html: svg }),
+    img,
     h('span', { class: 'tpl-name' }, t.name));
+}
+
+const pending = new WeakMap();
+const observer = typeof IntersectionObserver !== 'undefined'
+  ? new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      observer.unobserve(e.target);
+      pending.get(e.target)?.();
+      pending.delete(e.target);
+    }
+  }, { rootMargin: '400px' })
+  : null;
+
+/** Run fn when el comes near the screen (right away where that can't be observed). */
+export function lazily(el, fn) {
+  if (!observer) return void fn();
+  pending.set(el, fn);
+  observer.observe(el);
 }
