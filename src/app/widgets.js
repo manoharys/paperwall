@@ -303,6 +303,7 @@ export function gradientEditor({ label, value, onChange, getContext, testid, cur
     emit({ stops: tagged.map((t) => t.s) }, live);
   };
   const addStop = () => {
+    const stops = nowStops();
     // Put the new color in the middle of the widest gap.
     let at = 0;
     for (let i = 1; i < stops.length - 1; i++) if (stops[i + 1].offset - stops[i].offset > stops[at + 1].offset - stops[at].offset) at = i;

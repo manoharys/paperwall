@@ -267,7 +267,7 @@ export class Editor {
    */
   async addImage(upload, { at } = {}) {
     const frame = this.single;
-    if (!at && frame?.type === 'image' && !frame.assetId) return this.fillFrame(frame.id, upload);
+    if (!at && frame?.type === 'image' && !frame.assetId && !frame.locked) return this.fillFrame(frame.id, upload);
     const assetId = addAsset(this.doc, upload);
     const maxW = this.doc.width * 0.6;
     const maxH = this.doc.height * 0.6;
@@ -301,7 +301,7 @@ export class Editor {
     // Look on every page: the page may have changed while a photo was being picked.
     const page = this.doc.pages.find((p) => cmd.findElement(p, id));
     const el = page && cmd.findElement(page, id);
-    if (!el || el.type !== 'image') return null;
+    if (!el || el.type !== 'image' || el.locked) return null;
     this.change(() => {
       el.assetId = addAsset(this.doc, upload);
       const frame = el.w / el.h;

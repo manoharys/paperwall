@@ -79,7 +79,11 @@ export class InsertPanel {
     this.el = h('div', { class: 'insert' }, this.rail, h('div', { class: 'insert-panel', 'data-testid': 'insert-panel' }, this.body));
     this.pen = { tool: 'pen', color: '#1a1a2e', size: DRAW_TOOLS.pen.strokeWidth };
     editor.on((what) => {
-      if (what === 'stop-drawing') this.open('templates');
+      // Back to Templates without reopening the panel (on phones it may have just been hidden).
+      if (what === 'stop-drawing') {
+        this.tab = 'templates';
+        this.render();
+      }
     });
     this.render();
   }
@@ -253,7 +257,7 @@ export class InsertPanel {
           const el = createFrame(fr.mask, { ...fr.props });
           const k = 100 / Math.max(el.w, el.h);
           Object.assign(el, { w: el.w * k, h: el.h * k, radius: (el.radius || 0) * k });
-          return h('button', { type: 'button', class: 'thumb', title: fr.label, 'aria-label': fr.label, 'data-testid': `frame-${fr.label}`, onClick: () => ed.addFrame(fr.mask, fr.props), html: renderElementOnly(PREVIEW_DOC, el) });
+          return h('button', { type: 'button', class: 'thumb', title: fr.label, 'aria-label': fr.label, 'data-testid': `frame-${fr.label}`, onClick: () => ed.addFrame(fr.mask, fr.props), html: renderElementOnly(PREVIEW_DOC, el, { editor: true }) });
         }))),
       section('Photo grids', h('div', { class: 'thumb-grid', 'data-testid': 'photo-grid-list' }, GRIDS.map((g) => h('button', {
         type: 'button', class: 'thumb', title: g.name, 'aria-label': g.name, 'data-testid': `grid-${g.id}`, onClick: () => ed.addGrid(g),

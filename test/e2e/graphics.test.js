@@ -496,6 +496,7 @@ test('[IMG-14] photo frames: drop a photo into a shape', async () => {
   const { page, context } = await newDesign('square');
   await openTab(page, 'shapes');
   assert.ok((await page.locator('[data-testid="frame-grid"] .thumb').count()) >= 8);
+  assert.ok((await page.locator('[data-testid="frame-Heart frame"] svg path').count()) >= 1, 'tiles show their shape');
   await page.click('[data-testid="frame-Heart frame"]');
   let frame = await last(page);
   assert.equal(frame.type, 'image');

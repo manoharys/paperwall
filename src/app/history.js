@@ -1,6 +1,6 @@
 // Version history: copies of this design kept on this device while you work.
 
-import { h, dialog, clear, toast, lazily } from './ui.js';
+import { h, dialog, clear, toast, lazily, forget } from './ui.js';
 import { renderPage } from '../model/render.js';
 import { measure, ensureDesignFonts } from './fonts.js';
 import * as store from './store.js';
@@ -20,6 +20,7 @@ export function historyDialog(editor) {
   const list = h('ol', { class: 'versions', 'data-testid': 'versions' });
   const fill = async () => {
     const rows = await store.listVersions(editor.doc.id);
+    forget(list);
     clear(list);
     if (!rows.length) list.append(h('p', { class: 'empty-note' }, 'No versions yet. One is kept every few minutes while you work, and whenever you leave a design you changed.'));
     for (const v of rows) {
@@ -50,7 +51,7 @@ export function historyDialog(editor) {
       await editor.saveVersion('Saved by you');
       fill();
     } }, 'Save a version now'),
-    list), { wide: true, testid: 'history-dialog' });
+    list), { wide: true, testid: 'history-dialog', onClose: () => forget(list) });
   fill();
   return d;
 }

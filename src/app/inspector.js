@@ -318,7 +318,11 @@ export class Inspector {
         onClick: () => this.up({ effect: type === 'none' ? null : { type, color: fx.color, offset: fx.offset, thickness: fx.thickness } }),
       }, h('span', { class: 'fx-img', html: preview(type) }), h('small', null, EFFECT_NAMES[type])))),
       fx.type !== 'none' ? h('div', { class: 'sub' },
-        uses.color ? h('div', { class: 'field inline' }, h('span', null, 'Effect color'), colorButton({ label: 'Effect color', testid: 'effect-color', value: fx.color || el.color, getContext: this.colorContext, onChange: (c, l) => set({ color: c }, l) })) : null,
+        uses.color ? h('div', { class: 'field inline' },
+          h('span', null, fx.type === 'glitch' ? 'Colors' : 'Effect color'),
+          // Show the colors the effect actually draws with.
+          colorButton({ label: 'Effect color', testid: 'effect-color', value: fx.color || (fx.type === 'glitch' ? '#00e5ff' : el.color), getContext: this.colorContext, onChange: (c, l) => set({ color: c }, l) }),
+          fx.type === 'glitch' ? colorButton({ label: 'Second effect color', testid: 'effect-color-2', value: fx.color2 || '#ff2d95', getContext: this.colorContext, onChange: (c, l) => set({ color2: c }, l) }) : null) : null,
         uses.offset ? slider({ label: 'Offset', value: Math.round((fx.offset ?? 0.08) * 100), min: 0, max: 40, testid: 'effect-offset', onChange: (v, l) => set({ offset: v / 100 }, l) }) : null,
         uses.thickness ? slider({ label: 'Thickness', value: Math.round((fx.thickness ?? 0.035) * 1000), min: 5, max: 120, testid: 'effect-thickness', onChange: (v, l) => set({ thickness: v / 1000 }, l) }) : null) : null);
   }

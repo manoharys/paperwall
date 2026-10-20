@@ -48,6 +48,7 @@ export function findDialog(editor) {
   };
   const replaceAll = () => {
     let count = 0;
+    if (!findText(editor.doc, find.value, opts).length) return toast('Nothing to replace.');
     editor.change(() => {
       const r = replaceText(editor.doc, find.value, repl.value, opts);
       count = r.count;

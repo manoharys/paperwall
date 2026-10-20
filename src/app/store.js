@@ -177,14 +177,48 @@ async function writeVersion(doc, { label = '' } = {}) {
   ]);
   const keys = await keysIn(`${doc.id}|v|`);
   const drop = keys.slice(0, Math.max(0, keys.length - MAX_VERSIONS));
-  if (drop.length) {
-    // Old versions, and images no kept version uses, go in one transaction too.
-    const kept = new Set(keys.slice(drop.length));
-    const used = new Set((await valuesIn(`${doc.id}|v|`)).filter((v) => kept.has(v.key)).flatMap((v) => v.assetIds || []));
-    const orphans = (await keysIn(`${doc.id}|a|`)).filter((k) => !used.has(k.slice(`${doc.id}|a|`.length)));
-    await batch('versions', [...drop.flatMap((k) => [[k, undefined], [k.replace('|v|', '|d|'), undefined]]), ...orphans.map((k) => [k, undefined])]);
-  }
+  if (drop.length) await prune(doc.id, drop);
   return vKey(doc.id, at);
+}
+
+/**
+ * Drop old versions, then images no remaining version uses. It all happens
+ * in one transaction, so another tab can't add a version (and its images)
+ * between deciding what's unused and deleting it.
+ */
+async function prune(designId, drop) {
+  const [vlo, vhi] = range(`${designId}|v|`);
+  const [alo, ahi] = range(`${designId}|a|`);
+  const db = await open();
+  if (!db) {
+    const m = memory.versions;
+    for (const k of drop) {
+      m.delete(k);
+      m.delete(k.replace('|v|', '|d|'));
+    }
+    const used = new Set([...m.entries()].filter(([k]) => k >= vlo && k <= vhi).flatMap(([, v]) => v.assetIds || []));
+    for (const k of [...m.keys()]) if (k >= alo && k <= ahi && !used.has(k.slice(alo.length))) m.delete(k);
+    return;
+  }
+  await new Promise((resolve, reject) => {
+    const t = db.transaction('versions', 'readwrite');
+    const s = t.objectStore('versions');
+    for (const k of drop) {
+      s.delete(k);
+      s.delete(k.replace('|v|', '|d|'));
+    }
+    const kept = s.getAll(IDBKeyRange.bound(vlo, vhi));
+    kept.onsuccess = () => {
+      const used = new Set(kept.result.flatMap((v) => v.assetIds || []));
+      const images = s.getAllKeys(IDBKeyRange.bound(alo, ahi));
+      images.onsuccess = () => {
+        for (const k of images.result) if (!used.has(k.slice(alo.length))) s.delete(k);
+      };
+    };
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error || new Error('Storage is full'));
+  });
 }
 
 /** Whether a design has any versions yet (reads keys only). */
