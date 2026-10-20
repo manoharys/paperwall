@@ -46,10 +46,13 @@ function* textSlots(doc) {
         if (el.hidden || el.locked || groups.some((g) => g.hidden || g.locked)) continue;
         const slot = { page, el, owner, groups };
         if (el.type === 'text') yield { ...slot, get: () => el.text, set: (v) => (el.text = v) };
+        // Tables and charts from older or hand-made files may lack rows or data.
         if (el.type === 'table') {
-          for (const row of el.rows) for (let c = 0; c < row.length; c++) yield { ...slot, get: () => row[c], set: (v) => (row[c] = v) };
+          for (const row of Array.isArray(el.rows) ? el.rows : []) {
+            if (Array.isArray(row)) for (let c = 0; c < row.length; c++) yield { ...slot, get: () => row[c], set: (v) => (row[c] = v) };
+          }
         }
-        if (el.type === 'chart') for (const d of el.data) yield { ...slot, get: () => d.label, set: (v) => (d.label = v) };
+        if (el.type === 'chart') for (const d of Array.isArray(el.data) ? el.data : []) if (d) yield { ...slot, get: () => d.label, set: (v) => (d.label = v) };
         if (el.type === 'group') yield* visit(el.children, [...groups, el]);
       }
     };

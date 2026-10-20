@@ -9,7 +9,7 @@ import {
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
 import { curveGeometry } from '../model/render.js';
-import { unionBounds, pointInBox, rotatePoint, boxCenter, refitGroup } from '../model/geometry.js';
+import { unionBounds, pointInBox, toLocal, refitGroup } from '../model/geometry.js';
 import { gridBoxes } from '../model/grids.js';
 import { createConnector, updateConnectors, connectorHit } from '../model/connectors.js';
 import { gridLines, marginSize } from '../model/view.js';
@@ -67,14 +67,9 @@ function inMask(el, p) {
   if (!el.mask || el.mask === 'none' || el.mask === 'rect') return true;
   maskCtx ||= document.createElement('canvas').getContext('2d');
   if (!maskCtx || typeof Path2D === 'undefined') return true;
-  // Into the frame's own box: undo its turn, then its mirroring.
-  const c = boxCenter(el);
-  const q = rotatePoint(p.x, p.y, c.x, c.y, -(el.rotation || 0));
-  let x = q.x - el.x;
-  let y = q.y - el.y;
-  if (el.flipX) x = el.w - x;
-  if (el.flipY) y = el.h - y;
-  return maskCtx.isPointInPath(new Path2D(maskPath(el)), x, y);
+  // Into the frame's own box.
+  const q = toLocal(el, p);
+  return maskCtx.isPointInPath(new Path2D(maskPath(el)), q.x - el.x, q.y - el.y);
 }
 
 let clipboard = null; // shared between designs, like a real clipboard
@@ -129,10 +124,10 @@ export class Editor {
 
   // ---------- changes ----------
 
-  /** Run a change as one undo step. `key` merges rapid repeats (typing, nudging). */
   /**
-   * Make a change as one undo step. `unchanged(result)` says when fn turned
-   * out to change nothing: then no step is left and nothing is saved.
+   * Make a change as one undo step. `key` merges rapid repeats (typing,
+   * nudging). `unchanged(result)` says when fn turned out to change nothing:
+   * then no step is left and nothing is saved.
    */
   change(fn, { key = null, quiet = false, unchanged = null } = {}) {
     // A change that comes in mid-drag (a field committing as focus leaves it,
@@ -150,7 +145,11 @@ export class Editor {
         // Put back whatever fn changed before it failed, and leave no step.
         // (Merged into the step before, there's only that step to go back to.)
         const back = this.history.revert(this.doc) || (key ? this.history.rewind(this.doc) : null);
-        if (back) this.doc = back;
+        if (back) {
+          this.doc = back;
+          // A paused drag holds elements of the design just replaced: it can't go on.
+          if (resume) this.abandonDrag?.();
+        }
         this.emit('doc');
         throw e;
       }
@@ -455,12 +454,14 @@ export class Editor {
       for (let i = els.length - 1; i >= 0; i--) {
         const el = els[i];
         if (el.hidden) continue;
-        const at = { ...el, x: el.x + ox, y: el.y + oy };
-        if (!pointInBox(p.x, p.y, at)) continue;
+        // The point in this element's own (group) coordinates, so the element
+        // itself is tested (and its cached outline reused).
+        const q = { x: p.x - ox, y: p.y - oy };
+        if (!pointInBox(q.x, q.y, el)) continue;
         // Lines you draw or connect only cover what's near the line (as for clicks).
         if (el.type === 'connector' || el.type === 'draw') {
           const tol = (el.strokeWidth || 0) / 2 + 8 / this.zoom;
-          if (!(el.type === 'connector' ? connectorHit(at, p, tol) : drawHit(at, p, tol))) continue;
+          if (!(el.type === 'connector' ? connectorHit(el, q, tol) : drawHit(el, q, tol))) continue;
         }
         if (el.type === 'group') {
           if (el.locked || el.rotation || el.flipX || el.flipY) return BLOCKED;
@@ -470,7 +471,7 @@ export class Editor {
         }
         const frame = el.type === 'image' && (!el.assetId || (el.mask && el.mask !== 'none'));
         if (!frame) return BLOCKED;
-        if (!inMask(at, p)) continue;
+        if (!inMask(el, q)) continue;
         return el.locked ? BLOCKED : el;
       }
       return null;
@@ -542,9 +543,10 @@ export class Editor {
     const s = Math.min(this.doc.width, this.doc.height);
     const el = createConnector({ from: [a.x + a.w / 2, a.y + a.h / 2], to: [b.x + b.w / 2, b.y + b.h / 2], start: a.id, end: b.id, route, strokeWidth: Math.max(2, Math.round(s * 0.004)) });
     this.change(() => {
-      // Under the elements it joins, so its ends tuck neatly against them.
+      // Just under the upper of the two: above the lower one (which may be a
+      // big card or backdrop that would hide it), tucked under the other.
       const page = this.pageData;
-      const at = Math.min(page.elements.indexOf(a), page.elements.indexOf(b));
+      const at = Math.max(page.elements.indexOf(a), page.elements.indexOf(b));
       page.elements.splice(at, 0, el); // afterChange attaches its ends
     });
     this.select([el.id]);
@@ -796,21 +798,36 @@ export class Editor {
     this.change(() => cmd.moveToIndex(this.doc, this.page, id, index));
   }
 
+  /**
+   * The selected ids that moving can affect: a connector held at both ends
+   * goes wherever its elements go (moving it alone would snap straight back).
+   */
+  get movable() {
+    return this.selection.filter((id) => {
+      const el = cmd.findElement(this.pageData, id);
+      return el && !(el.type === 'connector' && el.start?.id && el.end?.id);
+    });
+  }
+
   align(how) {
-    if (this.selection.length) this.change(() => cmd.alignElements(this.doc, this.page, this.selection, how));
+    const ids = this.movable;
+    if (ids.length) this.change(() => cmd.alignElements(this.doc, this.page, ids, how));
   }
 
   distribute(axis) {
-    if (this.selection.length >= 3) this.change(() => cmd.distributeElements(this.doc, this.page, this.selection, axis));
+    const ids = this.movable;
+    if (ids.length >= 3) this.change(() => cmd.distributeElements(this.doc, this.page, ids, axis));
   }
 
   flip(axis) {
-    if (this.selection.length) this.change(() => cmd.flipElements(this.doc, this.page, this.selection, axis));
+    const ids = this.movable;
+    if (ids.length) this.change(() => cmd.flipElements(this.doc, this.page, ids, axis));
   }
 
   nudge(dx, dy) {
-    if (!this.selection.length) return;
-    this.change(() => cmd.moveElements(this.doc, this.page, this.selection, dx, dy), { key: `nudge:${this.selection.join(',')}` });
+    const ids = this.movable;
+    if (!ids.length) return;
+    this.change(() => cmd.moveElements(this.doc, this.page, ids, dx, dy), { key: `nudge:${ids.join(',')}` });
   }
 
   selectionBounds() {

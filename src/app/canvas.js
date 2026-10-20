@@ -99,7 +99,12 @@ export class Canvas {
       if (d.mode === 'crop') d.crop = { ...d.el.crop };
       if (d.mode === 'guide' && !d.isNew) d.orig = editor.pageData.guides?.[d.index]?.pos;
     };
-    // Something else needs the design mid-drag: the drag ends here, as if let go.
+    // The design was replaced under a drag that hadn't moved: drop it quietly.
+    editor.abandonDrag = () => {
+      this.drag = null;
+      editor.guides = [];
+      settle();
+    };
     this.el.addEventListener('dblclick', (e) => this.onDouble(e));
     this.el.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     this.el.addEventListener('dragover', (e) => {
@@ -340,8 +345,10 @@ export class Canvas {
       return;
     }
     if (ed.drawTool) {
-      // Drawing: every press on the page starts a new stroke.
+      // Drawing: every press on the page starts a new stroke (not one beside
+      // it, which wouldn't show in downloads, nor a scrollbar).
       e.preventDefault();
+      if (p.x < 0 || p.y < 0 || p.x > ed.doc.width || p.y > ed.doc.height) return;
       ed.deselect();
       this.drag = { mode: 'draw', points: [[p.x, p.y]], tool: { ...ed.drawTool } };
       this.capture(e);

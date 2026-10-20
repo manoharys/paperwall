@@ -574,3 +574,12 @@ test('[EDIT-19] replace one match at a time, even inside one table', async () =>
   assert.equal(r.count, 1);
   assert.deepEqual(t.rows, [['2024 a', '2025'], ['2024', 'x']], 'only the second match');
 });
+
+test('[EDIT-19] find copes with tables and charts that lack rows or data', async () => {
+  const { findText, replaceText } = await import('../../src/model/find.js');
+  const { createDesign, createText } = await import('../../src/model/doc.js');
+  const doc = createDesign({ width: 500, height: 500 });
+  doc.pages[0].elements.push({ id: 't1', type: 'table' }, { id: 'c1', type: 'chart', data: [null, { label: 'sale', value: 1 }] }, createText({ text: 'sale' }));
+  assert.equal(findText(doc, 'sale').reduce((s, h) => s + h.count, 0), 2);
+  assert.equal(replaceText(doc, 'sale', 'deal').count, 2);
+});

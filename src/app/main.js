@@ -233,7 +233,9 @@ document.addEventListener('visibilitychange', () => {
   editor.flush();
   // Not on every quick switch to another tab: at most once a minute.
   // Not mid-drag either: the design is half-moved then.
-  if (editor.changedSinceVersion && !editor.isDragging?.() && Date.now() - (editor.versionAt || 0) > 60_000) editor.saveVersion('', { quick: true });
+  // And not before the first check for versions is done (versionAt set), or
+  // this would be saved before the Original.
+  if (editor.changedSinceVersion && editor.versionAt && !editor.isDragging?.() && Date.now() - editor.versionAt > 60_000) editor.saveVersion('', { quick: true });
 });
 
 async function boot() {
