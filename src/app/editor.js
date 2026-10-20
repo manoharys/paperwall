@@ -481,17 +481,24 @@ export class Editor {
     this.change(() => cmd.setBackground(this.doc, this.page, bg), { key: key ? `bg:${key}:${this.page}` : null });
   }
 
+  /** Add every page of a template after the current page, resized to fit. */
   async addTemplatePage(templateDoc) {
     await ensureDesignFonts(templateDoc);
     const resized = cmd.resizeDesign(templateDoc, this.doc.width, this.doc.height);
-    const page = clone(resized.pages[0]);
-    page.id = uid('p');
-    const i = this.change(() => {
+    const first = this.change(() => {
       for (const [id, a] of Object.entries(resized.assets || {})) this.doc.assets[id] = a;
-      return cmd.addPage(this.doc, this.page, page);
+      let at = this.page;
+      let firstAdded = -1;
+      for (const p of resized.pages) {
+        const page = clone(p);
+        page.id = uid('p');
+        at = cmd.addPage(this.doc, at, page);
+        if (firstAdded < 0) firstAdded = at;
+      }
+      return firstAdded;
     });
     this.refitAllText();
-    this.setPage(i);
+    this.setPage(first);
   }
 
   // ---------- whole design ----------

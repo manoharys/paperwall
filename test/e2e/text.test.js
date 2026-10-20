@@ -58,7 +58,7 @@ test('[TXT-03] text wraps inside its box', async () => {
   await context.close();
 });
 
-test('[TXT-04] [TXT-05] choose a bundled font and a size', async () => {
+test('[TXT-04] [TXT-05] [TXT-21] choose a bundled font and a size', async () => {
   const { page, context, t } = await heading();
   await page.click('[data-testid="font-select"]');
   await page.waitForSelector('[data-testid="font-popover"]');

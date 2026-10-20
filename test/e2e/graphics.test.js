@@ -233,9 +233,11 @@ test('[IMG-12] drop shadow on images and shapes', async () => {
 
 // ---------- graphics ----------
 
-test('[ELM-01] [ELM-02] original icons, searchable, in any color', async () => {
+test('[ELM-01] [ELM-02] [ELM-07] icons, searchable, in any color', async () => {
   const { page, context } = await newDesign('square');
   await openTab(page, 'graphics');
+  const [, icons] = (await page.getAttribute('[data-testid="insert-search"]', 'placeholder')).match(/Search ([\d,]+) icons/);
+  assert.ok(+icons.replace(/,/g, '') >= 1500, `${icons} icons`);
   assert.equal(await page.locator('[data-testid="icon-grid"] .thumb').count(), 120, 'first 120 shown');
   await page.click('[data-testid="icons-more"]');
   assert.equal(await page.locator('[data-testid="icon-grid"] .thumb').count(), 360);
@@ -251,7 +253,7 @@ test('[ELM-01] [ELM-02] original icons, searchable, in any color', async () => {
   await context.close();
 });
 
-test('[ELM-03] original stickers', async () => {
+test('[ELM-03] [ELM-08] stickers', async () => {
   const { page, context } = await newDesign('square');
   await openTab(page, 'graphics');
   assert.ok((await page.locator('[data-testid="sticker-grid"] .thumb').count()) >= 150);
@@ -330,6 +332,8 @@ test('[BRD-01] [BRD-02] [BRD-03] brand kit: colors, fonts, apply in one click', 
   await page.selectOption('[data-testid="brand-heading-font"]', 'Bebas Neue');
   await page.selectOption('[data-testid="brand-body-font"]', 'Lora');
   await page.click('[data-testid="brand-apply"]');
+  // Applying waits for the brand fonts to load first.
+  await page.waitForFunction(() => window.paperwall.editor.pageData.elements[0].font === 'Bebas Neue');
   const els = await elements(page);
   assert.equal(els[0].font, 'Bebas Neue');
   assert.equal(els[1].font, 'Lora');

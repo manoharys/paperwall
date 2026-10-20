@@ -12,13 +12,14 @@ on-device AI models. Not approved: a collaboration server.
 
 ## v0.2 Library: enough to start from
 
-- [ ] 300+ original templates across 30+ categories, each checked by a
+- [x] 300+ original templates across 30+ categories, each checked by a
       quality gate (no text overflow, nothing off the page, readable contrast)
-- [ ] Multi-page template sets: presentations, resumes, menus, planners
-- [ ] 60+ open-license font families
-- [ ] 1,500+ icons (open-license set) plus Paperwall's own
-- [ ] More stickers, shapes, frames and decorative elements
-- [ ] Template browser: categories, sizes, search, previews
+      (TPL-06, TPL-08: 397 templates, 44 categories)
+- [x] Multi-page template sets: presentations, resumes, menus, planners (TPL-07)
+- [x] 60+ open-license font families (TXT-21: 92 families)
+- [x] 1,500+ icons (open-license set) plus Paperwall's own (ELM-07: 1,956)
+- [x] More stickers, shapes, frames and decorative elements (ELM-08: 198 stickers)
+- [x] Template browser: categories, sizes, search, previews (TPL-01, TPL-02, TPL-09)
 
 ## v0.3 Editor pro
 

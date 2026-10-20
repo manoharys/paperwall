@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { newDesign, openApp, waitForEditor, state, addText, addShape, teardown, downloadVia, pngSize, jpgSize, pixelAt, openTab } from './helpers.js';
-import { TEMPLATES, TEMPLATE_CATEGORIES, templateDoc } from '../../src/templates/index.js';
+import { TEMPLATES, TEMPLATE_CATEGORIES, templateDoc, searchTemplates } from '../../src/templates/index.js';
 import { FONTS } from '../../src/model/fonts.js';
 import { iconById, stickerById } from '../../src/model/graphics.js';
 
@@ -202,14 +202,16 @@ test('[EXP-11] copy the design to the clipboard as an image', async () => {
 
 test('[TPL-01] [TPL-02] browse templates by category and search', async () => {
   const { page, context } = await openApp();
-  const all = await page.locator('[data-testid="home-templates"] .tpl').count();
-  assert.equal(all, TEMPLATES.length);
-  await page.click('[data-testid="home-cat-Invitations"]');
-  const inv = TEMPLATES.filter((t) => t.category === 'Invitations').length;
-  assert.equal(await page.locator('[data-testid="home-templates"] .tpl').count(), inv);
+  const cards = '[data-testid="home-templates"] .tpl';
+  const ids = () => page.$$eval(cards, (els) => els.map((e) => e.dataset.testid.replace('template-', '')));
+  assert.equal(await page.textContent('[data-testid="home-template-count"]'), `${TEMPLATES.length} templates`);
+  await page.click('[data-testid="home-cat-Birthday"]');
+  assert.deepEqual(await ids(), searchTemplates({ category: 'Birthday' }).map((t) => t.id));
   await page.click('[data-testid="home-cat-All"]');
   await page.fill('[data-testid="home-template-search"]', 'menu');
-  assert.deepEqual(await page.$$eval('[data-testid="home-templates"] .tpl', (els) => els.map((e) => e.dataset.testid)), ['template-cafe-menu']);
+  const menus = searchTemplates({ query: 'menu' }).map((t) => t.id);
+  assert.ok(menus.includes('cafe-menu') && menus.length > 3);
+  assert.deepEqual(await ids(), menus.slice(0, 30));
   await context.close();
 });
 
@@ -229,6 +231,7 @@ test('[TPL-04] add a template as a new page in your design', async () => {
   await addText(page);
   await openTab(page, 'templates');
   await page.click('[data-testid="template-quote-card"]');
+  await page.waitForFunction(() => window.paperwall.editor.doc.pages.length === 2);
   const doc = await state(page);
   assert.equal(doc.pages.length, 2);
   assert.ok(doc.pages[1].elements.some((e) => e.type === 'text' && /Make the thing/.test(e.text)));

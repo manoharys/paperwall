@@ -2,6 +2,11 @@
 // text, icons and stickers, and is dedicated to the public domain (CC0).
 
 import { createDesign, createText, createShape, createLine, createIcon, createSticker, createQr, createPage, clone } from '../model/doc.js';
+import { FONT_PAIRS } from '../model/fonts.js';
+import { approxMeasure } from '../model/text-layout.js';
+import { layoutDesign } from '../model/layout.js';
+import { PALETTES, makePage } from './kit.js';
+import { FORMATS, CATEGORIES, SETS } from './content.js';
 
 const T = (text, props) => createText({ text, ...props });
 const S = (shape, props) => createShape(shape, props);
@@ -17,10 +22,10 @@ function design(width, height, background, elements) {
 
 const BUILDERS = [
   {
-    id: 'grand-opening', name: 'Grand opening', category: 'Social', tags: 'shop store opening launch announcement',
-    build: () => design(1080, 1080, { type: 'gradient', gradient: lin(160, '#ff7a45', '#f25c2a', '#b5179e') }, [
+    id: 'grand-opening', name: 'Grand opening', category: 'Grand opening', tags: 'shop store opening launch announcement',
+    build: () => design(1080, 1080, { type: 'gradient', gradient: lin(160, '#e04a1f', '#c93a17', '#9d1789') }, [
       K('rays', { x: 290, y: 60, w: 500, h: 500, opacity: 0.25 }),
-      T('NOW OPEN', { x: 90, y: 300, w: 900, size: 64, font: 'Montserrat', weight: 700, color: '#ffe8d6', align: 'center', letterSpacing: 18 }),
+      T('NOW OPEN', { x: 90, y: 300, w: 900, size: 64, font: 'Montserrat', weight: 700, color: '#ffffff', align: 'center', letterSpacing: 18 }),
       T('GRAND\nOPENING', { x: 90, y: 390, w: 900, size: 190, font: 'Bebas Neue', color: '#ffffff', align: 'center', lineHeight: 0.92 }),
       T('Saturday · 10 am', { x: 290, y: 800, w: 500, size: 44, font: 'Poppins', weight: 700, color: '#16161d', align: 'center', highlight: { color: '#ffd166', padding: 14, radius: 40 } }),
       T('12 Market Street', { x: 190, y: 910, w: 700, size: 34, font: 'Poppins', color: '#ffffff', align: 'center' }),
@@ -29,7 +34,7 @@ const BUILDERS = [
     ]),
   },
   {
-    id: 'quote-card', name: 'Quote card', category: 'Social', tags: 'quote inspiration motivation words',
+    id: 'quote-card', name: 'Quote card', category: 'Quotes', tags: 'quote inspiration motivation words',
     build: () => design(1080, 1080, { type: 'color', color: '#16161d' }, [
       I('quote', { x: 460, y: 150, w: 160, h: 160, color: '#f25c2a', strokeWidth: 2.2 }),
       T('Make the thing you wish existed. Then give it away.', { x: 140, y: 360, w: 800, size: 72, font: 'Playfair Display', color: '#ffffff', align: 'center', lineHeight: 1.25 }),
@@ -38,21 +43,21 @@ const BUILDERS = [
     ]),
   },
   {
-    id: 'summer-sale', name: 'Summer sale', category: 'Social', tags: 'sale discount offer shop story summer',
+    id: 'summer-sale', name: 'Summer sale', category: 'Sales', tags: 'sale discount offer shop story summer',
     build: () => design(1080, 1920, { type: 'gradient', gradient: lin(180, '#ffd166', '#ff9f43', '#f25c2a') }, [
       S('ellipse', { x: 640, y: -160, w: 640, h: 640, fill: '#fff3b0', opacity: 0.6 }),
       I('sun', { x: 760, y: 120, w: 220, h: 220, color: '#ffffff', strokeWidth: 1.6 }),
-      T('SUMMER', { x: 80, y: 560, w: 940, size: 150, font: 'Archivo Black', color: '#ffffff', lineHeight: 0.95 }),
+      T('SUMMER', { x: 80, y: 560, w: 940, size: 150, font: 'Archivo Black', color: '#16161d', lineHeight: 0.95 }),
       T('SALE', { x: 80, y: 700, w: 940, size: 250, font: 'Archivo Black', color: '#16161d', lineHeight: 0.95 }),
       T('Up to 50% off everything', { x: 80, y: 1010, w: 900, size: 60, font: 'Poppins', weight: 700, color: '#16161d', highlight: { color: '#ffffff', padding: 18, radius: 16 } }),
-      T('This weekend only', { x: 80, y: 1150, w: 900, size: 48, font: 'Poppins', color: '#ffffff' }),
+      T('This weekend only', { x: 80, y: 1150, w: 900, size: 48, font: 'Poppins', weight: 700, color: '#16161d' }),
       S('rect', { x: 80, y: 1560, w: 460, h: 130, radius: 65, fill: '#16161d' }),
       T('Shop now →', { x: 80, y: 1592, w: 460, size: 52, font: 'Poppins', weight: 700, color: '#ffffff', align: 'center' }),
       K('sparkles', { x: 820, y: 1500, w: 200, h: 200 }),
     ]),
   },
   {
-    id: 'birthday-invite', name: 'Birthday party', category: 'Invitations', tags: 'birthday party invite celebrate kids',
+    id: 'birthday-invite', name: 'Birthday party', category: 'Birthday', tags: 'birthday party invite celebrate kids',
     build: () => design(1500, 2100, { type: 'color', color: '#fff4f7' }, [
       K('confetti', { x: 0, y: 0, w: 1500, h: 700, opacity: 0.9 }),
       S('ellipse', { x: 300, y: 560, w: 900, h: 900, fill: '#ffffff', shadow: { x: 0, y: 20, blur: 60, color: '#ff4d6d', opacity: 0.18 } }),
@@ -65,7 +70,7 @@ const BUILDERS = [
     ]),
   },
   {
-    id: 'event-poster', name: 'Event poster', category: 'Posters', tags: 'event concert festival poster gig music',
+    id: 'event-poster', name: 'Event poster', category: 'Events', tags: 'event concert festival poster gig music',
     build: () => design(1080, 1350, { type: 'color', color: '#0b0b12' }, [
       S('ellipse', { x: -200, y: -150, w: 800, h: 800, fill: '#5b5bd6' }),
       S('ellipse', { x: 540, y: 420, w: 700, h: 700, fill: '#f25c2a' }),
@@ -79,7 +84,7 @@ const BUILDERS = [
     ]),
   },
   {
-    id: 'video-thumbnail', name: 'Bold video thumbnail', category: 'Video', tags: 'youtube thumbnail video vlog',
+    id: 'video-thumbnail', name: 'Bold video thumbnail', category: 'YouTube', tags: 'youtube thumbnail video vlog',
     build: () => design(1280, 720, { type: 'color', color: '#ffe600' }, [
       S('ellipse', { x: 760, y: 80, w: 560, h: 560, fill: '#16161d' }),
       S('ellipse', { x: 830, y: 150, w: 420, h: 420, fill: '#ff2e63' }),
@@ -90,7 +95,7 @@ const BUILDERS = [
     ]),
   },
   {
-    id: 'business-card', name: 'Clean business card', category: 'Business', tags: 'business card contact name professional',
+    id: 'business-card', name: 'Clean business card', category: 'Business cards', tags: 'business card contact name professional',
     build: () => design(1050, 600, { type: 'color', color: '#ffffff' }, [
       S('rect', { x: 0, y: 0, w: 24, h: 600, fill: '#f25c2a' }),
       T('Alex Rivera', { x: 90, y: 90, w: 600, size: 64, font: 'Montserrat', weight: 700, color: '#16161d' }),
@@ -115,7 +120,7 @@ const BUILDERS = [
     ]),
   },
   {
-    id: 'hiring', name: "We're hiring", category: 'Business', tags: 'hiring job recruit career team',
+    id: 'hiring', name: "We're hiring", category: 'Hiring', tags: 'hiring job recruit career team',
     build: () => design(1080, 1080, { type: 'color', color: '#eef6ff' }, [
       S('rect', { x: 60, y: 60, w: 960, h: 960, radius: 48, fill: '#ffffff', shadow: { x: 0, y: 16, blur: 48, color: '#3a86ff', opacity: 0.18 } }),
       I('briefcase', { x: 130, y: 140, w: 110, h: 110, color: '#3a86ff' }),
@@ -127,11 +132,11 @@ const BUILDERS = [
     ]),
   },
   {
-    id: 'cafe-menu', name: 'Café menu', category: 'Print', tags: 'menu cafe restaurant food drinks coffee',
+    id: 'cafe-menu', name: 'Café menu', category: 'Menus', tags: 'menu cafe restaurant food drinks coffee',
     build: () => design(1748, 2480, { type: 'color', color: '#fbf3e4' }, [
       I('coffee', { x: 794, y: 160, w: 160, h: 160, color: '#6f4518', strokeWidth: 1.4 }),
       T('The Corner Café', { x: 150, y: 360, w: 1448, size: 140, font: 'DM Serif Display', color: '#3a2618', align: 'center' }),
-      T('— MENU —', { x: 150, y: 560, w: 1448, size: 50, font: 'Montserrat', weight: 700, color: '#b08968', align: 'center', letterSpacing: 14 }),
+      T('— MENU —', { x: 150, y: 560, w: 1448, size: 50, font: 'Montserrat', weight: 700, color: '#8a6446', align: 'center', letterSpacing: 14 }),
       T('Espresso\nFlat white\nOat latte\nChai\nHot chocolate', { x: 250, y: 760, w: 900, size: 64, font: 'Lora', color: '#3a2618', lineHeight: 1.9 }),
       T('3.00\n3.80\n4.20\n3.90\n3.50', { x: 1200, y: 760, w: 300, size: 64, font: 'Lora', weight: 700, color: '#3a2618', align: 'right', lineHeight: 1.9 }),
       L({ x: 250, y: 1450, w: 1250, h: 24, stroke: '#b08968', strokeWidth: 3, dash: 'dotted' }),
@@ -142,7 +147,7 @@ const BUILDERS = [
     ]),
   },
   {
-    id: 'thank-you', name: 'Thank you', category: 'Cards', tags: 'thank you card gratitude customer',
+    id: 'thank-you', name: 'Thank you', category: 'Thank you', tags: 'thank you card gratitude customer',
     build: () => design(1080, 1080, { type: 'gradient', gradient: rad('#fff1e6', '#ffd6c2') }, [
       K('frame-corners', { x: 90, y: 90, w: 900, h: 900 }),
       T('thank you', { x: 140, y: 360, w: 800, size: 170, font: 'Pacifico', color: '#d1495b', align: 'center' }),
@@ -151,7 +156,7 @@ const BUILDERS = [
     ]),
   },
   {
-    id: 'save-the-date', name: 'Save the date', category: 'Invitations', tags: 'wedding save the date engagement',
+    id: 'save-the-date', name: 'Save the date', category: 'Wedding', tags: 'wedding save the date engagement',
     build: () => design(1500, 2100, { type: 'color', color: '#f6f1eb' }, [
       K('leaf-branch', { x: 1000, y: 60, w: 440, h: 440, rotation: 90 }),
       K('leaf-branch', { x: 60, y: 1600, w: 440, h: 440, rotation: -90 }),
@@ -163,7 +168,7 @@ const BUILDERS = [
     ]),
   },
   {
-    id: 'podcast-cover', name: 'Podcast cover', category: 'Social', tags: 'podcast cover art audio show episode',
+    id: 'podcast-cover', name: 'Podcast cover', category: 'Podcast', tags: 'podcast cover art audio show episode',
     build: () => design(1080, 1080, { type: 'color', color: '#08d9d6' }, [
       S('ellipse', { x: 140, y: 140, w: 800, h: 800, fill: '#16161d' }),
       I('mic', { x: 440, y: 230, w: 200, h: 200, color: '#ffe600', strokeWidth: 1.6 }),
@@ -172,7 +177,7 @@ const BUILDERS = [
     ]),
   },
   {
-    id: 'workout-story', name: 'Class schedule', category: 'Social', tags: 'fitness gym workout schedule class story',
+    id: 'workout-story', name: 'Class schedule', category: 'Fitness', tags: 'fitness gym workout schedule class story',
     build: () => design(1080, 1920, { type: 'color', color: '#111827' }, [
       I('dumbbell', { x: 80, y: 160, w: 140, h: 140, color: '#a3e635', strokeWidth: 2 }),
       T('THIS\nWEEK', { x: 80, y: 340, w: 920, size: 200, font: 'Oswald', weight: 700, color: '#ffffff', lineHeight: 0.95 }),
@@ -182,7 +187,7 @@ const BUILDERS = [
     ]),
   },
   {
-    id: 'webinar', name: 'Webinar', category: 'Business', tags: 'webinar online event talk live workshop',
+    id: 'webinar', name: 'Webinar', category: 'Webinars', tags: 'webinar online event talk live workshop',
     build: () => design(1920, 1080, { type: 'color', color: '#ffffff' }, [
       S('rect', { x: 1100, y: 0, w: 820, h: 1080, fill: lin(160, '#5b5bd6', '#8e7dff') }),
       K('blob-1', { x: 1250, y: 260, w: 560, h: 560, opacity: 0.35 }),
@@ -195,25 +200,101 @@ const BUILDERS = [
     ]),
   },
   {
-    id: 'open-house', name: 'Open house', category: 'Posters', tags: 'real estate house home open house property',
+    id: 'open-house', name: 'Open house', category: 'Real estate', tags: 'real estate house home open house property',
     build: () => design(1080, 1350, { type: 'color', color: '#f4f1ea' }, [
       S('rect', { x: 0, y: 0, w: 1080, h: 620, fill: lin(180, '#9fd3c7', '#385170') }),
       I('home', { x: 390, y: 140, w: 300, h: 300, color: '#ffffff', strokeWidth: 1.2 }),
       T('OPEN HOUSE', { x: 60, y: 690, w: 960, size: 130, font: 'Bebas Neue', color: '#142d4c', align: 'center' }),
-      T('Sunday · 1–4 pm', { x: 60, y: 840, w: 960, size: 54, font: 'Montserrat', weight: 700, color: '#385170', align: 'center' }),
+      T('Sunday · 1–4 pm', { x: 60, y: 862, w: 960, size: 54, font: 'Montserrat', weight: 700, color: '#385170', align: 'center' }),
       T('3 bed · 2 bath · garden\n88 Willow Lane', { x: 60, y: 960, w: 960, size: 44, font: 'Inter', color: '#3d3d4e', align: 'center', lineHeight: 1.5 }),
       K('price-tag', { x: 800, y: 1120, w: 200, h: 140 }),
     ]),
   },
 ];
 
-export const TEMPLATES = BUILDERS.map(({ build, ...meta }) => ({ ...meta, build }));
-export const TEMPLATE_CATEGORIES = [...new Set(BUILDERS.map((b) => b.category))];
+const slug = (s) => s.toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const pairByName = (name) => FONT_PAIRS.find((p) => p.name === name) || FONT_PAIRS[0];
+const formatOf = (w, h) => Object.entries(FORMATS).find(([, f]) => f.w === w && f.h === h)?.[0] || 'custom';
 
-/** A fresh, editable design made from a template. */
-export function templateDoc(t) {
+/** Generated templates: every piece of content laid out in each of its category's layouts. */
+function generated() {
+  const out = [];
+  for (const cat of CATEGORIES) {
+    cat.items.forEach((item, i) => {
+      cat.layouts.forEach((layout, j) => {
+        const format = cat.formats[(i + j) % cat.formats.length];
+        const { w, h } = FORMATS[format];
+        const palette = PALETTES[cat.palettes[(i * cat.layouts.length + j) % cat.palettes.length]];
+        const pair = pairByName(cat.pairs[(i + j * 2) % cat.pairs.length]);
+        out.push({
+          id: `${slug(cat.name)}-${slug(item.name)}-${'abcdef'[j]}`,
+          name: item.name,
+          category: cat.name,
+          tags: `${cat.tags} ${item.name.toLowerCase()} ${FORMATS[format].label.toLowerCase()}`,
+          format,
+          build: () => ({ width: w, height: h, pages: [makePage(layout, { W: w, H: h, palette, pair, content: { ...item, variant: j } })] }),
+        });
+      });
+    });
+  }
+  for (const set of SETS) {
+    const { w, h } = FORMATS[set.format];
+    const palette = PALETTES[set.palette];
+    const pair = pairByName(set.pair);
+    out.push({
+      id: set.id,
+      name: set.name,
+      category: set.category,
+      tags: `${set.tags} ${set.pages.length} pages`,
+      format: set.format,
+      pages: set.pages.length,
+      build: () => ({ width: w, height: h, pages: set.pages.map(([layout, content], i) => makePage(layout, { W: w, H: h, palette, pair, content: { ...content, variant: i } })) }),
+    });
+  }
+  return out;
+}
+
+export const TEMPLATES = [
+  ...BUILDERS.map(({ build, ...meta }) => {
+    const { width, height } = build();
+    return { ...meta, format: formatOf(width, height), width, height, pages: 1, build };
+  }),
+  ...generated().map((t) => ({ pages: 1, ...t, width: FORMATS[t.format].w, height: FORMATS[t.format].h })),
+];
+
+export const TEMPLATE_CATEGORIES = [...new Set(TEMPLATES.map((t) => t.category))];
+
+/** Formats that templates come in, for filtering: [{ id, label, count }]. */
+export const TEMPLATE_FORMATS = Object.entries(FORMATS)
+  .map(([id, f]) => ({ id, label: f.label, count: TEMPLATES.filter((t) => t.format === id).length }))
+  .filter((f) => f.count);
+
+/** A short description of a template's size, like "Story · 1080 × 1920". */
+export function templateFormatLabel(t) {
+  return FORMATS[t.format]?.label || `${t.width} × ${t.height}`;
+}
+
+export function templateById(id) {
+  return TEMPLATES.find((t) => t.id === id) || null;
+}
+
+/** Templates matching a search, a category and a format ('All' for any). */
+export function searchTemplates({ query = '', category = 'All', format = 'All' } = {}) {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return TEMPLATES.filter((t) => (category === 'All' || t.category === category) &&
+    (format === 'All' || t.format === format) &&
+    words.every((w) => `${t.name} ${t.category} ${t.tags}`.toLowerCase().includes(w)));
+}
+
+/**
+ * A fresh, editable design made from a template. Text is fitted with
+ * `measure`; pass the real font measurer once the template's fonts are
+ * loaded (the rough default is fine for working out which fonts it uses).
+ */
+export function templateDoc(t, measure = approxMeasure) {
   const spec = t.build();
+  const pages = spec.pages || [{ background: spec.background, elements: spec.elements }];
   const doc = createDesign({ width: spec.width, height: spec.height, name: t.name });
-  doc.pages = [{ ...createPage(clone(spec.background)), elements: spec.elements }];
-  return doc;
+  doc.pages = pages.map((p) => ({ ...createPage(clone(p.background)), elements: p.elements, flows: p.flows, after: p.after }));
+  return layoutDesign(doc, measure);
 }

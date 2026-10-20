@@ -7,7 +7,7 @@ import { ALL_ICONS, ALL_STICKERS, searchGraphics } from '../model/graphics.js';
 import { renderPage, renderElementOnly } from '../model/render.js';
 import { createShape, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES } from '../model/doc.js';
 import { collectColors } from '../model/commands.js';
-import { TEMPLATES, TEMPLATE_CATEGORIES, templateDoc } from '../templates/index.js';
+import { TEMPLATES, TEMPLATE_CATEGORIES, TEMPLATE_FORMATS, templateDoc, searchTemplates, templateFormatLabel } from '../templates/index.js';
 import { measure, ensureFont, ensureDesignFonts } from './fonts.js';
 import * as store from './store.js';
 
@@ -107,33 +107,22 @@ export class InsertPanel {
   // ---------- templates ----------
 
   templates() {
-    const grid = h('div', { class: 'tpl-grid', 'data-testid': 'template-grid' });
-    const fill = () => {
-      clear(grid);
-      const q = this.query.trim().toLowerCase();
-      const list = TEMPLATES.filter((t) => (this.category === 'All' || t.category === this.category) &&
-        (!q || t.name.toLowerCase().includes(q) || t.tags.includes(q) || t.category.toLowerCase().includes(q)));
-      if (!list.length) grid.append(h('p', { class: 'empty-note' }, 'No templates match that. Try "sale", "birthday" or "quote".'));
-      for (const t of list) grid.append(templateCard(t, () => this.useTemplate(t)));
-    };
-    const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Template categories' },
-      ['All', ...TEMPLATE_CATEGORIES].map((c) => h('button', { type: 'button', class: c === this.category ? 'chip on' : 'chip', 'data-testid': `tpl-cat-${c}`, onClick: () => {
-        this.category = c;
-        this.render();
-      } }, c)));
-    fill();
+    if (!this.tplState) this.tplState = { query: '', category: 'All', format: 'All', shown: 24 };
     return [
-      this.search('Search templates', fill),
-      chips,
-      h('p', { class: 'hint' }, 'Every template is original and free for any use. Click one to add it as a new page.'),
-      grid,
+      ...templateBrowser({
+        state: this.tplState,
+        ids: { search: 'template-search', format: 'template-format', cat: 'tpl-cat', grid: 'template-grid', more: 'templates-more', count: 'template-count' },
+        pageSize: 24,
+        onPick: (t) => this.useTemplate(t),
+      }),
+      h('p', { class: 'hint' }, 'Every template is original and free for any use. Click one to add its pages to your design.'),
     ];
   }
 
   async useTemplate(t) {
     const ed = this.ed;
     const blank = ed.doc.pages.length === 1 && !ed.pageData.elements.length;
-    await ed.addTemplatePage(templateDoc(t));
+    await ed.addTemplatePage(await readyTemplate(t));
     if (blank) {
       ed.change(() => ed.doc.pages.splice(0, 1));
       ed.page = -1;
@@ -357,18 +346,82 @@ export class InsertPanel {
   }
 }
 
+/** A template laid out with its real fonts, ready to open or add. */
+export async function readyTemplate(t) {
+  await ensureDesignFonts(templateDoc(t));
+  return templateDoc(t, measure);
+}
+
 /** A template preview. It's drawn when it scrolls into view, once its fonts have loaded. */
 export function templateCard(t, onClick) {
-  const doc = templateDoc(t);
-  const img = h('span', { class: 'tpl-img', style: { aspectRatio: `${doc.width} / ${doc.height}` } });
-  const draw = async () => {
-    await ensureDesignFonts(doc);
+  const img = h('span', { class: 'tpl-img', style: { aspectRatio: `${t.width} / ${t.height}` } });
+  lazily(img, async () => {
+    const doc = await readyTemplate(t);
     img.innerHTML = renderPage(doc, 0, { measure, noSize: true, idPrefix: `tp-${t.id}` });
+  });
+  const meta = t.pages > 1 ? `${templateFormatLabel(t)} · ${t.pages} pages` : templateFormatLabel(t);
+  // Previews sit in same-sized frames so rows line up, whatever the format.
+  const frame = h('span', { class: t.height / t.width > 1.25 ? 'tpl-frame tall' : 'tpl-frame' }, img);
+  return h('button', { type: 'button', class: 'tpl', title: `${t.name} (${meta})`, 'data-testid': `template-${t.id}`, 'data-format': t.format, onClick },
+    frame,
+    t.pages > 1 ? h('span', { class: 'tpl-badge', 'data-testid': 'template-pages' }, `${t.pages} pages`) : null,
+    h('span', { class: 'tpl-name' }, t.name),
+    h('small', { class: 'tpl-meta' }, meta));
+}
+
+/**
+ * Search box, size filter, category chips and a grid of templates that shows
+ * `pageSize` at a time. `state` ({ query, category, format, shown }) is kept
+ * by the caller so the browser can be rebuilt without losing its place.
+ */
+export function templateBrowser({ state, ids, onPick, pageSize = 48, gridClass = 'tpl-grid' }) {
+  const grid = h('div', { class: gridClass, 'data-testid': ids.grid });
+  const count = h('p', { class: 'tpl-count', 'data-testid': ids.count, 'aria-live': 'polite' });
+  const more = h('button', { type: 'button', class: 'btn more', 'data-testid': ids.more, onClick: () => {
+    state.shown += pageSize;
+    fill(false);
+  } }, 'Show more templates');
+  const search = h('input', { type: 'search', value: state.query, placeholder: `Search ${TEMPLATES.length} templates`, 'aria-label': 'Search templates', 'data-testid': ids.search });
+  const format = h('select', { 'aria-label': 'Size', 'data-testid': ids.format },
+    h('option', { value: 'All' }, 'All sizes'),
+    TEMPLATE_FORMATS.map((f) => h('option', { value: f.id, selected: f.id === state.format }, `${f.label} (${f.count})`)));
+  const chips = h('div', { class: 'chips scroll', role: 'group', 'aria-label': 'Template categories' });
+  const drawChips = () => {
+    clear(chips);
+    for (const c of ['All', ...TEMPLATE_CATEGORIES]) {
+      chips.append(h('button', { type: 'button', class: c === state.category ? 'chip on' : 'chip', 'aria-pressed': String(c === state.category), 'data-testid': `${ids.cat}-${c}`, onClick: () => {
+        state.category = c;
+        drawChips();
+        fill();
+      } }, c));
+    }
   };
-  lazily(img, draw);
-  return h('button', { type: 'button', class: 'tpl', title: t.name, 'data-testid': `template-${t.id}`, onClick },
-    img,
-    h('span', { class: 'tpl-name' }, t.name));
+  const fill = (reset = true) => {
+    if (reset) state.shown = pageSize;
+    const list = searchTemplates(state);
+    clear(grid);
+    if (!list.length) grid.append(h('p', { class: 'empty-note' }, 'No templates match. Try "sale", "invite", "resume" or "menu".'));
+    for (const t of list.slice(0, state.shown)) grid.append(templateCard(t, () => onPick(t)));
+    count.textContent = `${list.length} template${list.length === 1 ? '' : 's'}`;
+    more.hidden = list.length <= state.shown;
+  };
+  search.addEventListener('input', () => {
+    state.query = search.value;
+    fill();
+  });
+  format.addEventListener('change', () => {
+    state.format = format.value;
+    fill();
+  });
+  drawChips();
+  fill(false);
+  return [
+    h('div', { class: 'tpl-tools' }, h('div', { class: 'search' }, icon('search', 18), search), format),
+    chips,
+    count,
+    grid,
+    more,
+  ];
 }
 
 const pending = new WeakMap();
