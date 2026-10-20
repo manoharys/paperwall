@@ -300,7 +300,13 @@ export class Canvas {
       if (!g) guide = null;
       else {
         const off = Math.abs((g.axis === 'x' ? p.x : p.y) - g.pos) * ed.zoom;
-        if (off > 1.5 && this.hitTest(p)) guide = null;
+        const hit = off > 1.5 ? this.hitTest(p) : null;
+        if (hit) {
+          // Only an element with an edge or middle on the guide (one snapped to it).
+          const b = boundsOf(hit);
+          const [lo, size] = g.axis === 'x' ? [b.x, b.w] : [b.y, b.h];
+          if ([lo, lo + size / 2, lo + size].some((v) => Math.abs(v - g.pos) < 1)) guide = null;
+        }
       }
     }
     if (guide) {
@@ -391,7 +397,8 @@ export class Canvas {
     }
     if (d.mode === 'draw') {
       if (e.pointerId !== d.pointerId) return;
-      for (const ev of e.getCoalescedEvents?.() || [e]) {
+      const coalesced = e.getCoalescedEvents?.(); // can be empty (synthetic events)
+      for (const ev of coalesced?.length ? coalesced : [e]) {
         const q = this.toPage(ev);
         d.points.push([q.x, q.y]);
       }
@@ -771,8 +778,8 @@ export class Canvas {
 
   /** Show the stroke being drawn, on top of the page. */
   drawStroke() {
-    const t = this.ed.drawTool;
     const d = this.drag;
+    const t = d?.tool; // the pen the stroke began with, even if drawing was turned off since
     if (!t || !d) return;
     const z = this.ed.zoom;
     if (!this.stroke?.isConnected) {

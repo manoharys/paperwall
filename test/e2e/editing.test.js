@@ -443,6 +443,10 @@ test('[EDIT-19] find and replace text across every page', async () => {
   await page.keyboard.press(`${mod}+f`);
   await page.fill('[data-testid="find-input"]', 'summer');
   assert.match(await page.textContent('[data-testid="find-status"]'), /^2 matches in 2 places/);
+  // Previous, before anything is shown, goes to the last match.
+  await page.click('[data-testid="find-prev"]');
+  assert.match(await page.textContent('[data-testid="find-status"]'), /showing 2 of 2/);
+  assert.equal(await state(page, (ed) => ed.page), 1);
   await page.click('[data-testid="find-next"]');
   assert.equal(await state(page, (ed) => ed.page), 0, 'jumps to the first page');
   await page.click('[data-testid="find-next"]');

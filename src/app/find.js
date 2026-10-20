@@ -26,7 +26,8 @@ export function findDialog(editor) {
   };
   const show = (i) => {
     if (!matches.length) return;
-    at = (i + matches.length) % matches.length;
+    // Previous before anything is shown goes to the last match.
+    at = ((at < 0 && i < 0 ? -1 : i) + matches.length) % matches.length;
     const hit = matches[at];
     if (editor.page !== hit.page) editor.setPage(hit.page);
     editor.select([hit.id]);
@@ -83,8 +84,8 @@ export function findDialog(editor) {
   return dialog('Find and replace', h('div', { class: 'stack find' },
     find,
     h('div', { class: 'row' },
-      toggle({ label: 'Match case', checked: false, testid: 'find-case', onChange: (v) => { opts.matchCase = v; refresh(); } }),
-      toggle({ label: 'Whole words', checked: false, testid: 'find-word', onChange: (v) => { opts.wholeWord = v; refresh(); } })),
+      toggle({ label: 'Match case', checked: false, testid: 'find-case', onChange: (v) => { opts.matchCase = v; at = -1; refresh(); } }),
+      toggle({ label: 'Whole words', checked: false, testid: 'find-word', onChange: (v) => { opts.wholeWord = v; at = -1; refresh(); } })),
     status,
     h('div', { class: 'row' },
       h('button', { type: 'button', class: 'btn small', 'data-testid': 'find-prev', onClick: () => show(at - 1) }, 'Previous'),

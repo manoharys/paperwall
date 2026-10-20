@@ -371,9 +371,8 @@ export class Editor {
     if (!el || el.type !== 'image' || (el.locked && !evenLocked)) return null;
     this.change(() => {
       el.assetId = addAsset(this.doc, upload);
-      const frame = el.w / el.h;
-      const pic = upload.width / upload.height;
-      el.crop = pic > frame ? { x: (1 - frame / pic) / 2, y: 0, w: frame / pic, h: 1 } : { x: 0, y: (1 - pic / frame) / 2, w: 1, h: pic / frame };
+      el.crop = null; // centred, cropped to fill the frame
+      cmd.coverCrop(el, upload.width, upload.height);
     });
     // A frame in a group: the group is what's selected.
     if (page === this.pageData) this.select([cmd.findElement(page, id) ? el.id : page.elements.find((g) => deepFind([g], id)).id]);
@@ -489,12 +488,13 @@ export class Editor {
     return updateConnectors(this.pageData, { refit: false });
   }
 
-  /** Turn a freehand stroke (page points) into a drawing with the current tool. */
-  /** `tool` is the pen the stroke began with (drawing may have been turned off since). */
+  /**
+   * Turn a freehand stroke (page points) into a drawing. `tool` is the pen
+   * the stroke began with (drawing may have been turned off since).
+   */
   addDrawing(points, tool = this.drawTool) {
-    const t = tool;
-    if (!t || !points.length) return null;
-    const el = createDrawing(thinPoints(points, 1.5 / this.zoom), { tool: t.tool, stroke: t.color, strokeWidth: t.size });
+    if (!tool || !points.length) return null;
+    const el = createDrawing(thinPoints(points, 1.5 / this.zoom), { tool: tool.tool, stroke: tool.color, strokeWidth: tool.size });
     this.change(() => cmd.addElement(this.doc, this.page, el));
     return el;
   }

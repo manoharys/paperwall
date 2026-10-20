@@ -373,6 +373,8 @@ kbd { font: 12px ui-monospace, monospace; background: var(--panel-2); border: 1p
 
 /* Drawing */
 .stage.drawing, .stage.drawing * { cursor: crosshair !important; }
+/* A stroke can start beside the page too: don't let the browser pan instead. */
+.stage.drawing { touch-action: none; }
 .tool-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
 .tool { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); cursor: pointer; font-size: 12px; }
 .tool.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
