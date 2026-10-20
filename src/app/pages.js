@@ -134,10 +134,10 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
   const root = h('div', { class: 'presenter', 'data-testid': 'presenter', tabindex: '-1' }, slide, counter,
     h('button', { type: 'button', class: 'presenter-close', 'aria-label': 'Stop presenting', onClick: () => close() }, icon('close')));
   // Videos play along, and with Play the soundtrack too.
-  const videos = new VideoFrames(doc);
+  const videos = new VideoFrames(doc, { hrefFor: canvas.assetHref });
   const tl = timeline(doc, shown);
   // The soundtrack plays with Play (as the panel says), not plain presenting.
-  const sound = autoplay && !only ? soundtrackPlayer(doc) : null;
+  const sound = autoplay && !only ? soundtrackPlayer(doc, canvas.assetHref) : null;
   // The sound starts with the page Play starts on (as in a download of the
   // pages from there); moving to another page moves it along with them.
   const soundFrom = tl.parts[at].start;
@@ -160,6 +160,7 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
   let from = null; // the page before, when moving forward (its transition plays)
   let drawn = 0; // when the slide was last drawn
   let wait = 0; // a still page's timer, when playing
+  let fading = 0; // when playing the last page: the soundtrack's fade-out, as downloads end
   let live = false; // the page's videos are playing in place: nothing to redraw
   const draw = (now) => {
     frame = 0;
@@ -221,6 +222,7 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
   const go = (to, forward, { auto = false } = {}) => {
     cancelAnimationFrame(frame);
     clearTimeout(wait);
+    clearTimeout(fading);
     from = forward && to !== at ? shown[at] : null;
     // Moving on by itself, the next page starts when the last one's time was
     // up (not a frame later), so pages keep time with the soundtrack.
@@ -233,6 +235,11 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     videos.pauseAll();
     videos.start(videosOn(doc, [shown[at]]), started);
     if (!auto) sound?.seek(Math.max(0, tl.parts[at].start - soundFrom));
+    if (sound && at === shown.length - 1) {
+      // The sound fades over the end, as in a download of these pages.
+      const fade = Math.min(1, (tl.total - soundFrom) / 4);
+      fading = setTimeout(() => sound.fadeOut(fade), Math.max(0, started + (pageDuration(page) - fade) * 1000 - performance.now()));
+    }
     slide.style.aspectRatio = `${doc.width} / ${doc.height}`;
     counter.textContent = `${at + 1} / ${shown.length}`;
     draw(started);
@@ -253,6 +260,7 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
   const close = () => {
     cancelAnimationFrame(frame);
     clearTimeout(wait);
+    clearTimeout(fading);
     videos.dispose();
     sound?.stop();
     document.removeEventListener('keydown', onKey, true);
@@ -278,14 +286,17 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
 const LIVE_VIDEO = typeof navigator === 'undefined' || !(/AppleWebKit/.test(navigator.userAgent) && !/Chrome\/|Chromium\//.test(navigator.userAgent));
 
 /** The design's soundtrack as something to play from a point, or null if it has none. */
-function soundtrackPlayer(doc) {
+function soundtrackPlayer(doc, hrefFor) {
   const asset = soundtrackOf(doc);
   if (!asset) return null;
   const audio = new Audio();
   let url = '';
   try {
-    url = blobUrlFor(asset.dataUrl);
+    // The canvas's copy of the file where it has one (not ours to let go of).
+    const shared = hrefFor?.(doc.audio.assetId) || '';
+    url = shared || blobUrlFor(asset.dataUrl);
     audio.src = url;
+    if (shared) url = '';
   } catch {
     /* a damaged sound: the slides play in silence */
   }
@@ -293,10 +304,11 @@ function soundtrackPlayer(doc) {
   // player's own volume), else the player's.
   const volume = doc.audio.volume ?? 1;
   let mixer = null;
+  let gain = null;
   const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
   try {
     mixer = new Ctx();
-    const gain = mixer.createGain();
+    gain = mixer.createGain();
     gain.gain.value = volume;
     mixer.createMediaElementSource(audio).connect(gain).connect(mixer.destination);
     mixer.resume?.().catch(() => null); // in case it starts held
@@ -324,9 +336,20 @@ function soundtrackPlayer(doc) {
   audio.addEventListener('loadedmetadata', play);
   return {
     seek(t) {
+      if (gain) {
+        gain.gain.cancelScheduledValues(0); // back from any fade
+        gain.gain.value = volume;
+      }
       wanted = t;
       wantedAt = performance.now();
       if (audio.readyState >= 1) play();
+    },
+    /** Fade to silence over `seconds` (as downloads end). */
+    fadeOut(seconds) {
+      if (!gain) return;
+      const now = mixer.currentTime;
+      gain.gain.setValueAtTime(volume, now);
+      gain.gain.linearRampToValueAtTime(0, now + Math.max(0.05, seconds));
     },
     pause() {
       wanted = null; // and it doesn't start once it has loaded, either

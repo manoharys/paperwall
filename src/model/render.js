@@ -620,7 +620,9 @@ export function renderFrame(doc, frame, opts = {}) {
     const tr = transitionAt(frame.transition.type, frame.transition.progress);
     body = layer(frame.from.index, frame.from.local, tr.from) + layer(frame.index, frame.local, tr.to);
   } else body = layer(frame.index, frame.local, null);
-  return svgDocument(ctx, body, w, h, opts, ' overflow="hidden"');
+  // On white, as in every download (so a see-through moment of a transition
+  // looks the same played, presented or downloaded).
+  return svgDocument(ctx, `<rect width="${f(w)}" height="${f(h)}" fill="#ffffff"/>${body}`, w, h, opts, ' overflow="hidden"');
 }
 
 /** Render a single element on its own, for previews (layers list, thumbnails). */

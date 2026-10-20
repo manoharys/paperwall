@@ -238,8 +238,9 @@ function exactColors(px, max) {
  * Nearest palette color for an RGB color, remembered per 6-bit-per-channel
  * cell: fine enough that close tints (a #fafafa card on white) stay apart.
  */
+let cacheBuffer = null; // one, reused for every frame's palette
 function paletteMapper(palette) {
-  const cache = new Int16Array(262144).fill(-1);
+  const cache = (cacheBuffer ||= new Int16Array(262144)).fill(-1);
   return (r, g, b) => {
     const key = ((r >> 2) << 12) | ((g >> 2) << 6) | (b >> 2);
     let hit = cache[key];
