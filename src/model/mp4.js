@@ -37,23 +37,23 @@ export function buildMp4Parts({ video, audio = null, duration }) {
   const ftyp = box('ftyp', fourcc('isom'), u32(0x200), fourcc('isom'), fourcc('iso2'), fourcc(video.codec === 'avc' ? 'avc1' : 'iso6'), fourcc('mp41'));
   const tracks = [{ kind: 'video', ...video, timescale: 90000 }];
   if (audio) tracks.push({ kind: 'audio', ...audio, timescale: audio.sampleRate });
-  // Each track's samples, one after another in the media data.
+  // Samples of all tracks in time order (sound next to its pictures), so a
+  // player streaming the file has both from the start.
+  const order = tracks.flatMap((t, ti) => t.chunks.map((c, ci) => ({ ti, ci, at: c.timestamp ?? 0 })))
+    .sort((a, b) => a.at - b.at || a.ti - b.ti);
   const moovFor = (base) => {
+    const offsets = tracks.map((t) => new Array(t.chunks.length));
     let at = base;
-    const traks = tracks.map((t, i) => {
-      const offsets = t.chunks.map((c) => {
-        const o = at;
-        at += c.data.length;
-        return o;
-      });
-      return trak(t, i + 1, offsets, duration);
-    });
-    return box('moov', mvhd(duration, tracks.length + 1), ...traks);
+    for (const { ti, ci } of order) {
+      offsets[ti][ci] = at;
+      at += tracks[ti].chunks[ci].data.length;
+    }
+    return box('moov', mvhd(duration, tracks.length + 1), ...tracks.map((t, i) => trak(t, i + 1, offsets[i], duration)));
   };
   // The index's size doesn't depend on the offsets in it: measure, then write.
   const size = moovFor(0).length;
   const moov = moovFor(ftyp.length + size + 8);
-  const samples = tracks.flatMap((t) => t.chunks.map((c) => c.data));
+  const samples = order.map(({ ti, ci }) => tracks[ti].chunks[ci].data);
   const mediaSize = samples.reduce((s, d) => s + d.length, 0);
   return [ftyp, moov, u32(mediaSize + 8), fourcc('mdat'), ...samples];
 }

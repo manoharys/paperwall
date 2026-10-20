@@ -155,12 +155,18 @@ export class VideoFrames {
       ready: Promise.resolve().then(() => {
         if (this.disposed) return false; // (no file made for a player already let go)
         const url = this.urlFor(el.assetId);
-        if (!url) return false;
+        if (!url) {
+          p.failed = true;
+          return false;
+        }
         video.src = url;
         return firstPicture(video).then(() => {
           p.alpha = seeThrough(video);
           return true;
-        }, () => false);
+        }, () => {
+          p.failed = true;
+          return false;
+        });
       }).catch(() => false),
     };
     this.players.set(el.id, p);
@@ -210,9 +216,12 @@ export class VideoFrames {
     }
   }
 
-  /** Whether every one of `els` has played to its end and stays there (none loops). */
+  /** Whether every one of `els` is still now: played to its end (not looping), or unable to play here. */
   allEnded(els) {
-    return els.length > 0 && els.every((el) => el.loop === false && this.players.get(el.id)?.video.ended);
+    return els.length > 0 && els.every((el) => {
+      const p = this.players.get(el.id);
+      return p?.failed || (el.loop === false && p?.video.ended);
+    });
   }
 
   /** How long `el`'s video is: the player's word, else what was found when it was added. */

@@ -187,8 +187,9 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
         // a see-through video).
         const under = box.parentNode.querySelector(`image[data-under="${CSS.escape(box.dataset.video)}"]`);
         if (under) {
-          if (v.readyState >= 2) under.remove();
-          else v.addEventListener('loadeddata', () => under.remove(), { once: true });
+          // (A video still seeking shows once it has: 'seeked' or 'playing'.)
+          if (v.readyState >= 2 && !v.seeking) under.remove();
+          else for (const type of ['loadeddata', 'seeked', 'playing']) v.addEventListener(type, () => under.remove(), { once: true });
         }
       }
     } else if (live) {
@@ -271,8 +272,16 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     videos.dispose();
     sound?.stop();
     document.removeEventListener('keydown', onKey, true);
+    document.removeEventListener('fullscreenchange', onFullscreen);
     if (document.fullscreenElement) document.exitFullscreen().catch(() => null);
     root.remove();
+  };
+  // Leaving full screen (Escape, which the browser keeps for itself) ends
+  // presenting too: nothing plays on behind it.
+  let wentFull = false;
+  const onFullscreen = () => {
+    if (document.fullscreenElement) wentFull = true;
+    else if (wentFull) close();
   };
   root.addEventListener('click', (e) => {
     if (e.target.closest('.presenter-close')) return;
@@ -281,6 +290,7 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     if (to !== at) go(to, to === at + 1);
   });
   document.addEventListener('keydown', onKey, true);
+  document.addEventListener('fullscreenchange', onFullscreen);
   document.body.append(root);
   go(at, false);
   root.focus();

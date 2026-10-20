@@ -163,7 +163,10 @@ export async function soundtrackBuffer(doc) {
   const Ctx = globalThis.OfflineAudioContext || globalThis.webkitOfflineAudioContext;
   if (!Ctx) return null;
   // (The callback form: older Safari's has no promise.)
-  return new Promise((resolve, reject) => new Ctx(1, 1, 48000).decodeAudioData(dataUrlToBytes(a.dataUrl).bytes.buffer, resolve, reject));
+  return new Promise((resolve, reject) => {
+    // (Newer browsers also return a promise, which fails too: heard by `reject` already.)
+    new Ctx(1, 1, 48000).decodeAudioData(dataUrlToBytes(a.dataUrl).bytes.buffer, resolve, reject)?.catch?.(() => null);
+  });
 }
 
 export function exportDialog(editor) {
