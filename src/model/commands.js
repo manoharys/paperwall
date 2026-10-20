@@ -416,6 +416,8 @@ export function resizeDesign(doc, width, height) {
       if (b.w <= width) el.x += Math.max(0, -b.x) - Math.max(0, b.x + b.w - width);
       if (b.h <= height) el.y += Math.max(0, -b.y) - Math.max(0, b.y + b.h - height);
     }
+    // Guides keep their place relative to the page (a centre guide stays centred).
+    if (page.guides) page.guides = page.guides.map((g) => ({ ...g, pos: Math.round(g.pos * (g.axis === 'x' ? sx : sy)) }));
   }
   out.width = Math.round(width);
   out.height = Math.round(height);

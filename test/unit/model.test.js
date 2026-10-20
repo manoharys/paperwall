@@ -503,3 +503,24 @@ test('[BRD-03] a brand kit also recolors text effects and duotone photos', async
   assert.ok(['#123456', '#abcdef'].includes(t.effect.color));
   assert.ok(['#123456', '#abcdef'].includes(img.filters.duotone.dark));
 });
+
+test('[DOC-10] resizing a design keeps guides in the same place on the page', async () => {
+  const { createDesign } = await import('../../src/model/doc.js');
+  const { resizeDesign } = await import('../../src/model/commands.js');
+  const doc = createDesign({ width: 1080, height: 1080 });
+  doc.pages[0].guides = [{ axis: 'x', pos: 540 }, { axis: 'y', pos: 270 }];
+  const out = resizeDesign(doc, 1920, 540);
+  assert.deepEqual(out.pages[0].guides, [{ axis: 'x', pos: 960 }, { axis: 'y', pos: 135 }]);
+});
+
+test('[EDIT-01] discarding at the history limit keeps the oldest step', async () => {
+  const { History } = await import('../../src/model/history.js');
+  const h = new History(2);
+  const doc = { pages: [], assets: {} };
+  h.record({ ...doc, n: 1 });
+  h.record({ ...doc, n: 2 });
+  h.record({ ...doc, n: 3 });
+  h.discard();
+  assert.equal(h.past.length, 2);
+  assert.equal(JSON.parse(h.past[0]).n, 1, 'the oldest step came back');
+});

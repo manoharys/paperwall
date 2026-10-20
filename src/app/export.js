@@ -4,7 +4,7 @@
 import { renderPage, textRuns } from '../model/render.js';
 import { buildPdf } from '../model/pdf.js';
 import { buildZip } from '../model/zip.js';
-import { validateDesign, clone } from '../model/doc.js';
+import { validateDesign, clone, visiblePages } from '../model/doc.js';
 import { measure, fontCssFor, registerDesignFonts } from './fonts.js';
 import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage } from './ui.js';
 import { section, segmented, slider, toggle } from './widgets.js';
@@ -140,7 +140,7 @@ export function exportDialog(editor) {
   const doc = editor.doc;
   // Hidden pages start unticked; tick one to download it anyway. If every
   // page is hidden (or there's just one), start with all of them.
-  const visible = doc.pages.map((p, i) => (p.hidden ? -1 : i)).filter((i) => i >= 0);
+  const visible = visiblePages(doc);
   const state = { format: 'png', scale: 1, transparent: false, quality: 92, pages: new Set(visible.length && doc.pages.length > 1 ? visible : doc.pages.map((_, i) => i)) };
   const body = h('div', { class: 'export' });
   const draw = () => {

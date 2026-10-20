@@ -51,13 +51,15 @@ export function findDialog(editor) {
     show(same >= 0 ? same + 1 : at);
   };
   const replaceAll = () => {
-    let count = 0;
-    if (!findText(editor.doc, find.value, opts).length) return toast('Nothing to replace.');
-    editor.change(() => {
-      const r = replaceText(editor.doc, find.value, repl.value, opts);
-      count = r.count;
+    // One walk over the design: record an undo step, replace, and drop the
+    // step again if nothing matched.
+    editor.history.record(editor.doc);
+    const r = replaceText(editor.doc, find.value, repl.value, opts);
+    const count = r.count;
+    if (count) {
       refit(r.changed);
-    });
+      editor.afterChange();
+    } else editor.history.discard();
     refresh();
     toast(count ? `Replaced ${count} time${count === 1 ? '' : 's'}. Undo to put it back.` : 'Nothing to replace.');
   };

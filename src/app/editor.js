@@ -88,12 +88,13 @@ export class Editor {
     return result;
   }
 
-  afterChange(quiet = false) {
+  /** After any change: save, refresh, keep connectors attached. `edit: false` for corrections (re-measuring), which don't call for a new version. */
+  afterChange(quiet = false, { edit = true } = {}) {
     // Connectors on every page follow what they're attached to (pages
     // without connectors return at once).
     this.syncAllConnectors();
     this.doc.updatedAt = Date.now();
-    this.changedSinceVersion = true;
+    if (edit) this.changedSinceVersion = true;
     this.selection = this.selection.filter((id) => cmd.findElement(this.pageData, id));
     if (!quiet) this.emit('doc');
     this.save();
@@ -393,8 +394,7 @@ export class Editor {
       // Under the elements it joins, so its ends tuck neatly against them.
       const page = this.pageData;
       const at = Math.min(page.elements.indexOf(a), page.elements.indexOf(b));
-      page.elements.splice(at, 0, el);
-      updateConnectors(page);
+      page.elements.splice(at, 0, el); // afterChange attaches its ends
     });
     this.select([el.id]);
     return el;

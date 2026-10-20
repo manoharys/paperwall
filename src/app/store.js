@@ -10,9 +10,14 @@ const memory = Object.fromEntries(STORES.map((s) => [s, new Map()]));
 let persistent = true;
 let outdated = false; // a newer Paperwall upgraded storage in another tab
 
+const OUTDATED = 'Paperwall was updated in another tab. Reload this tab to keep using your designs.';
+
 function open() {
+  // Once another tab has upgraded storage, this tab can't use it: every read
+  // and write fails (and says why) instead of quietly using an empty memory store.
+  if (outdated) return Promise.reject(new Error(OUTDATED));
   if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve) => {
+  dbPromise = new Promise((resolve, reject) => {
     let req;
     try {
       req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -51,7 +56,7 @@ function open() {
         outdated = true;
         globalThis.dispatchEvent?.(new CustomEvent('paperwall:storage-outdated'));
         dbPromise = null;
-        resolve(null);
+        reject(new Error(OUTDATED));
         return;
       }
       persistent = false;
@@ -93,7 +98,6 @@ export function isPersistent() {
 }
 
 export async function put(store, key, value) {
-  if (outdated) throw new Error('Paperwall was updated in another tab. Reload this tab to keep saving.');
   const db = await open();
   if (!db) return void memory[store].set(key, value);
   await txRetry(db, store, 'readwrite', (s) => s.put(value, key));
@@ -102,7 +106,6 @@ export async function put(store, key, value) {
 /** Several puts (value set) and deletes (value undefined) in one transaction. */
 async function batch(store, ops) {
   if (!ops.length) return;
-  if (outdated) throw new Error('Paperwall was updated in another tab. Reload this tab to keep saving.');
   const db = await open();
   if (!db) {
     for (const [k, v] of ops) v === undefined ? memory[store].delete(k) : memory[store].set(k, v);
@@ -195,14 +198,31 @@ async function writeVersion(doc, { label = '' } = {}) {
   const at = Date.now();
   const { assets, ...meta } = doc;
   const rest = JSON.parse(JSON.stringify(meta)); // the images are stored separately, once
-  const have = new Set(await keysIn(`${doc.id}|a|`));
-  const meta2 = { key: vKey(doc.id, at), designId: doc.id, at, label, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, assetIds: Object.keys(assets || {}) };
-  // New images, the design and its details, all in one transaction.
-  await batch('versions', [
-    ...Object.entries(assets || {}).filter(([id]) => !have.has(aKey(doc.id, id))).map(([id, a]) => [aKey(doc.id, id), a]),
-    [dKey(doc.id, at), rest],
-    [vKey(doc.id, at), meta2],
-  ]);
+  const details = { key: vKey(doc.id, at), designId: doc.id, at, label, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, assetIds: Object.keys(assets || {}) };
+  // Which images are already stored is checked in the same transaction that
+  // writes the version, so another tab's clean-up can't remove one in between.
+  const db = await open();
+  const [alo, ahi] = range(`${doc.id}|a|`);
+  if (!db) {
+    for (const [id, a] of Object.entries(assets || {})) if (!memory.versions.has(aKey(doc.id, id))) memory.versions.set(aKey(doc.id, id), a);
+    memory.versions.set(dKey(doc.id, at), rest);
+    memory.versions.set(vKey(doc.id, at), details);
+  } else {
+    await new Promise((resolve, reject) => {
+      const t = db.transaction('versions', 'readwrite');
+      const s = t.objectStore('versions');
+      const have = s.getAllKeys(IDBKeyRange.bound(alo, ahi));
+      have.onsuccess = () => {
+        const stored = new Set(have.result);
+        for (const [id, a] of Object.entries(assets || {})) if (!stored.has(aKey(doc.id, id))) s.put(a, aKey(doc.id, id));
+        s.put(rest, dKey(doc.id, at));
+        s.put(details, vKey(doc.id, at));
+      };
+      t.oncomplete = () => resolve();
+      t.onerror = () => reject(t.error);
+      t.onabort = () => reject(t.error || new Error('Storage is full'));
+    });
+  }
   const keys = await keysIn(`${doc.id}|v|`);
   const drop = keys.slice(0, Math.max(0, keys.length - MAX_VERSIONS));
   if (drop.length) await prune(doc.id, drop);

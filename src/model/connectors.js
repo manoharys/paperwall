@@ -150,6 +150,12 @@ export function connectorGeometry(el, trim = { start: 0, end: 0 }) {
   const [a, b] = el.points.map(([fx, fy]) => [fx * el.w, fy * el.h]);
   const g = routeBetween(el, a, b);
   if (!trim.start && !trim.end) return g;
+  // On a short line, trim less so the ends never cross.
+  const room = Math.hypot(b[0] - a[0], b[1] - a[1]) * 0.9;
+  if (trim.start + trim.end > room) {
+    const k = room / (trim.start + trim.end);
+    trim = { start: trim.start * k, end: trim.end * k };
+  }
   const unit = ([x, y]) => {
     const l = Math.hypot(x, y) || 1;
     return [x / l, y / l];

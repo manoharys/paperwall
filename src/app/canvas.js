@@ -59,7 +59,10 @@ export class Canvas {
     editor.on((what) => {
       if (what === 'live') return this.schedule();
       if (what === 'tool') return void this.el.classList.toggle('drawing', !!editor.drawTool);
-      if (what === 'aids') return void this.drawOverlay();
+      if (what === 'aids') {
+        this.drawRulers(); // switching rulers on or off shows at once (cheap: cached)
+        return void this.scheduleOverlay();
+      }
       // Discrete changes draw right away; drags are batched per frame.
       if (this.frame) cancelAnimationFrame(this.frame);
       this.frame = 0;
@@ -68,6 +71,15 @@ export class Canvas {
   }
 
   // ---------- drawing ----------
+
+  /** Redraw just the overlay (guides, grid) once this frame. */
+  scheduleOverlay() {
+    if (this.overlayFrame) return;
+    this.overlayFrame = requestAnimationFrame(() => {
+      this.overlayFrame = 0;
+      this.drawOverlay();
+    });
+  }
 
   schedule() {
     if (this.frame) return;
@@ -273,7 +285,14 @@ export class Canvas {
       this.startTransform(handle, p, e);
       return;
     }
-    const guide = e.target.closest?.('[data-guide]');
+    let guide = e.target.closest?.('[data-guide]');
+    if (guide) {
+      // Next to an element lined up on the guide, the element wins unless the
+      // press is right on the line.
+      const g = ed.pageData.guides[+guide.getAttribute('data-guide')];
+      const off = Math.abs((g.axis === 'x' ? p.x : p.y) - g.pos) * ed.zoom;
+      if (off > 1.5 && this.hitTest(p)) guide = null;
+    }
     if (guide) {
       e.preventDefault();
       const index = +guide.getAttribute('data-guide');
@@ -388,7 +407,8 @@ export class Canvas {
       if (!e.altKey) {
         // Connectors follow what's being moved, so they aren't something to snap to.
         const others = ed.pageData.elements.filter((el) => !el.hidden && el.type !== 'connector' && !ed.selection.includes(el.id));
-        const snap = snapMove(moving, others, { w: ed.doc.width, h: ed.doc.height }, 6 / ed.zoom, ed.snapLines());
+        d.lines ??= ed.snapLines(); // the same for the whole drag
+        const snap = snapMove(moving, others, { w: ed.doc.width, h: ed.doc.height }, 6 / ed.zoom, d.lines);
         dx += snap.dx;
         dy += snap.dy;
         ed.guides = snap.guides;

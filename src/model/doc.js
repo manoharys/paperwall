@@ -23,6 +23,11 @@ export const PRESETS = [
   { id: 'logo', name: 'Logo', group: 'Brand', w: 500, h: 500 },
 ];
 
+/** Indexes of the pages that aren't hidden (shown when presenting and downloading). */
+export function visiblePages(doc) {
+  return doc.pages.map((p, i) => (p.hidden ? -1 : i)).filter((i) => i >= 0);
+}
+
 export function presetById(id) {
   return PRESETS.find((p) => p.id === id) || null;
 }

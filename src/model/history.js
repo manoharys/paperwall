@@ -31,7 +31,8 @@ export class History {
       return;
     }
     this.past.push(snapshot(doc));
-    if (this.past.length > this.limit) this.past.shift();
+    // The oldest step is set aside, not lost, in case this one is discarded.
+    this.shifted = this.past.length > this.limit ? this.past.shift() : null;
     this.discardedFuture = this.future; // brought back if this step is discarded
     this.pending = true; // the newest step is this one, until undo or redo
     this.future = [];
@@ -46,6 +47,8 @@ export class History {
     if (!this.pending) return;
     this.pending = false;
     this.past.pop();
+    if (this.shifted) this.past.unshift(this.shifted);
+    this.shifted = null;
     if (this.discardedFuture) this.future = this.discardedFuture;
     this.discardedFuture = null;
     this.lastKey = null;

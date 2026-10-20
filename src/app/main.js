@@ -197,7 +197,7 @@ async function openEditor(id) {
     clearMeasureCache();
     const families = new Set([...loaded].map((k) => k.split('|')[0]));
     // A correction to measurements, not an edit: saved, but not an undo step.
-    if (editor.refitAllText((el) => families.has(el.font))) editor.afterChange(true);
+    if (editor.refitAllText((el) => families.has(el.font))) editor.afterChange(true, { edit: false });
     canvas.render();
   };
   document.fonts.addEventListener('loadingdone', onFontsLoaded);

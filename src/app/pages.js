@@ -3,6 +3,7 @@
 import { h, icon, iconButton, clear, debounce, dialog, toast } from './ui.js';
 import { renderPage } from '../model/render.js';
 import { measure } from './fonts.js';
+import { visiblePages } from '../model/doc.js';
 
 export class PageStrip {
   constructor(editor, canvas) {
@@ -96,7 +97,7 @@ export function pageGrid(editor, canvas) {
 /** Show pages full screen, one at a time. Arrow keys move, Escape leaves. Hidden pages are skipped. */
 export function present(editor, canvas) {
   const doc = editor.doc;
-  const shown = doc.pages.map((p, k) => (p.hidden ? -1 : k)).filter((k) => k >= 0);
+  const shown = visiblePages(doc);
   if (!shown.length) return toast('Every page is hidden. Show a page to present it.');
   let at = Math.max(0, shown.indexOf(editor.page));
   const slide = h('div', { class: 'slide' });
