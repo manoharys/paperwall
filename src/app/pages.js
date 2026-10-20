@@ -282,7 +282,21 @@ function soundtrackPlayer(doc) {
   const asset = doc.audio && doc.assets[doc.audio.assetId];
   if (!asset) return null;
   const audio = new Audio();
-  audio.volume = doc.audio.volume ?? 1;
+  // Volume through Web Audio where there is one (iPhones and iPads ignore a
+  // player's own volume), else the player's.
+  const volume = doc.audio.volume ?? 1;
+  let mixer = null;
+  const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
+  try {
+    mixer = new Ctx();
+    const gain = mixer.createGain();
+    gain.gain.value = volume;
+    mixer.createMediaElementSource(audio).connect(gain).connect(mixer.destination);
+  } catch {
+    mixer?.close?.().catch(() => null);
+    mixer = null;
+    audio.volume = volume;
+  }
   // Asked to play now, while the click that pressed Play still counts:
   // Safari only lets a sound play later if it was started by a click.
   audio.play().catch(() => null);
@@ -319,6 +333,7 @@ function soundtrackPlayer(doc) {
     stop() {
       stopped = true;
       audio.pause();
+      mixer?.close?.().catch(() => null);
       audio.removeEventListener('loadedmetadata', play);
       loaded.then(() => url && URL.revokeObjectURL(url));
     },

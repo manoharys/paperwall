@@ -401,10 +401,13 @@ export function isEmptyFrame(doc, el) {
 }
 
 /** An animation or transition from a file: a known type and numbers in range, else nothing. */
+const isNum = (v) => v !== null && v !== '' && typeof v !== 'boolean' && Number.isFinite(+v);
+
 function cleanMotion(m, kinds, ranges) {
   if (!m || typeof m !== 'object' || !Object.hasOwn(kinds, m.type) || m.type === 'none') return undefined;
   const out = { type: m.type };
-  for (const [k, [lo, hi]] of Object.entries(ranges)) if (Number.isFinite(+m[k])) out[k] = Math.max(lo, Math.min(hi, +m[k]));
+  // Missing, empty or not a number: left out, so the default applies (as when playing).
+  for (const [k, [lo, hi]] of Object.entries(ranges)) if (isNum(m[k])) out[k] = Math.max(lo, Math.min(hi, +m[k]));
   return out;
 }
 
@@ -443,7 +446,7 @@ export function validateDesign(doc) {
     if (p.guides !== undefined) p.guides = (Array.isArray(p.guides) ? p.guides : []).filter((g) => g && (g.axis === 'x' || g.axis === 'y') && Number.isFinite(+g.pos)).map((g) => ({ axis: g.axis, pos: +g.pos }));
     if (p.anim !== undefined) p.anim = cleanMotion(p.anim, PAGE_ANIMATIONS, { duration: LIMITS.duration, stagger: LIMITS.stagger });
     if (p.transition !== undefined) p.transition = cleanMotion(p.transition, TRANSITIONS, { duration: LIMITS.transition });
-    if (p.duration !== undefined) p.duration = Number.isFinite(+p.duration) ? Math.max(LIMITS.page[0], Math.min(LIMITS.page[1], +p.duration)) : undefined;
+    if (p.duration !== undefined) p.duration = isNum(p.duration) ? Math.max(LIMITS.page[0], Math.min(LIMITS.page[1], +p.duration)) : undefined;
   }
   for (const [id, a] of Object.entries(doc.assets)) {
     if (!a || typeof a.dataUrl !== 'string' || !/^data:(image|font|video|audio)\//.test(a.dataUrl)) delete doc.assets[id];

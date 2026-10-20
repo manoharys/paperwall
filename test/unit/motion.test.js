@@ -431,3 +431,13 @@ test('[MOT-02] a page\'s elements all come in within its time; a delay past it i
   page.elements[0].anim = { type: 'fade', delay: 8 };
   assert.equal(startsTooLate(page), true);
 });
+
+test('[MOT-03] empty motion values in a file keep their defaults', () => {
+  const doc = createDesign({ width: 100, height: 100 });
+  doc.pages[0].duration = null;
+  doc.pages[0].anim = { type: 'fade', duration: null, stagger: '' };
+  validateDesign(doc);
+  assert.equal(doc.pages[0].duration, undefined);
+  assert.deepEqual(doc.pages[0].anim, { type: 'fade' });
+  assert.equal(pageDuration(doc.pages[0]), 5);
+});
