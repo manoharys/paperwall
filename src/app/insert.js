@@ -339,10 +339,14 @@ export class InsertPanel {
             e.dataTransfer.setData('application/x-paperwall-upload', u.id);
             e.dataTransfer.effectAllowed = 'copy';
           } }, async () => {
-            // Videos and sounds are listed without their bytes: fetched when used.
-            const whole = u.dataUrl ? u : await store.getUpload(u.id);
-            if (!whole?.dataUrl) return toast(`${u.name} is missing. Try uploading it again.`, 'error');
-            if (!ed.closed) await ed.place(whole);
+            try {
+              // Videos and sounds are listed without their bytes: fetched when used.
+              const whole = u.dataUrl ? u : await store.getUpload(u.id);
+              if (!whole?.dataUrl) return toast(`${u.name} is missing. Try uploading it again.`, 'error');
+              if (!ed.closed) await ed.place(whole);
+            } catch (e) {
+              toast(e.message, 'error');
+            }
           }, look, u.kind === 'video' ? h('span', { class: 'upload-play', 'aria-hidden': 'true' }, icon('play', 14)) : null),
           iconButton('trash', 'Remove from uploads', async () => {
             await store.deleteUpload(u.id);

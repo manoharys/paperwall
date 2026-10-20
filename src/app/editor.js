@@ -471,6 +471,7 @@ export class Editor {
     if (info.sound) {
       kind = 'audio';
       info = { duration: info.duration };
+      checkSize(file, kind);
     }
     const upload = { id: uid('u'), name: file.name, mime: file.type, dataUrl, kind, ...info, addedAt: Date.now() };
     // It's used either way; Uploads just can't keep a copy when storage is full.

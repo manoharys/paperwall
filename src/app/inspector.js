@@ -5,7 +5,7 @@ import { h, icon, iconButton, clear, toast, pickFile, readFileAsDataUrl, dialog,
 import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover, popoverOpen, PALETTES, fontPicker, gradientEditor } from './widgets.js';
 import { FONTS, FONT_KINDS } from '../model/fonts.js';
 import { ANIMATIONS, PAGE_ANIMATIONS, TRANSITIONS, DEFAULT_ANIM_DURATION, DEFAULT_STAGGER, DEFAULT_TRANSITION_DURATION, LIMITS, pageDuration } from '../model/motion.js';
-import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, isEmptyFrame, parseChartData, chartDataText, parseTable, tableText, soundtrackOf } from '../model/doc.js';
+import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, isEmptyFrame, parseChartData, chartDataText, parseTable, tableText, soundtrackOf, KEEPS_RATIO } from '../model/doc.js';
 import { collectColors, cropZoom } from '../model/commands.js';
 import { renderElementOnly, TEXT_EFFECTS } from '../model/render.js';
 import { measure, addCustomFont, customFontNames, ensureFont, fontSettled } from './fonts.js';
@@ -164,7 +164,7 @@ export class Inspector {
     const set = (k) => (v) => this.up({ [k]: k === 'rotation' ? ((v % 360) + 360) % 360 : v });
     const resize = (k) => (v) => {
       const props = { [k]: Math.max(1, v) };
-      if (['image', 'video', 'icon', 'sticker', 'qr'].includes(el.type)) {
+      if (KEEPS_RATIO.includes(el.type)) {
         const r = el.w / el.h;
         if (k === 'w') props.h = Math.max(1, v / r);
         else props.w = Math.max(1, v * r);

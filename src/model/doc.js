@@ -367,9 +367,14 @@ export function createGroup(children, props = {}) {
 }
 
 /** Add a picture, video or sound to the design (once: the same file is shared). Returns the asset id. */
+/** Element types whose width and height keep their ratio when resized. */
+export const KEEPS_RATIO = ['image', 'video', 'icon', 'sticker', 'qr'];
+
 export function addAsset(doc, { mime, dataUrl, width, height, name = '', kind = 'image', duration, poster }) {
+  // The same file used the same way is stored once (a sound and a video of
+  // the same bytes stay apart: each kind is checked as its own when loaded).
   for (const [id, a] of Object.entries(doc.assets)) {
-    if (a.dataUrl === dataUrl) return id;
+    if (a.dataUrl === dataUrl && (a.type || 'image') === kind) return id;
   }
   const id = uid('a');
   doc.assets[id] = { type: kind, mime, dataUrl, width, height, name, ...(duration !== undefined ? { duration } : {}), ...(poster ? { poster } : {}) };

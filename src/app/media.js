@@ -71,6 +71,8 @@ export async function videoInfo(file) {
       await known;
     }
     const duration = Number.isFinite(v.duration) ? v.duration : 0;
+    // `sound`: a file with no picture at all (music saved as .webm or .mp4).
+    if (!v.videoWidth || !v.videoHeight) return { sound: true, duration };
     v.currentTime = Math.min(0.2, duration / 2 || 0);
     await once(v, 'seeked').catch(() => null);
     const s = Math.min(1, 640 / Math.max(v.videoWidth, v.videoHeight, 1));
@@ -78,8 +80,6 @@ export async function videoInfo(file) {
     c.width = Math.max(1, Math.round(v.videoWidth * s));
     c.height = Math.max(1, Math.round(v.videoHeight * s));
     c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
-    // `sound`: a file with no picture at all (music saved as .webm or .mp4).
-    if (!v.videoWidth || !v.videoHeight) return { sound: true, duration };
     return { width: v.videoWidth, height: v.videoHeight, duration, poster: c.toDataURL('image/jpeg', 0.82) };
   } finally {
     v.removeAttribute('src');

@@ -7,7 +7,7 @@ import {
   pointInBox, rectFromPoints, rectsIntersect, HANDLES,
 } from '../model/geometry.js';
 import { resizeElement, coverCrop, topmost, findElement } from '../model/commands.js';
-import { clone, DRAW_TOOLS, pxPerUnit, isEmptyFrame, restroke } from '../model/doc.js';
+import { clone, DRAW_TOOLS, pxPerUnit, isEmptyFrame, restroke, KEEPS_RATIO } from '../model/doc.js';
 import { gridLines, marginSize, bleedSize } from '../model/view.js';
 import { endsOf, setEnds, isLine, lineHit } from '../model/connectors.js';
 import { measure } from './fonts.js';
@@ -16,7 +16,7 @@ import { h, dataUrlToBlob, toast, pickFile } from './ui.js';
 import * as store from './store.js';
 
 const PAD = 64;
-const RATIO_LOCKED = new Set(['image', 'video', 'icon', 'sticker', 'qr', 'group']);
+const RATIO_LOCKED = new Set([...KEEPS_RATIO, 'group']);
 
 
 export class Canvas {

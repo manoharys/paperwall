@@ -171,6 +171,8 @@ export function exportDialog(editor) {
   // page is hidden (or there's just one), start with all of them.
   const visible = visiblePages(doc);
   const state = { format: 'png', scale: 1, transparent: false, quality: 92, pages: new Set(visible.length && doc.pages.length > 1 ? visible : doc.pages.map((_, i) => i)) };
+  // The ticked pages, in page order.
+  const picked = () => [...state.pages].sort((a, b) => a - b);
   const body = h('div', { class: 'export' });
   const draw = () => {
     body.replaceChildren(...[
@@ -196,7 +198,7 @@ export function exportDialog(editor) {
         mp4: 'A video of your animations and pages, with your soundtrack. Plays everywhere.',
         webm: 'A video of your animations and pages, with your soundtrack. Smaller; plays in browsers.',
       }[state.format]),
-      MOVING.has(state.format) ? h('p', { class: 'hint', 'data-testid': 'export-length' }, motionNote(doc, [...state.pages].sort((a, b) => a - b))) : null,
+      MOVING.has(state.format) ? h('p', { class: 'hint', 'data-testid': 'export-length' }, motionNote(doc, picked())) : null,
       (state.format === 'mp4' || state.format === 'webm') && !canMakeVideo() ? h('p', { class: 'hint warn' }, "This browser can't make videos. Try a recent Chrome, Edge, Safari or Firefox, or download a GIF.") : null),
       state.format === 'png' || state.format === 'jpg' ? section('Size', segmented({ label: 'Size', value: state.scale, testid: 'export-scale', onChange: (v) => {
         state.scale = v;
@@ -213,7 +215,7 @@ export function exportDialog(editor) {
           else state.pages.delete(i);
           // The animation's length depends on the pages.
           const note = body.querySelector('[data-testid="export-length"]');
-          if (note) note.textContent = motionNote(doc, [...state.pages].sort((a, b) => a - b));
+          if (note) note.textContent = motionNote(doc, picked());
         });
         const p = doc.pages[i];
         return h('label', { class: 'toggle' }, cb, h('span', null, pageLabel(p, i)));
@@ -230,13 +232,13 @@ export function exportDialog(editor) {
         } }, icon('copy'), 'Copy image'),
         h('button', { type: 'button', class: 'btn', 'data-testid': 'export-print', onClick: async () => {
           d.close();
-          await printDesign(doc, [...state.pages].sort((a, b) => a - b));
+          await printDesign(doc, picked());
         } }, 'Print')),
       h('p', { class: 'fine' }, 'No watermark. Made on your device; nothing is uploaded.'),
     ].filter(Boolean));
   };
   const run = async () => {
-    const pages = [...state.pages].sort((a, b) => a - b);
+    const pages = picked();
     if (!pages.length) return toast('Pick at least one page.');
     const name = safeFilename(doc.name);
     const btn = body.querySelector('[data-testid="export-download"]');
