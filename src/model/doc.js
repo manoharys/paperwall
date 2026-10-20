@@ -202,8 +202,8 @@ export function createDrawing(points, { tool = 'pen', stroke = '#1a1a2e', stroke
 export function restroke(el, width) {
   if (!el.points?.length) return { strokeWidth: width }; // nothing drawn: no box to fit
   const abs = el.points.map(([x, y]) => [el.x + x * el.w, el.y + y * el.h]);
-  const { x, y, w, h, points } = createDrawing(abs, { strokeWidth: width });
-  return { x, y, w, h, points, strokeWidth: width };
+  const { x, y, w, h, shares } = boxAround(abs, width / 2);
+  return { x, y, w, h, points: shares, strokeWidth: width };
 }
 
 /** Drop points closer than `min` px to the last kept one (they add size, not shape). */

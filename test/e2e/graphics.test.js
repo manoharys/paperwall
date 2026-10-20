@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { newDesign, state, elements, addShape, clickElement, elementCenter, drag, teardown, makePng, uploadImages, mod, openTab, screenPoint } from './helpers.js';
+import { newDesign, state, elements, addShape, clickElement, elementCenter, drag, teardown, makePng, uploadImages, mod, openTab, screenPoint, handle } from './helpers.js';
 
 after(teardown);
 
@@ -697,5 +697,28 @@ test('[ELM-10] dragging a connector with one end attached moves its loose end wi
   });
   const loose = after[1];
   assert.ok(Math.abs(loose[0] - (ends[1][0] + 60)) < 3 && Math.abs(loose[1] - (ends[1][1] + 60)) < 3, `the loose end followed: ${loose} from ${ends[1]}`);
+  await context.close();
+});
+
+test('[ELM-10] clicking a connector end without moving it leaves it attached', async () => {
+  const { page, context } = await newDesign('square');
+  const id = await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    const a = ed.addShape('rect');
+    const b = ed.addShape('rect');
+    ed.change(() => Object.assign(ed.pageData.elements.find((e) => e.id === a.id), { x: 100, y: 400, w: 200, h: 200 }));
+    ed.change(() => Object.assign(ed.pageData.elements.find((e) => e.id === b.id), { x: 700, y: 400, w: 200, h: 200 }));
+    const c = ed.connect([a.id, b.id], 'straight');
+    ed.select([c.id]);
+    return c.id;
+  });
+  const at = await handle(page, 'end1');
+  // A press with a pixel of jitter, as a real hand gives.
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.mouse.move(at.x + 1, at.y + 1);
+  await page.mouse.up();
+  const c = (await elements(page)).find((e) => e.id === id);
+  assert.ok(c.end.id, 'still attached');
   await context.close();
 });

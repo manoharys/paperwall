@@ -199,16 +199,17 @@ async function valuesIn(prefix) {
 /** Several values by key, in one transaction (undefined where missing). */
 async function getMany(store, keys) {
   if (!keys.length) return [];
-  const db = await open();
-  if (!db) return keys.map((k) => memory[store].get(k));
-  return withDb((fresh) => new Promise((resolve, reject) => {
-    const t = fresh.transaction(store, 'readonly');
-    const s = t.objectStore(store);
-    const reqs = keys.map((k) => s.get(k));
-    t.oncomplete = () => resolve(reqs.map((r) => r.result));
-    t.onerror = () => reject(t.error);
-    t.onabort = () => reject(t.error || new Error('Reading storage was stopped'));
-  }));
+  return withDb((db) => {
+    if (!db) return keys.map((k) => memory[store].get(k));
+    return new Promise((resolve, reject) => {
+      const t = db.transaction(store, 'readonly');
+      const s = t.objectStore(store);
+      const reqs = keys.map((k) => s.get(k));
+      t.oncomplete = () => resolve(reqs.map((r) => r.result));
+      t.onerror = () => reject(t.error);
+      t.onabort = () => reject(t.error || new Error('Reading storage was stopped'));
+    });
+  });
 }
 
 // Versions are saved one at a time, so one save's clean-up can't remove

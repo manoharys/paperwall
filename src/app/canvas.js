@@ -253,8 +253,8 @@ export class Canvas {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     if (this.textarea && e.target === this.textarea) return;
     const ed = this.ed;
-    // A second finger or a palm while a stroke is going is ignored (even on a ruler).
-    if (this.drag?.mode === 'draw') return void e.preventDefault();
+    // A second finger or a palm while any drag is going is ignored (even on a ruler).
+    if (this.drag && e.pointerId !== this.drag.pointerId) return void e.preventDefault();
     if (this.textarea) this.finishTextEdit();
     if (this.spaceDown || e.button === 1) {
       this.drag = { mode: 'pan', sx: e.clientX, sy: e.clientY, left: this.el.scrollLeft, top: this.el.scrollTop };
@@ -354,7 +354,7 @@ export class Canvas {
     ed.history.record(ed.doc);
     if (handle === 'end0' || handle === 'end1') {
       const el = sel[0];
-      this.drag = { recorded: true, mode: 'end', el, which: +handle.slice(3), moved: false, target: null };
+      this.drag = { recorded: true, mode: 'end', el, which: +handle.slice(3), start: p, moved: false, target: null };
     } else if (handle === 'rotate') {
       this.drag = { recorded: true, mode: 'rotate', el: sel[0], moved: false };
     } else if (sel.length === 1) {
@@ -391,18 +391,20 @@ export class Canvas {
       return;
     }
     if (d.mode === 'end') {
-      // Move one end; let go over an element to attach it there.
+      // Move one end; let go over an element to attach it there. A press that
+      // barely moves (a click on the handle) leaves it attached.
+      if (!d.moved && Math.hypot(p.x - d.start.x, p.y - d.start.y) * ed.zoom < 3) return;
       d.moved = true;
       const ends = endsOf(d.el);
       ends[d.which] = [p.x, p.y];
-      d.el[d.which ? 'end' : 'start'] = { id: null };
+      const key = d.which ? 'end' : 'start';
+      d.el[key] = { id: null, side: d.el[key]?.side }; // loose ends keep the side they left from
       setEnds(d.el, ends[0], ends[1]);
       d.target = this.attachTarget(p, d.el, d.which);
       ed.emit('live');
       return;
     }
     if (d.mode === 'draw') {
-      if (e.pointerId !== d.pointerId) return;
       const coalesced = e.getCoalescedEvents?.(); // can be empty (synthetic events)
       for (const ev of coalesced?.length ? coalesced : [e]) {
         const q = this.toPage(ev);
@@ -782,7 +784,9 @@ export class Canvas {
    */
   attachTarget(p, connector, which) {
     const other = (which ? connector.start : connector.end)?.id;
-    return topmost(this.ed.pageData, (el) => !el.hidden && el.type !== 'connector' && el !== connector && el.id !== other && pointInBox(p.x, p.y, el));
+    // A little past the edge counts, since the handle sits on it.
+    const reach = 8 / this.ed.zoom;
+    return topmost(this.ed.pageData, (el) => !el.hidden && el.type !== 'connector' && el !== connector && el.id !== other && pointInBox(p.x, p.y, el, reach));
   }
 
 

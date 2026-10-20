@@ -757,8 +757,8 @@ export class Editor {
   setPageTitle(i, title) {
     const clean = String(title || '').trim().slice(0, 120);
     if ((this.doc.pages[i].title || '') === clean) return;
+    // The strip catches up with the 'doc' redraw: not on every keystroke.
     this.change(() => (this.doc.pages[i].title = clean || undefined), { key: `title:${i}` });
-    this.emit('page');
   }
 
   /** Hidden pages stay in the design but are skipped when presenting and downloading. */
