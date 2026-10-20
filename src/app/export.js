@@ -155,7 +155,7 @@ export async function soundtrackBuffer(doc) {
   if (!Ctx) return null;
   const ctx = new Ctx();
   try {
-    return await ctx.decodeAudioData(dataUrlToBytes(a.dataUrl).buffer);
+    return await ctx.decodeAudioData(dataUrlToBytes(a.dataUrl).bytes.buffer);
   } finally {
     ctx.close?.();
   }
@@ -236,7 +236,7 @@ export function exportDialog(editor) {
         const onProgress = (p) => (btn.lastChild.textContent = `Making ${state.format.toUpperCase()}… ${Math.round(p * 100)}%`);
         const blob = state.format === 'gif'
           ? await exportGif(doc, pages, { onProgress })
-          : await exportVideo(doc, pages, { container: state.format, audio: await soundtrackBuffer(doc).catch(() => null), onProgress });
+          : await exportVideo(doc, pages, { container: state.format, audio: await soundtrackBuffer(doc).catch(() => null), volume: doc.audio?.volume ?? 1, onProgress });
         download(blob, `${name}.${state.format}`);
       } else if (state.format === 'pdf') {
         download(await exportPdf(doc, pages), `${name}.pdf`);
@@ -265,4 +265,4 @@ export function exportDialog(editor) {
 }
 
 /** For tests and power users: everything above, without the dialog. */
-export const api = { exportImage, exportSvg, exportPdf, exportGif, exportVideo, thumbnail, projectBlob, rasterize, dataUrlToBytes, clone };
+export const api = { exportImage, exportSvg, exportPdf, exportGif, exportVideo, soundtrackBuffer, thumbnail, projectBlob, rasterize, dataUrlToBytes, clone };

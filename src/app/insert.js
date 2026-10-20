@@ -327,14 +327,18 @@ export class InsertPanel {
     const load = async () => {
       const ups = await store.listUploads();
       clear(grid);
-      if (!ups.length) grid.append(h('p', { class: 'empty-note' }, 'Images you add show up here, so you can use them again in any design.'));
+      if (!ups.length) grid.append(h('p', { class: 'empty-note' }, 'Pictures, videos and sounds you add show up here, so you can use them again in any design.'));
       for (const u of ups) {
-        grid.append(h('div', { class: 'upload' },
-          pressable({ class: 'upload-img', title: u.name, 'aria-label': `Add ${u.name}`, 'data-testid': 'upload-item', draggable: 'true', onDragstart: (e) => {
+        // A picture shows itself; a video its poster and a play mark; a sound its name.
+        const look = u.kind === 'audio'
+          ? h('span', { class: 'upload-sound' }, icon('music'), h('small', null, u.name))
+          : h('img', { src: u.kind === 'video' ? u.poster : u.dataUrl, alt: '', draggable: 'false' });
+        grid.append(h('div', { class: `upload${u.kind ? ` ${u.kind}` : ''}` },
+          pressable({ class: 'upload-img', title: u.kind === 'audio' ? `Use ${u.name} as the soundtrack` : u.name, 'aria-label': u.kind === 'audio' ? `Use ${u.name} as the soundtrack` : `Add ${u.name}`, 'data-testid': 'upload-item', 'data-kind': u.kind || 'image', draggable: 'true', onDragstart: (e) => {
             // Drag onto the page to add it, or onto a frame to fill the frame.
             e.dataTransfer.setData('application/x-paperwall-upload', u.id);
             e.dataTransfer.effectAllowed = 'copy';
-          } }, () => ed.addImage(u), h('img', { src: u.dataUrl, alt: '', draggable: 'false' })),
+          } }, () => ed.place(u), look, u.kind === 'video' ? h('span', { class: 'upload-play', 'aria-hidden': 'true' }, icon('play', 14)) : null),
           iconButton('trash', 'Remove from uploads', async () => {
             await store.deleteUpload(u.id);
             load();
@@ -343,20 +347,21 @@ export class InsertPanel {
     };
     load();
     const upload = h('button', { type: 'button', class: 'btn primary wide', 'data-testid': 'upload-btn', onClick: async () => {
-      const files = await pickFile('image/*', true);
+      const files = await pickFile('image/*,video/*,audio/*', true);
       for (const f of files) {
         try {
-          const u = await ed.importImageFile(f);
-          await ed.addImage(u);
+          const u = await ed.importMediaFile(f);
+          if (ed.closed) return;
+          await ed.place(u);
         } catch (e) {
           toast(e.message, 'error');
         }
       }
       load();
-    } }, icon('uploads'), 'Upload images');
+    } }, icon('uploads'), 'Upload pictures, videos and sounds');
     return [
       upload,
-      h('p', { class: 'hint' }, `Or drag images onto the page, or paste with ${mod}+V. Your images stay on this device: nothing is uploaded anywhere.`),
+      h('p', { class: 'hint' }, `Or drag files onto the page, or paste pictures with ${mod}+V. A sound becomes the soundtrack. Everything stays on this device: nothing is uploaded anywhere.`),
       grid,
     ];
   }

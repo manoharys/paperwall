@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { newDesign, state, elements, addShape, clickElement, teardown, downloadVia } from './helpers.js';
+import { newDesign, state, elements, addShape, clickElement, teardown, downloadVia, openTab } from './helpers.js';
 
 after(teardown);
 
@@ -169,5 +169,101 @@ test('[MOT-06] download as a video: WebM and MP4', async () => {
   assert.deepEqual(types, ['ftyp', 'moov', 'mdat']);
   const stsz = buf.indexOf('stsz');
   assert.equal(buf.readUInt32BE(stsz + 12), 60, '2 seconds at 30 frames a second');
+  await context.close();
+});
+
+/** A one-second WebM made here by Paperwall itself: a red square popping in on white. */
+async function makeClip(page) {
+  const bytes = await page.evaluate(async () => {
+    const ed = window.paperwall.editor;
+    const doc = JSON.parse(JSON.stringify(ed.doc));
+    doc.width = 320;
+    doc.height = 240;
+    doc.pages = [{ id: 'clip', elements: [{ id: 'sq', type: 'shape', shape: 'rect', x: 110, y: 70, w: 100, h: 100, rotation: 0, opacity: 1, fill: '#ff0000', anim: { type: 'pop', duration: 0.5 } }], background: { type: 'color', color: '#ffffff' }, duration: 1 }];
+    const blob = await window.paperwall.export.exportVideo(doc, [0], { container: 'webm' });
+    return [...new Uint8Array(await blob.arrayBuffer())];
+  });
+  return Buffer.from(bytes);
+}
+
+/** A one-second 440 Hz tone as a WAV file. */
+function makeTone() {
+  const rate = 44100;
+  const n = rate;
+  const buf = Buffer.alloc(44 + n * 2);
+  buf.write('RIFF', 0);
+  buf.writeUInt32LE(36 + n * 2, 4);
+  buf.write('WAVEfmt ', 8);
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20);
+  buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(rate, 24);
+  buf.writeUInt32LE(rate * 2, 28);
+  buf.writeUInt16LE(2, 32);
+  buf.writeUInt16LE(16, 34);
+  buf.write('data', 36);
+  buf.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) buf.writeInt16LE(Math.round(Math.sin((i / rate) * 2 * Math.PI * 440) * 12000), 44 + i * 2);
+  return buf;
+}
+
+test('[MOT-07] add a video: it shows its poster, plays when presenting and moves in downloads', async () => {
+  const { page, context } = await newDesign('square');
+  const clip = await makeClip(page);
+  await openTab(page, 'uploads');
+  const chooser = page.waitForEvent('filechooser');
+  await page.click('[data-testid="upload-btn"]');
+  await (await chooser).setFiles({ name: 'clip.webm', mimeType: 'video/webm', buffer: clip });
+  await page.waitForFunction(() => window.paperwall.editor.pageData.elements.some((e) => e.type === 'video'));
+  const v = (await elements(page)).find((e) => e.type === 'video');
+  const asset = await state(page, (ed, id) => ed.doc.assets[id], v.assetId);
+  assert.equal(asset.type, 'video');
+  assert.ok(asset.duration > 0.8 && asset.duration < 1.3, `${asset.duration} seconds`);
+  assert.match(asset.poster, /^data:image\/jpeg/);
+  assert.equal(Math.round(v.w / v.h * 100), Math.round(320 / 240 * 100), 'its own shape');
+  await page.waitForSelector('[data-testid="upload-item"][data-kind="video"]');
+  // Its panel: where it starts, looping.
+  await page.click('[data-testid="video-loop"]');
+  assert.equal((await elements(page)).find((e) => e.type === 'video').loop, false);
+  // Presenting shows it playing: its picture is taken from the video.
+  await page.click('[data-testid="present"]');
+  await page.waitForFunction(() => /<image[^>]+href="data:image\/jpeg/.test(document.querySelector('[data-testid="slide"]')?.innerHTML || ''));
+  await page.keyboard.press('Escape');
+  // A GIF of the page has the square popping in, from the video alone.
+  const gif = await page.evaluate(async () => {
+    const ed = window.paperwall.editor;
+    ed.setPageMotion(0, { duration: 1 });
+    const blob = await window.paperwall.export.exportGif(ed.doc, [0]);
+    return [...new Uint8Array(await blob.arrayBuffer())];
+  });
+  const frames = Buffer.from(gif).toString('latin1').split('\x21\xf9\x04').length - 1;
+  assert.ok(frames > 3, `${frames} frames: the video moves`);
+  await context.close();
+});
+
+test('[MOT-08] a soundtrack: a sound from Uploads plays in downloaded videos', async () => {
+  const { page, context } = await newDesign('square');
+  await openTab(page, 'uploads');
+  const chooser = page.waitForEvent('filechooser');
+  await page.click('[data-testid="upload-btn"]');
+  await (await chooser).setFiles({ name: 'tone.wav', mimeType: 'audio/wav', buffer: makeTone() });
+  await page.waitForFunction(() => !!window.paperwall.editor.doc.audio);
+  // The Uploads list shows it once it's refreshed.
+  await page.waitForSelector('[data-testid="upload-item"][data-kind="audio"]');
+  // The page panel shows it, with a volume.
+  await page.evaluate(() => window.paperwall.editor.deselect());
+  assert.match(await page.textContent('[data-testid="soundtrack"]'), /tone\.wav/);
+  // A WebM download carries it as Opus.
+  const webm = await page.evaluate(async () => {
+    const ed = window.paperwall.editor;
+    ed.setPageMotion(0, { duration: 1 });
+    const blob = await window.paperwall.export.exportVideo(ed.doc, [0], { container: 'webm', audio: await window.paperwall.export.soundtrackBuffer(ed.doc) });
+    return [...new Uint8Array(await blob.arrayBuffer())];
+  });
+  const bytes = Buffer.from(webm);
+  assert.ok(bytes.includes(Buffer.from('A_OPUS')), 'an Opus sound track');
+  // Removing it.
+  await page.click('[data-testid="soundtrack-remove"]');
+  assert.equal(await state(page, (ed) => !!ed.doc.audio), false);
   await context.close();
 });

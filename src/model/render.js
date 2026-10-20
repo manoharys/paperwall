@@ -29,6 +29,8 @@ function makeCtx(doc, opts) {
     // Empty-frame placeholders: while editing and in page previews, never in downloads.
     placeholders: !!(opts.editor || opts.placeholders),
     skip: opts.skip || null,
+    // While playing or downloading: the picture for each video at this moment.
+    videoFrame: opts.videoFrame || null,
   };
 }
 
@@ -143,7 +145,23 @@ function renderLine(ctx, el) {
 }
 
 function renderImage(ctx, el) {
-  const href = el.assetId ? ctx.href(el.assetId) : '';
+  return renderPicture(ctx, el, el.assetId ? ctx.href(el.assetId) : '');
+}
+
+/**
+ * A video shows like a picture: the frame for this moment when playing (or
+ * downloading), else its poster. While editing it wears a small play badge.
+ */
+function renderVideo(ctx, el) {
+  const asset = ctx.doc.assets[el.assetId];
+  const href = ctx.videoFrame?.(el) || asset?.poster || '';
+  const pic = renderPicture(ctx, el, href); // no picture at all: the grey box of a missing image
+  if (!ctx.editor) return pic;
+  const s = Math.max(14, Math.min(el.w, el.h) * 0.14);
+  return `${pic}<g transform="translate(${f(el.w - s * 1.35)} ${f(s * 0.35)})"><circle cx="${f(s / 2)}" cy="${f(s / 2)}" r="${f(s / 2)}" fill="#000" fill-opacity="0.55"/><path d="M${f(s * 0.4)} ${f(s * 0.3)}L${f(s * 0.72)} ${f(s / 2)}L${f(s * 0.4)} ${f(s * 0.7)}Z" fill="#fff"/></g>`;
+}
+
+function renderPicture(ctx, el, href) {
   const outline = maskPath(el);
   // A picture whose image is missing (damaged file) keeps a grey box everywhere.
   if (el.assetId && !href) return `<path d="${outline}" fill="#e5e5ef"/>`;
@@ -461,6 +479,7 @@ const RENDERERS = {
   shape: renderShape,
   line: renderLine,
   image: renderImage,
+  video: renderVideo,
   icon: renderIcon,
   sticker: renderSticker,
   qr: renderQr,

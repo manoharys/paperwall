@@ -234,3 +234,24 @@ test('[MOT-05] GIF: LZW survives long runs and a full code table', async () => {
   assert.equal(gif.frames[0].pixels, W * H, 'every pixel decodes');
   assert.ok(lzwEncode(8, new Uint8Array(0)).length > 0);
 });
+
+test('[MOT-07] a video plays from its start point, looping or holding its last frame', async () => {
+  const { createVideo, videoTime, createDesign, validateDesign, usedAssetIds } = await import('../../src/model/doc.js');
+  const v = createVideo('a1', { trim: { start: 2 } });
+  assert.equal(videoTime(v, 0, 10), 2);
+  assert.equal(videoTime(v, 3, 10), 5);
+  assert.equal(videoTime(v, 9, 10), 3, 'past the end: from the start point again');
+  v.loop = false;
+  assert.ok(videoTime(v, 9, 10) < 10 && videoTime(v, 9, 10) > 9.9, 'holds near the end');
+  // In a design: its asset is kept, and the soundtrack's too.
+  const doc = createDesign({ width: 100, height: 100 });
+  doc.assets = { a1: { type: 'video', dataUrl: 'data:video/webm;base64,AA', poster: 'data:image/jpeg;base64,AA' }, s1: { type: 'audio', dataUrl: 'data:audio/wav;base64,AA' } };
+  doc.pages[0].elements.push(v);
+  doc.audio = { assetId: 's1', volume: 3 };
+  validateDesign(doc);
+  assert.deepEqual(doc.audio, { assetId: 's1', volume: 1 }, 'volume kept between 0 and 1');
+  assert.deepEqual([...usedAssetIds(doc)].sort(), ['a1', 's1']);
+  doc.audio = { assetId: 'gone' };
+  validateDesign(doc);
+  assert.equal(doc.audio, undefined, 'a soundtrack whose sound is gone is dropped');
+});

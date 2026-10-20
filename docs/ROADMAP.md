@@ -36,10 +36,10 @@ on-device AI models. Not approved: a collaboration server.
 
 ## v0.4 Motion
 
-- [ ] Animations for elements and pages (fade, rise, pan, pop, typewriter…)
-- [ ] Page timing and transitions
-- [ ] Download as GIF and video (WebM/MP4)
-- [ ] Video and audio elements
+- [x] Animations for elements and pages (fade, rise, pan, pop, typewriter…) (MOT-01, MOT-02)
+- [x] Page timing and transitions; playing them (MOT-03, MOT-04)
+- [x] Download as GIF and video (WebM/MP4) (MOT-05, MOT-06)
+- [x] Video and audio elements (MOT-07, MOT-08)
 - [x] Carried over from v0.3 review: a page-level connector whose two ends are both inside one turned group follows that group when it moves
 
 ## v0.5 Present, docs and whiteboards

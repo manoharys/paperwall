@@ -12,8 +12,10 @@ So the honest answer to "do we have parity with Canva?" is:
   is there**, and every piece of it is verified by a browser test
   ([SCOREBOARD.md](../SCOREBOARD.md)).
 - **For everything Canva does: no.** Paperwall has no stock photo library, no
-  AI, no video, no real-time collaboration and no cloud. Some of that is on
-  the roadmap; some of it (the cloud) is left out on purpose.
+  AI, no real-time collaboration and no cloud, and its video editing is
+  basic (videos and a soundtrack in animated designs, no timeline editor).
+  Some of that is on the roadmap; some of it (the cloud) is left out on
+  purpose.
 
 Below, 32 capability areas, compared at the level of what a person can do.
 Canva's side is described from its public product pages in general terms;
@@ -75,7 +77,7 @@ smaller way.
 | Stock photo and video library | Not planned as a hosted service. Possible: let people bring in openly licensed photos they download themselves. |
 | AI tools (generate images or text, smart edits) | Possible later as optional on-device models; nothing that sends your work to a server. |
 | Cutting people out of busy photos | On the scoreboard as "not done yet". Needs an on-device model. |
-| Video, animation, GIF/MP4 export | Roadmap: simple animated GIF/MP4 export. |
+| Video, animation, GIF/MP4 export | Done in v0.4: element and page animations, transitions, page timing, videos and a soundtrack, and GIF, MP4 and WebM downloads. Not yet: a timeline editor, cutting clips, video sound. |
 | Real-time collaboration, comments, share links | Not planned: there's no server. You can send the design file. |
 | Cloud sync across devices | Left out on purpose. Save to a file to move a design. |
 | Whiteboards, documents, websites, social scheduling, print ordering | Out of scope. |

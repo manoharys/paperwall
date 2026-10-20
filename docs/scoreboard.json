@@ -2,13 +2,13 @@
   "summary": {
     "date": "2026-10-20",
     "total": 163,
-    "verified": 160,
+    "verified": 162,
     "failing": 0,
-    "todo": 3,
-    "e2eTests": 140,
-    "e2ePassing": 140,
-    "unitTests": 115,
-    "unitPassing": 115
+    "todo": 1,
+    "e2eTests": 142,
+    "e2ePassing": 142,
+    "unitTests": 116,
+    "unitPassing": 116
   },
   "areas": [
     {
@@ -805,12 +805,12 @@
         {
           "id": "MOT-07",
           "title": "Add videos to a design",
-          "status": "todo"
+          "status": "verified"
         },
         {
           "id": "MOT-08",
           "title": "Add a soundtrack that plays in videos and when presenting",
-          "status": "todo"
+          "status": "verified"
         }
       ]
     },

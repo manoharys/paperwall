@@ -30,7 +30,7 @@ function cached(key, keep, make) {
 
 const EFFECT_NAMES = { none: 'None', lift: 'Lift', hollow: 'Hollow', splice: 'Splice', echo: 'Echo', glitch: 'Glitch', glow: 'Glow', neon: 'Neon' };
 
-const TYPE_NAMES = { text: 'Text', shape: 'Shape', line: 'Line', image: 'Image', icon: 'Icon', sticker: 'Sticker', qr: 'QR code', group: 'Group', chart: 'Chart', table: 'Table', draw: 'Drawing', connector: 'Connector' };
+const TYPE_NAMES = { video: 'Video', text: 'Text', shape: 'Shape', line: 'Line', image: 'Image', icon: 'Icon', sticker: 'Sticker', qr: 'QR code', group: 'Group', chart: 'Chart', table: 'Table', draw: 'Drawing', connector: 'Connector' };
 const SHAPE_NAMES = { rect: 'Rectangle', ellipse: 'Circle', triangle: 'Triangle', star: 'Star', polygon: 'Polygon', heart: 'Heart', arrow: 'Arrow', bubble: 'Speech bubble', diamond: 'Diamond', arch: 'Arch', blob: 'Blob' };
 // Frame shapes are named as shapes are, but for these three.
 const MASK_LABELS = { ...SHAPE_NAMES, none: 'Rectangle', circle: 'Circle', polygon: 'Hexagon' };
@@ -219,6 +219,7 @@ export class Inspector {
       shape: () => this.shapePanel(el),
       line: () => this.linePanel(el),
       image: () => this.imagePanel(el),
+      video: () => this.videoPanel(el),
       icon: () => [section('Color', h('div', { class: 'field inline' }, h('span', null, 'Icon color'), colorButton({ label: 'Icon color', testid: 'icon-color', value: el.color, getContext: this.colorContext, onChange: (c, l) => this.up({ color: c }, l ? 'color' : null) })),
         slider({ label: 'Line weight', value: el.strokeWidth || 1.8, min: 0.5, max: 4, step: 0.1, onChange: (v, l) => this.up({ strokeWidth: v }, l ? 'sw' : null) }))],
       connector: () => [
@@ -259,6 +260,17 @@ export class Inspector {
       h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'anim-play', onClick: () => this.onPlay?.() }, icon('play'), 'Play this page'));
   }
 
+  /** The design's soundtrack: what it is, how loud, and taking it away. */
+  soundtrackRow() {
+    const ed = this.ed;
+    const a = ed.doc.audio && ed.doc.assets[ed.doc.audio.assetId];
+    if (!a) return h('p', { class: 'hint', 'data-testid': 'soundtrack-none' }, 'Soundtrack: add a sound from Uploads. It plays when you press Play, and in videos you download.');
+    return h('div', { class: 'sub', 'data-testid': 'soundtrack' },
+      h('div', { class: 'field inline' }, h('span', null, 'Soundtrack'), h('b', { class: 'ellipsis' }, a.name || 'Sound'),
+        iconButton('trash', 'Remove the soundtrack', () => ed.setSoundtrack(null), { 'data-testid': 'soundtrack-remove' })),
+      slider({ label: 'Volume', value: Math.round((ed.doc.audio.volume ?? 1) * 100), min: 0, max: 100, unit: '%', testid: 'soundtrack-volume', onChange: (v, l) => ed.setSoundtrackVolume(v / 100, l ? 'volume' : null) }));
+  }
+
   /** The page's own motion: an animation for everything on it, how long it shows, and how it comes in. */
   motionPanel() {
     const ed = this.ed;
@@ -272,6 +284,7 @@ export class Inspector {
       slider({ label: 'Show for', value: pageDuration(page), min: 1, max: 30, step: 0.5, unit: 's', testid: 'page-duration', onChange: (v, l) => set({ duration: v }, l ? `duration:${at}` : null) }),
       selectField({ label: 'Transition into this page', value: tr.type, testid: 'page-transition', options: Object.entries(TRANSITIONS).map(([value, { name }]) => ({ value, label: name })), onChange: (type) => set({ transition: type === 'none' ? undefined : { type, duration: tr.duration ?? DEFAULT_TRANSITION_DURATION } }) }),
       at === 0 && tr.type !== 'none' ? h('p', { class: 'hint' }, 'Shows when this page follows another, as when pages are moved.') : null,
+      this.soundtrackRow(),
       h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'page-play', onClick: () => this.onPlay?.() }, icon('play'), 'Play from this page'));
   }
 
@@ -434,6 +447,18 @@ export class Inspector {
       h('div', { class: 'row' },
         toggle({ label: 'Arrow at start', checked: el.startCap === 'arrow', testid: 'arrow-start', onChange: (on) => this.up({ startCap: on ? 'arrow' : 'none' }) }),
         toggle({ label: 'Arrow at end', checked: el.endCap === 'arrow', testid: 'arrow-end', onChange: (on) => this.up({ endCap: on ? 'arrow' : 'none' }) })))];
+  }
+
+  /** Where a video starts and whether it loops; its shape, like a picture's. */
+  videoPanel(el) {
+    const asset = this.ed.doc.assets[el.assetId];
+    const length = asset?.duration || 0;
+    return [section('Video',
+      h('p', { class: 'hint' }, `${length ? `${Math.round(length * 10) / 10} seconds. ` : ''}Plays when the page plays, presents or downloads as a video. Videos play without their sound: add a soundtrack from Uploads.`),
+      length > 0.5 ? slider({ label: 'Start at', value: el.trim?.start || 0, min: 0, max: Math.floor(length * 10) / 10, step: 0.1, unit: 's', testid: 'video-start', onChange: (v, l) => this.up({ trim: { start: v } }, l ? 'trim' : null) }) : null,
+      toggle({ label: 'Play again from the start when it ends', checked: el.loop !== false, testid: 'video-loop', onChange: (on) => this.up({ loop: on }) }),
+      selectField({ label: 'Frame shape', value: el.mask || 'none', testid: 'video-mask', options: FRAME_MASKS.map((m) => ({ value: m, label: MASK_LABELS[m] })), onChange: (mask) => this.up({ mask }) }),
+      !el.mask || el.mask === 'none' ? slider({ label: 'Corner rounding', value: el.radius || 0, min: 0, max: Math.round(Math.min(el.w, el.h) / 2), onChange: this.live('radius') }) : null)];
   }
 
   imagePanel(el) {

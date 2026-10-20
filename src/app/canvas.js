@@ -11,11 +11,12 @@ import { clone, DRAW_TOOLS, pxPerUnit, isEmptyFrame, restroke } from '../model/d
 import { gridLines, marginSize, bleedSize } from '../model/view.js';
 import { endsOf, setEnds, isLine, lineHit } from '../model/connectors.js';
 import { measure } from './fonts.js';
+import { mediaKind } from './media.js';
 import { h, dataUrlToBlob, toast, pickFile } from './ui.js';
 import * as store from './store.js';
 
 const PAD = 64;
-const RATIO_LOCKED = new Set(['image', 'icon', 'sticker', 'qr', 'group']);
+const RATIO_LOCKED = new Set(['image', 'video', 'icon', 'sticker', 'qr', 'group']);
 
 
 export class Canvas {
@@ -556,7 +557,7 @@ export class Canvas {
         resizeElement(el, { ...box, h: o.h, y: box.y + (box.h - o.h) / 2 });
       } else {
         resizeElement(el, box, { scaleContent: o.type === 'group' || o.type === 'qr' });
-        const asset = o.type === 'image' && !keepRatio ? ed.doc.assets[o.assetId] : null;
+        const asset = (o.type === 'image' || o.type === 'video') && !keepRatio ? ed.doc.assets[o.assetId] : null;
         if (asset) coverCrop(el, asset.width, asset.height);
       }
     } else if (d.mode === 'resize-many') {
@@ -700,6 +701,8 @@ export class Canvas {
     // every picture after the first, when several are dropped) it's added.
     let filled = false;
     const place = async (upload) => {
+      // Videos and sounds go where they belong (the page; the soundtrack).
+      if (upload.kind === 'video' || upload.kind === 'audio') return this.ed.place(upload, { at });
       const frame = filled ? null : this.ed.frameAt(at);
       if (frame) {
         this.ed.fillFrame(frame.id, upload);
@@ -716,11 +719,12 @@ export class Canvas {
       }
       return;
     }
-    const files = [...(e.dataTransfer?.files || [])].filter((f) => f.type.startsWith('image/'));
+    const files = [...(e.dataTransfer?.files || [])].filter((f) => mediaKind(f));
     if (!files.length) return;
     for (const file of files) {
       try {
-        const upload = await this.ed.importImageFile(file);
+        const upload = await this.ed.importMediaFile(file);
+        if (this.ed.closed) return;
         await place(upload);
         at = { x: at.x + 30, y: at.y + 30 };
       } catch (err) {

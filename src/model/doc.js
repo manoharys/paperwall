@@ -195,6 +195,35 @@ export function createImage(assetId, props = {}) {
   });
 }
 
+/**
+ * A video on the page: shown like a picture (crop, filters, rounding, frame
+ * shapes), playing from `trim.start` seconds when the page plays; `loop`
+ * starts it over if it's shorter than the page.
+ */
+export function createVideo(assetId, props = {}) {
+  return base('video', {
+    w: 640,
+    h: 360,
+    assetId,
+    crop: { x: 0, y: 0, w: 1, h: 1 },
+    filters: { ...DEFAULT_FILTERS },
+    radius: 0,
+    mask: 'none',
+    trim: { start: 0 },
+    loop: true,
+    ...props,
+  });
+}
+
+/** Where a video is (seconds into its file) at `local` seconds into its page. */
+export function videoTime(el, local, duration) {
+  const start = Math.max(0, el.trim?.start || 0);
+  const t = start + Math.max(0, local);
+  if (!(duration > 0)) return t;
+  if (el.loop === false) return Math.min(t, Math.max(0, duration - 0.04));
+  return start >= duration ? 0 : start + ((t - start) % Math.max(0.04, duration - start));
+}
+
 export const DRAW_TOOLS = {
   pen: { strokeWidth: 6, opacity: 1 },
   marker: { strokeWidth: 18, opacity: 1 },
@@ -332,12 +361,13 @@ export function createGroup(children, props = {}) {
 }
 
 /** Add an image's bytes to the design. Returns the asset id. */
-export function addAsset(doc, { mime, dataUrl, width, height, name = '' }) {
+/** Add a picture, video or sound to the design (once: the same file is shared). */
+export function addAsset(doc, { mime, dataUrl, width, height, name = '', kind = 'image', duration, poster }) {
   for (const [id, a] of Object.entries(doc.assets)) {
     if (a.dataUrl === dataUrl) return id;
   }
   const id = uid('a');
-  doc.assets[id] = { type: 'image', mime, dataUrl, width, height, name };
+  doc.assets[id] = { type: kind, mime, dataUrl, width, height, name, ...(duration !== undefined ? { duration } : {}), ...(poster ? { poster } : {}) };
   return id;
 }
 
@@ -346,10 +376,11 @@ export function usedAssetIds(doc) {
   const used = new Set();
   const visit = (els) => {
     for (const el of els) {
-      if (el.type === 'image') used.add(el.assetId);
+      if (el.type === 'image' || el.type === 'video') used.add(el.assetId);
       if (el.type === 'group') visit(el.children);
     }
   };
+  if (doc.audio?.assetId) used.add(doc.audio.assetId);
   for (const p of doc.pages) {
     visit(p.elements);
     if (p.background?.type === 'image') used.add(p.background.assetId);
@@ -398,6 +429,10 @@ export function validateDesign(doc) {
       for (const k of ['start', 'end']) el[k] = { id: typeof el[k]?.id === 'string' ? el[k].id : null, side: ['l', 'r', 't', 'b'].includes(el[k]?.side) ? el[k].side : undefined };
     }
     if (el.anim !== undefined) el.anim = cleanMotion(el.anim, ANIMATIONS, { duration: [0.1, 10], delay: [0, 30] });
+    if (el.type === 'video') {
+      el.trim = { start: Math.max(0, Number.isFinite(+el.trim?.start) ? +el.trim.start : 0) };
+      el.loop = el.loop !== false;
+    }
     return el;
   });
   for (const p of doc.pages) {
@@ -411,8 +446,14 @@ export function validateDesign(doc) {
     if (p.duration !== undefined) p.duration = Number.isFinite(+p.duration) ? Math.max(0.5, Math.min(60, +p.duration)) : undefined;
   }
   for (const [id, a] of Object.entries(doc.assets)) {
-    if (!a || typeof a.dataUrl !== 'string' || !/^data:(image|font)\//.test(a.dataUrl)) delete doc.assets[id];
+    if (!a || typeof a.dataUrl !== 'string' || !/^data:(image|font|video|audio)\//.test(a.dataUrl)) delete doc.assets[id];
     else if (a.type === 'font') a.family = String(a.family || 'My font').replace(/[^\w\s-]/g, '').trim() || 'My font';
+    else if (a.type === 'video' && !(typeof a.poster === 'string' && a.poster.startsWith('data:image/'))) a.poster = undefined;
+  }
+  // The soundtrack: a sound the design has, at a volume from 0 to 1.
+  if (doc.audio !== undefined) {
+    const a = doc.audio && doc.assets[doc.audio.assetId];
+    doc.audio = a && a.type === 'audio' ? { assetId: doc.audio.assetId, volume: Number.isFinite(+doc.audio.volume) ? Math.max(0, Math.min(1, +doc.audio.volume)) : 1 } : undefined;
   }
   return doc;
 }

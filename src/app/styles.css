@@ -166,6 +166,9 @@ h1, h2, h3 { margin: 0; line-height: 1.15; }
 .upload .icon-btn { position: absolute; top: 4px; right: 4px; background: var(--panel); width: 28px; height: 28px; opacity: 0; }
 .upload:hover .icon-btn { opacity: 1; }
 .upload-img { width: 100%; aspect-ratio: 1; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; padding: 0; cursor: pointer; background: var(--panel-2); }
+.upload-sound { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 100%; padding: 6px; color: var(--muted); }
+.upload-sound small { font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.upload-play { position: absolute; left: 6px; top: 6px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; pointer-events: none; }
 .upload-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .brand-colors { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .brand-color { position: relative; }
@@ -434,3 +437,5 @@ kbd { font: 12px ui-monospace, monospace; background: var(--panel-2); border: 1p
 .version-img svg, .version-img img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .version-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .version-meta small { color: var(--muted); }
+
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }

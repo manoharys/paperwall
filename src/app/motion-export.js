@@ -10,6 +10,7 @@ import { buildWebm } from '../model/webm.js';
 import { buildMp4 } from '../model/mp4.js';
 import { measure, fontCssFor } from './fonts.js';
 import { loadImage } from './ui.js';
+import { VideoFrames, videosOn } from './media.js';
 
 /** A copy of what an encoder hands over as bytes (an ArrayBuffer or a view of one). */
 function bytesOf(d) {
@@ -40,24 +41,42 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal },
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  for (let i = 0; i < count; i++) {
-    if (signal?.aborted) throw new Error('Stopped');
-    const t = i / fps;
-    const svg = renderFrame(doc, frameAt(doc, tl, t), { measure, fontCss, idPrefix: 'mv' });
-    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
-    try {
-      const img = await loadImage(url);
-      if (img.decode) await img.decode().catch(() => null);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0, width, height);
-    } finally {
-      URL.revokeObjectURL(url);
+  // Videos on the pages are shown frame by frame, each at its exact moment.
+  const videos = videosOn(doc, pages).length ? new VideoFrames(doc) : null;
+  try {
+    for (let i = 0; i < count; i++) {
+      if (signal?.aborted) throw new Error('Stopped');
+      const t = i / fps;
+      const frame = frameAt(doc, tl, t);
+      const pictures = new Map();
+      if (videos) {
+        for (const [index, local] of [[frame.index, frame.local], ...(frame.from ? [[frame.from.index, frame.from.local]] : [])]) {
+          for (const el of videosOn(doc, [index])) pictures.set(el.id, await videos.seek(el, local));
+        }
+      }
+      await drawFrame(doc, frame, pictures, { fontCss, ctx, width, height });
+      await each(canvas, ctx, i, t);
+      onProgress?.((i + 1) / count);
     }
-    await each(canvas, ctx, i, t);
-    onProgress?.((i + 1) / count);
+  } finally {
+    videos?.dispose();
   }
   return { count, total: tl.total };
+}
+
+/** One frame into the canvas: the page(s) at their moment, videos at theirs. */
+async function drawFrame(doc, frame, pictures, { fontCss, ctx, width, height }) {
+  const svg = renderFrame(doc, frame, { measure, fontCss, idPrefix: 'mv', videoFrame: (el) => pictures.get(el.id) });
+  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+  try {
+    const img = await loadImage(url);
+    if (img.decode) await img.decode().catch(() => null);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(img, 0, 0, width, height);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 /** The design as an animated GIF. */
@@ -96,7 +115,7 @@ async function pickVideoCodec(container, width, height) {
  * The design as a video: 'mp4' or 'webm'. `audio` (optional) is a soundtrack
  * as an AudioBuffer, cut to the video's length.
  */
-export async function exportVideo(doc, pages, { container = 'mp4', size = null, audio = null, onProgress, signal } = {}) {
+export async function exportVideo(doc, pages, { container = 'mp4', size = null, audio = null, volume = 1, onProgress, signal } = {}) {
   if (!canMakeVideo()) throw new Error("This browser can't make videos. Try a recent Chrome, Edge, Safari or Firefox.");
   const { width, height } = frameSize(doc, 'video', size);
   const pick = await pickVideoCodec(container, width, height);
@@ -126,14 +145,14 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
   await encoder.flush();
   encoder.close();
   if (failure) throw failure;
-  const sound = audio ? await encodeAudio(audio, total, container) : null;
+  const sound = audio ? await encodeAudio(audio, total, container, volume) : null;
   const video = { codec: pick.codec, codecString: pick.codecString, width, height, description, chunks };
   const bytes = container === 'mp4' ? buildMp4({ video, audio: sound, duration: total }) : buildWebm({ video, audio: sound, duration: total });
   return new Blob([bytes], { type: container === 'mp4' ? 'video/mp4' : 'video/webm' });
 }
 
 /** A soundtrack, encoded for the container (Opus; AAC in MP4 where the browser has it). */
-async function encodeAudio(buffer, seconds, container) {
+async function encodeAudio(buffer, seconds, container, volume = 1) {
   if (typeof AudioEncoder === 'undefined') return null;
   const sampleRate = 48000;
   const channels = Math.min(2, buffer.numberOfChannels);
@@ -158,7 +177,8 @@ async function encodeAudio(buffer, seconds, container) {
   src.buffer = buffer;
   const gain = offline.createGain();
   const fade = Math.min(1, seconds / 4);
-  gain.gain.setValueAtTime(1, Math.max(0, seconds - fade));
+  gain.gain.setValueAtTime(volume, 0);
+  gain.gain.setValueAtTime(volume, Math.max(0, seconds - fade));
   gain.gain.linearRampToValueAtTime(0, seconds);
   src.connect(gain).connect(offline.destination);
   src.start();

@@ -2,7 +2,8 @@
 
 import { h, icon, iconButton, clear, debounce, dialog, toast, lazily, forget, pressable } from './ui.js';
 import { renderPage, renderFrame } from '../model/render.js';
-import { ANIMATIONS, animationOf, animationsEnd, pageDuration, transitionOf } from '../model/motion.js';
+import { ANIMATIONS, animationOf, animationsEnd, pageDuration, transitionOf, timeline } from '../model/motion.js';
+import { VideoFrames, videosOn, blobUrl } from './media.js';
 import { measure } from './fonts.js';
 import { visiblePages, pageName, pageLabel } from '../model/doc.js';
 
@@ -131,7 +132,12 @@ export function present(editor, canvas, { autoplay = false } = {}) {
   const counter = h('div', { class: 'slide-count' });
   const root = h('div', { class: 'presenter', 'data-testid': 'presenter', tabindex: '-1' }, slide, counter,
     h('button', { type: 'button', class: 'presenter-close', 'aria-label': 'Stop presenting', onClick: () => close() }, icon('close')));
-  const opts = { measure, noSize: true, assetHref: canvas.assetHref };
+  // Videos play along (their picture taken each frame), and the soundtrack
+  // plays from where the shown page starts in the whole design.
+  const videos = new VideoFrames(doc);
+  const tl = timeline(doc, shown);
+  const sound = soundtrackPlayer(doc);
+  const opts = { measure, noSize: true, assetHref: canvas.assetHref, videoFrame: (el) => videos.capture(el) };
   let frame = 0;
   let started = 0;
   let from = null; // the page before, when moving forward (its transition plays)
@@ -151,7 +157,7 @@ export function present(editor, canvas, { autoplay = false } = {}) {
       return; // the end: the last page stays
     }
     // Keep drawing while anything moves (or until the page's time is up, when playing).
-    const moving = local < Math.max(animationsEnd(page), from !== null ? tr.duration : 0) || page.elements.some((el) => ANIMATIONS[animationOf(page, el)?.type]?.loop);
+    const moving = local < Math.max(animationsEnd(page), from !== null ? tr.duration : 0) || page.elements.some((el) => ANIMATIONS[animationOf(page, el)?.type]?.loop) || videosOn(doc, [i]).length > 0;
     if (moving || autoplay) frame = requestAnimationFrame(draw);
   };
   const go = (to, forward) => {
@@ -159,6 +165,9 @@ export function present(editor, canvas, { autoplay = false } = {}) {
     from = forward && to !== at ? shown[at] : null;
     at = to;
     started = performance.now();
+    videos.pauseAll();
+    videos.start(videosOn(doc, [shown[at]]));
+    sound?.seek(tl.parts[at].start);
     slide.style.aspectRatio = `${doc.width} / ${doc.height}`;
     counter.textContent = `${at + 1} / ${shown.length}`;
     draw(started);
@@ -178,6 +187,8 @@ export function present(editor, canvas, { autoplay = false } = {}) {
   };
   const close = () => {
     cancelAnimationFrame(frame);
+    videos.dispose();
+    sound?.stop();
     document.removeEventListener('keydown', onKey, true);
     if (document.fullscreenElement) document.exitFullscreen().catch(() => null);
     root.remove();
@@ -193,4 +204,27 @@ export function present(editor, canvas, { autoplay = false } = {}) {
   go(at, false);
   root.focus();
   root.requestFullscreen?.().catch(() => null);
+}
+
+/** The design's soundtrack as something to play from a point, or null if it has none. */
+function soundtrackPlayer(doc) {
+  const asset = doc.audio && doc.assets[doc.audio.assetId];
+  if (!asset) return null;
+  const url = blobUrl(asset.dataUrl);
+  const audio = new Audio(url);
+  audio.volume = doc.audio.volume ?? 1;
+  return {
+    seek(t) {
+      const go = () => {
+        audio.currentTime = Math.min(t, Math.max(0, (audio.duration || t) - 0.05));
+        audio.play().catch(() => null);
+      };
+      if (audio.readyState >= 1) go();
+      else audio.addEventListener('loadedmetadata', go, { once: true });
+    },
+    stop() {
+      audio.pause();
+      URL.revokeObjectURL(url);
+    },
+  };
 }

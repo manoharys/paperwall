@@ -4,7 +4,7 @@
 import { History } from '../model/history.js';
 import * as cmd from '../model/commands.js';
 import {
-  createText, createShape, createLine, createImage, createFrame, createDrawing, thinPoints, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
+  createText, createShape, createLine, createImage, createVideo, createFrame, createDrawing, thinPoints, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
   TEXT_STYLES, versionSnapshot, isEmptyFrame,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
@@ -16,6 +16,7 @@ import { gridLines, marginSize } from '../model/view.js';
 import { maskPath } from '../model/shapes.js';
 
 import { measure, ensureFont } from './fonts.js';
+import { mediaKind, checkSize, videoInfo, audioInfo } from './media.js';
 import { removePlainBackground } from '../model/bgremove.js';
 import { readFileAsDataUrl, loadImage, toast, debounce } from './ui.js';
 import * as store from './store.js';
@@ -429,6 +430,56 @@ export class Editor {
     return this.insert(el);
   }
 
+  /** A video from Uploads, at its own shape, as big as fits nicely (or dropped `at` a point). */
+  addVideo(upload, { at } = {}) {
+    const assetId = addAsset(this.doc, { ...upload, kind: 'video' });
+    const s = Math.min(1, (this.doc.width * 0.7) / upload.width, (this.doc.height * 0.7) / upload.height);
+    const el = createVideo(assetId, { w: Math.round(upload.width * s), h: Math.round(upload.height * s) });
+    if (at) {
+      el.x = at.x - el.w / 2;
+      el.y = at.y - el.h / 2;
+      return this.insert(el, { center: false });
+    }
+    return this.insert(el);
+  }
+
+  /** Use a sound from Uploads as the design's soundtrack (null takes it away). */
+  setSoundtrack(upload, volume = 1) {
+    this.change(() => {
+      if (!upload) delete this.doc.audio;
+      else this.doc.audio = { assetId: addAsset(this.doc, { ...upload, kind: 'audio' }), volume };
+    });
+  }
+
+  /** The soundtrack's volume (0 to 1). */
+  setSoundtrackVolume(volume, key = null) {
+    if (!this.doc.audio) return;
+    this.change(() => (this.doc.audio = { ...this.doc.audio, volume }), { key });
+  }
+
+  /** A picture, video or sound from this device, kept in Uploads too. */
+  async importMediaFile(file) {
+    const kind = mediaKind(file);
+    if (kind === 'image') return this.importImageFile(file);
+    if (!kind) throw new Error(`${file.name} isn't a picture, video or sound`);
+    checkSize(file, kind);
+    const [dataUrl, info] = await Promise.all([readFileAsDataUrl(file), kind === 'video' ? videoInfo(file) : audioInfo(file)]);
+    const upload = { id: uid('u'), name: file.name, mime: file.type, dataUrl, kind, ...info, addedAt: Date.now() };
+    await store.saveUpload(upload).catch(() => null);
+    return upload;
+  }
+
+  /** Put an upload where it belongs: a picture or video on the page, a sound as the soundtrack. */
+  async place(upload, opts) {
+    if (upload.kind === 'video') return this.addVideo(upload, opts);
+    if (upload.kind === 'audio') {
+      this.setSoundtrack(upload);
+      toast(`${upload.name} is the soundtrack now. It plays when you press Play, and in videos you download.`);
+      return null;
+    }
+    return this.addImage(upload, opts);
+  }
+
   async importImageFile(file) {
     if (!file.type.startsWith('image/')) throw new Error(`${file.name} isn't an image`);
     const dataUrl = await readFileAsDataUrl(file);
@@ -749,7 +800,7 @@ export class Editor {
     const out = {};
     const visit = (list) => {
       for (const el of list) {
-        if (el.type === 'image' && this.doc.assets[el.assetId]) out[el.assetId] = this.doc.assets[el.assetId];
+        if ((el.type === 'image' || el.type === 'video') && this.doc.assets[el.assetId]) out[el.assetId] = this.doc.assets[el.assetId];
         if (el.type === 'group') visit(el.children);
       }
     };

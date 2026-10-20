@@ -1,6 +1,25 @@
 # Changelog
 
-## 0.3.0 (unreleased): Editor pro
+## 0.4.0 (unreleased): Motion
+
+- Animations for elements as they come in: fade, rise, drop, pan, pop,
+  wipe, typewriter, tumble and breathe, each with its own duration and
+  delay; or animate a whole page, everything coming in one after another.
+- How long each page shows, and the transition into it (fade, slide, push,
+  zoom).
+- Play: animations, transitions and page timing, from any page; presenting
+  plays them too.
+- Download as an animated GIF, or as an MP4 or WebM video. Encoded on your
+  device: GIFs by our own encoder, video by the browser into MP4 and WebM
+  files we write ourselves.
+- Videos in designs: poster while editing, playing when presenting and in
+  downloads, with a start point and looping.
+- A soundtrack: a sound from Uploads plays when you press Play and is mixed
+  into downloaded videos.
+- v0.3 follow-ups: connectors to elements in turned groups, gradient stops
+  without positions, whole-word find in older Safari.
+
+## 0.3.0: Editor pro
 
 - Photo frames in nine shapes and twelve photo grids: drop, drag or pick a
   photo and it's cropped to fill.
