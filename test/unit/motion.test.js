@@ -407,3 +407,15 @@ test('[MOT-03] the first page\'s transition alone doesn\'t make a design move', 
   doc.pages[1].transition = { type: 'fade' };
   assert.equal(designMoves(doc, [0, 1]), true);
 });
+
+test('[MOT-02] a whole page never loops, and a video whose file is missing doesn\'t move', async () => {
+  const { createVideo } = await import('../../src/model/doc.js');
+  const doc = createDesign({ width: 100, height: 100 });
+  doc.pages[0].anim = { type: 'breathe' };
+  validateDesign(doc);
+  assert.equal(doc.pages[0].anim, undefined, 'a looping page animation is dropped');
+  doc.pages[0].elements.push(createVideo('gone'));
+  assert.equal(designMoves(doc, [0]), false, 'nothing can play');
+  doc.assets.gone = { type: 'video', dataUrl: 'data:video/webm;base64,AA==' };
+  assert.equal(designMoves(doc, [0]), true);
+});

@@ -1,7 +1,10 @@
 // The design document: pages of elements, plus the images they use.
 
 import { boxAround } from './geometry.js';
-import { ANIMATIONS, TRANSITIONS } from './motion.js';
+import { ANIMATIONS, TRANSITIONS, LIMITS } from './motion.js';
+
+// What a whole page can come in with: the animations that don't loop.
+const PAGE_ANIMATIONS = Object.fromEntries(Object.entries(ANIMATIONS).filter(([, a]) => !a.loop));
 
 export const FORMAT_VERSION = 1;
 export const DPI = 300;
@@ -428,7 +431,7 @@ export function validateDesign(doc) {
       if (el.points.length !== 2) el.points = [[0, 0], [1, 1]];
       for (const k of ['start', 'end']) el[k] = { id: typeof el[k]?.id === 'string' ? el[k].id : null, side: ['l', 'r', 't', 'b'].includes(el[k]?.side) ? el[k].side : undefined };
     }
-    if (el.anim !== undefined) el.anim = cleanMotion(el.anim, ANIMATIONS, { duration: [0.1, 10], delay: [0, 30] });
+    if (el.anim !== undefined) el.anim = cleanMotion(el.anim, ANIMATIONS, { duration: LIMITS.duration, delay: LIMITS.delay });
     if (el.type === 'video') {
       el.trim = { start: Math.max(0, Number.isFinite(+el.trim?.start) ? +el.trim.start : 0) };
       el.loop = el.loop !== false;
@@ -441,9 +444,9 @@ export function validateDesign(doc) {
     if (p.title !== undefined) p.title = typeof p.title === 'string' ? p.title.slice(0, 120) : undefined;
     if (p.hidden !== undefined) p.hidden = p.hidden === true || undefined;
     if (p.guides !== undefined) p.guides = (Array.isArray(p.guides) ? p.guides : []).filter((g) => g && (g.axis === 'x' || g.axis === 'y') && Number.isFinite(+g.pos)).map((g) => ({ axis: g.axis, pos: +g.pos }));
-    if (p.anim !== undefined) p.anim = cleanMotion(p.anim, ANIMATIONS, { duration: [0.1, 10], stagger: [0, 2] });
-    if (p.transition !== undefined) p.transition = cleanMotion(p.transition, TRANSITIONS, { duration: [0.1, 5] });
-    if (p.duration !== undefined) p.duration = Number.isFinite(+p.duration) ? Math.max(0.5, Math.min(60, +p.duration)) : undefined;
+    if (p.anim !== undefined) p.anim = cleanMotion(p.anim, PAGE_ANIMATIONS, { duration: LIMITS.duration, stagger: LIMITS.stagger });
+    if (p.transition !== undefined) p.transition = cleanMotion(p.transition, TRANSITIONS, { duration: LIMITS.transition });
+    if (p.duration !== undefined) p.duration = Number.isFinite(+p.duration) ? Math.max(LIMITS.page[0], Math.min(LIMITS.page[1], +p.duration)) : undefined;
   }
   for (const [id, a] of Object.entries(doc.assets)) {
     if (!a || typeof a.dataUrl !== 'string' || !/^data:(image|font|video|audio)\//.test(a.dataUrl)) delete doc.assets[id];

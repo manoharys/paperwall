@@ -133,12 +133,14 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
   const counter = h('div', { class: 'slide-count' });
   const root = h('div', { class: 'presenter', 'data-testid': 'presenter', tabindex: '-1' }, slide, counter,
     h('button', { type: 'button', class: 'presenter-close', 'aria-label': 'Stop presenting', onClick: () => close() }, icon('close')));
-  // Videos play along (their picture taken each frame), and the soundtrack
-  // plays from where the shown page starts in the whole design.
+  // Videos play along, and with Play the soundtrack too.
   const videos = new VideoFrames(doc);
   const tl = timeline(doc, shown);
   // The soundtrack plays with Play (as the panel says), not plain presenting.
   const sound = autoplay && !only ? soundtrackPlayer(doc) : null;
+  // The sound starts with the page Play starts on (as in a download of the
+  // pages from there); moving to another page moves it along with them.
+  const soundFrom = tl.parts[at].start;
   // Videos are taken at the size they show on screen (the slide fits the
   // screen both ways), and at most 30 times a second, however fast the screen.
   const shownScale = () => Math.min(window.innerWidth / doc.width, window.innerHeight / doc.height);
@@ -220,10 +222,10 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     drawn = 0;
     live = false;
     const page = doc.pages[shown[at]];
-    info = { end: animationsEnd(page), keeps: keepsMoving(page), loops: hasLoop(page) };
+    info = { end: animationsEnd(page), keeps: keepsMoving(page, doc.assets), loops: hasLoop(page) };
     videos.pauseAll();
     videos.start(videosOn(doc, [shown[at]]), started);
-    if (!auto) sound?.seek(tl.parts[at].start);
+    if (!auto) sound?.seek(Math.max(0, tl.parts[at].start - soundFrom));
     slide.style.aspectRatio = `${doc.width} / ${doc.height}`;
     counter.textContent = `${at + 1} / ${shown.length}`;
     draw(started);

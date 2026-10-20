@@ -153,15 +153,21 @@ export class VideoFrames {
       ready: this.urlFor(el.assetId).then((url) => {
         if (!url || this.disposed) return false;
         video.src = url;
-        return firstPicture(video).then(() => true, () => false);
+        return firstPicture(video).then(() => {
+          p.alpha = seeThrough(video);
+          return true;
+        }, () => false);
       }).catch(() => false),
     };
     this.players.set(el.id, p);
     return p;
   }
 
-  /** The picture of `el` at `local` seconds into its page, exactly (waits for the seek). Null if it can't be played here. */
-  async seek(el, local) {
+  /**
+   * The picture of `el` at `local` seconds into its page, exactly (waits for
+   * the seek), at `scale` (output px per page px). Null if it can't be played here.
+   */
+  async seek(el, local, scale = 1.5) {
     const p = this.player(el);
     if (!(await p.ready)) return null; // the poster shows instead
     const v = p.video;
@@ -171,7 +177,7 @@ export class VideoFrames {
       v.currentTime = t;
       await seeked;
     }
-    return this.grab(v, el);
+    return this.grab(p, el, scale);
   }
 
   /**
@@ -213,18 +219,22 @@ export class VideoFrames {
   /** Whatever `el`'s video is showing now, at `scale` (screen px per page px). */
   capture(el, scale = 1.5) {
     const p = this.players.get(el.id);
-    return p && p.video.readyState >= 2 ? this.grab(p.video, el, scale) : null;
+    return p && p.video.readyState >= 2 ? this.grab(p, el, scale) : null;
   }
 
-  grab(v, el, scale = 1.5) {
+  grab({ video: v, alpha }, el, scale = 1.5) {
     if (!v.videoWidth) return null;
     // As sharp as it shows, but no sharper than the video.
     const s = Math.min(1, (Math.max(el.w, el.h) * scale) / Math.max(v.videoWidth, v.videoHeight));
     const c = this.canvas;
     c.width = Math.max(1, Math.round(v.videoWidth * s));
     c.height = Math.max(1, Math.round(v.videoHeight * s));
-    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
-    return c.toDataURL('image/jpeg', 0.85);
+    const g = c.getContext('2d');
+    g.clearRect(0, 0, c.width, c.height);
+    g.drawImage(v, 0, 0, c.width, c.height);
+    // A see-through video keeps its see-through parts (WebP, or PNG where
+    // there's no WebP); the rest are JPEGs, much quicker to make.
+    return alpha ? c.toDataURL('image/webp', 0.85) : c.toDataURL('image/jpeg', 0.85);
   }
 
   pauseAll() {
@@ -243,6 +253,22 @@ export class VideoFrames {
     for (const url of this.urls.values()) url.then((u) => u && URL.revokeObjectURL(u), () => null);
     this.urls.clear();
   }
+}
+
+/** Whether a video's first picture has see-through parts. */
+function seeThrough(v) {
+  try {
+    const c = document.createElement('canvas');
+    c.width = 16;
+    c.height = 16;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(v, 0, 0, 16, 16);
+    const d = g.getImageData(0, 0, 16, 16).data;
+    for (let i = 3; i < d.length; i += 4) if (d[i] < 250) return true;
+  } catch {
+    /* can't tell: as most videos, solid */
+  }
+  return false;
 }
 
 /** Every video element on the given pages (inside groups too). */

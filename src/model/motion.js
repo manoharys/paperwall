@@ -27,6 +27,8 @@ export const TRANSITIONS = {
 };
 
 export const DEFAULT_PAGE_DURATION = 5; // seconds
+/** The allowed range of each setting, in seconds (files are held to these too). */
+export const LIMITS = { duration: [0.1, 10], delay: [0, 30], stagger: [0, 2], transition: [0.1, 5], page: [0.5, 60] };
 export const DEFAULT_ANIM_DURATION = 0.8;
 export const DEFAULT_STAGGER = 0.15;
 export const DEFAULT_TRANSITION_DURATION = 0.6;
@@ -42,8 +44,7 @@ const easeBack = (t) => {
 
 /** How long a page shows, in seconds. */
 export function pageDuration(page) {
-  const d = Number(page?.duration);
-  return Number.isFinite(d) && d > 0 ? Math.min(d, 60) : DEFAULT_PAGE_DURATION;
+  return clampNum(page?.duration, ...LIMITS.page, DEFAULT_PAGE_DURATION);
 }
 
 /** The transition into a page: { type, duration } (type 'none' for a cut). */
@@ -51,8 +52,7 @@ export function transitionOf(page) {
   const t = page?.transition;
   if (!t || !Object.hasOwn(TRANSITIONS, t.type) || t.type === 'none') return { type: 'none', duration: 0 };
   // Never longer than half the page's time, so it always finishes on the page.
-  const d = Number(t.duration);
-  return { type: t.type, duration: Math.min(Number.isFinite(d) && d > 0 ? d : DEFAULT_TRANSITION_DURATION, pageDuration(page) / 2) };
+  return { type: t.type, duration: Math.min(clampNum(t.duration, ...LIMITS.transition, DEFAULT_TRANSITION_DURATION), pageDuration(page) / 2) };
 }
 
 /**
@@ -80,17 +80,18 @@ export function animationOf(page, el, order = readingOrder(page), { nested = fal
   const known = (a) => a && Object.hasOwn(ANIMATIONS, a.type) && a.type !== 'none';
   const own = known(el.anim) ? el.anim : null;
   // Inside a group, only an element's own animation (the group comes in as one).
-  const pageAnim = !nested && known(page.anim) ? page.anim : null;
+  // A whole page doesn't loop (it would never be still).
+  const pageAnim = !nested && known(page.anim) && !ANIMATIONS[page.anim.type].loop ? page.anim : null;
   const anim = own || pageAnim;
   if (!anim) return null;
-  const duration = clampNum(anim.duration, 0.1, 10, DEFAULT_ANIM_DURATION);
+  const duration = clampNum(anim.duration, ...LIMITS.duration, DEFAULT_ANIM_DURATION);
   const at = Math.max(0, order.indexOf(el.id));
-  const delay = own ? clampNum(own.delay, 0, 30, 0) : at * clampNum(pageAnim.stagger, 0, 2, DEFAULT_STAGGER);
+  const delay = own ? clampNum(own.delay, ...LIMITS.delay, 0) : at * clampNum(pageAnim.stagger, ...LIMITS.stagger, DEFAULT_STAGGER);
   return { type: anim.type, duration, delay };
 }
 
 function clampNum(v, lo, hi, fallback) {
-  const n = Number(v);
+  const n = v === undefined || v === null || v === '' ? NaN : Number(v);
   return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fallback;
 }
 
@@ -174,9 +175,10 @@ export function animationsEnd(page) {
   return animations(page).reduce((end, a) => Math.max(end, a.delay + a.duration), 0);
 }
 
-/** Whether a page has a video (inside groups too). */
-export function hasVideo(page) {
-  const walk = (els) => els.some((el) => !el.hidden && (el.type === 'video' || (el.type === 'group' && walk(el.children))));
+/** Whether a page has a video (inside groups too) that can play: its file is in `assets`, when given. */
+export function hasVideo(page, assets = null) {
+  const playable = (el) => el.type === 'video' && (!assets || !!assets[el.assetId]);
+  const walk = (els) => els.some((el) => !el.hidden && (playable(el) || (el.type === 'group' && walk(el.children))));
   return walk(page.elements);
 }
 
@@ -186,19 +188,19 @@ export function hasLoop(page) {
 }
 
 /** Whether a page keeps moving after its animations are done (a looping one, or a video). */
-export function keepsMoving(page) {
-  return hasVideo(page) || hasLoop(page);
+export function keepsMoving(page, assets = null) {
+  return hasVideo(page, assets) || hasLoop(page);
 }
 
 /** Whether anything on a page moves. */
-export function pageMoves(page) {
-  return animations(page).length > 0 || transitionOf(page).type !== 'none' || hasVideo(page);
+export function pageMoves(page, assets = null) {
+  return animations(page).length > 0 || transitionOf(page).type !== 'none' || hasVideo(page, assets);
 }
 
 /** Whether anything in a design moves (so a GIF or video is worth making). */
 export function designMoves(doc, pages = doc.pages.map((_, i) => i)) {
   // The first page's transition never plays: nothing comes before it.
-  return pages.some((i, k) => (k === 0 ? animations(doc.pages[i]).length > 0 || hasVideo(doc.pages[i]) : pageMoves(doc.pages[i])));
+  return pages.some((i, k) => (k === 0 ? animations(doc.pages[i]).length > 0 || hasVideo(doc.pages[i], doc.assets) : pageMoves(doc.pages[i], doc.assets)));
 }
 
 /**
