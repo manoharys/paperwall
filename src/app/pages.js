@@ -2,7 +2,7 @@
 
 import { h, icon, iconButton, clear, debounce, dialog, toast, lazily, forget, pressable } from './ui.js';
 import { renderPage, renderFrame } from '../model/render.js';
-import { ANIMATIONS, animationOf, animationsEnd, pageDuration, transitionOf, timeline } from '../model/motion.js';
+import { animationsEnd, keepsMoving, pageDuration, transitionOf, timeline } from '../model/motion.js';
 import { VideoFrames, videosOn, blobUrl } from './media.js';
 import { measure } from './fonts.js';
 import { visiblePages, pageName, pageLabel } from '../model/doc.js';
@@ -137,8 +137,11 @@ export function present(editor, canvas, { autoplay = false } = {}) {
   const videos = new VideoFrames(doc);
   const tl = timeline(doc, shown);
   const sound = soundtrackPlayer(doc);
-  const opts = { measure, noSize: true, assetHref: canvas.assetHref, videoFrame: (el) => videos.capture(el) };
+  // Videos are taken at the size they show on screen, not bigger.
+  const shownScale = () => (slide.clientWidth || doc.width) / doc.width;
+  const opts = { measure, noSize: true, assetHref: canvas.assetHref, videoFrame: (el) => videos.capture(el, shownScale()) };
   let frame = 0;
+  let info = null; // the shown page's motion, worked out once when it comes up
   let started = 0;
   let from = null; // the page before, when moving forward (its transition plays)
   const draw = (now) => {
@@ -160,7 +163,7 @@ export function present(editor, canvas, { autoplay = false } = {}) {
       return;
     }
     // Keep drawing while anything moves (or until the page's time is up, when playing).
-    const moving = local < Math.max(animationsEnd(page), from !== null ? tr.duration : 0) || page.elements.some((el) => ANIMATIONS[animationOf(page, el)?.type]?.loop) || videosOn(doc, [i]).length > 0;
+    const moving = local < Math.max(info.end, from !== null ? tr.duration : 0) || info.keeps;
     if (moving || autoplay) frame = requestAnimationFrame(draw);
   };
   const go = (to, forward) => {
@@ -168,6 +171,8 @@ export function present(editor, canvas, { autoplay = false } = {}) {
     from = forward && to !== at ? shown[at] : null;
     at = to;
     started = performance.now();
+    const page = doc.pages[shown[at]];
+    info = { end: animationsEnd(page), keeps: keepsMoving(page) };
     videos.pauseAll();
     videos.start(videosOn(doc, [shown[at]]));
     sound?.seek(tl.parts[at].start);
@@ -186,7 +191,7 @@ export function present(editor, canvas, { autoplay = false } = {}) {
     else return;
     e.preventDefault();
     e.stopPropagation();
-    go(to, to === at + 1);
+    if (to !== at) go(to, to === at + 1); // at either end, nothing happens (the page doesn't start over)
   };
   const close = () => {
     cancelAnimationFrame(frame);
@@ -200,7 +205,7 @@ export function present(editor, canvas, { autoplay = false } = {}) {
     if (e.target.closest('.presenter-close')) return;
     const left = e.clientX < window.innerWidth / 3;
     const to = left ? Math.max(0, at - 1) : Math.min(last, at + 1);
-    go(to, to === at + 1);
+    if (to !== at) go(to, to === at + 1);
   });
   document.addEventListener('keydown', onKey, true);
   document.body.append(root);
@@ -219,7 +224,9 @@ function soundtrackPlayer(doc) {
   return {
     seek(t) {
       const go = () => {
-        audio.currentTime = Math.min(t, Math.max(0, (audio.duration || t) - 0.05));
+        // Past the end of the sound: silence (as in a download), not its last moment.
+        if (audio.duration && t >= audio.duration) return audio.pause();
+        audio.currentTime = t;
         audio.play().catch(() => null);
       };
       if (audio.readyState >= 1) go();

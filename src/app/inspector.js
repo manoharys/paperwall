@@ -164,7 +164,7 @@ export class Inspector {
     const set = (k) => (v) => this.up({ [k]: k === 'rotation' ? ((v % 360) + 360) % 360 : v });
     const resize = (k) => (v) => {
       const props = { [k]: Math.max(1, v) };
-      if (el.type === 'image' || el.type === 'icon' || el.type === 'sticker' || el.type === 'qr') {
+      if (['image', 'video', 'icon', 'sticker', 'qr'].includes(el.type)) {
         const r = el.w / el.h;
         if (k === 'w') props.h = Math.max(1, v / r);
         else props.w = Math.max(1, v * r);

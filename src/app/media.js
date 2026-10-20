@@ -128,10 +128,12 @@ export class VideoFrames {
 
   /** Start the videos of a page playing, from where the page begins. */
   start(els) {
+    const turn = (this.turn = (this.turn || 0) + 1);
     for (const el of els) {
       const p = this.player(el);
       p.ready.then((ok) => {
-        if (!ok) return;
+        // Not if the page was left (or playing stopped) while it loaded.
+        if (!ok || turn !== this.turn) return;
         const v = p.video;
         // Looping goes back to the start point (as downloads do), not to 0.
         v.loop = false;
@@ -145,16 +147,16 @@ export class VideoFrames {
     }
   }
 
-  /** Whatever `el`'s video is showing now. */
-  capture(el) {
+  /** Whatever `el`'s video is showing now, at `scale` (screen px per page px). */
+  capture(el, scale = 1.5) {
     const p = this.players.get(el.id);
-    return p && p.video.readyState >= 2 ? this.grab(p.video, el) : null;
+    return p && p.video.readyState >= 2 ? this.grab(p.video, el, scale) : null;
   }
 
-  grab(v, el) {
+  grab(v, el, scale = 1.5) {
     if (!v.videoWidth) return null;
-    // As sharp as the element needs, but no sharper than the video.
-    const s = Math.min(1, (Math.max(el.w, el.h) * 1.5) / Math.max(v.videoWidth, v.videoHeight));
+    // As sharp as it shows, but no sharper than the video.
+    const s = Math.min(1, (Math.max(el.w, el.h) * scale) / Math.max(v.videoWidth, v.videoHeight));
     const c = this.canvas;
     c.width = Math.max(1, Math.round(v.videoWidth * s));
     c.height = Math.max(1, Math.round(v.videoHeight * s));
@@ -163,6 +165,7 @@ export class VideoFrames {
   }
 
   pauseAll() {
+    this.turn = (this.turn || 0) + 1; // videos still loading won't start after this
     for (const { video } of this.players.values()) video.pause();
   }
 

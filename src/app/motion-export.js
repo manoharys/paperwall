@@ -138,16 +138,21 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
     error: (e) => (failure = e),
   });
   encoder.configure(pick.config);
-  const { total } = await eachFrame(doc, pages, { fps, width, height, onProgress, signal }, async (canvas, ctx, i) => {
-    if (failure) throw failure;
-    const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
-    // A key frame every two seconds, so players can jump around.
-    encoder.encode(frame, { keyFrame: i % (fps * 2) === 0 });
-    frame.close();
-    while (encoder.encodeQueueSize > 4) await new Promise((r) => setTimeout(r, 5));
-  });
-  await encoder.flush();
-  encoder.close();
+  let total;
+  try {
+    ({ total } = await eachFrame(doc, pages, { fps, width, height, onProgress, signal }, async (canvas, ctx, i) => {
+      if (failure) throw failure;
+      const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
+      // A key frame every two seconds, so players can jump around.
+      encoder.encode(frame, { keyFrame: i % (fps * 2) === 0 });
+      frame.close();
+      while (encoder.encodeQueueSize > 4) await new Promise((r) => setTimeout(r, 5));
+    }));
+    await encoder.flush();
+  } finally {
+    // Encoders are a limited resource: always given back, even when a download fails.
+    if (encoder.state !== 'closed') encoder.close();
+  }
   if (failure) throw failure;
   const sound = audio ? await encodeAudio(audio, total, container, volume) : null;
   const video = { codec: pick.codec, codecString: pick.codecString, width, height, description, chunks };
@@ -200,17 +205,20 @@ async function encodeAudio(buffer, seconds, container, volume = 1) {
     error: (e) => (failure = e),
   });
   encoder.configure(pick.config);
-  const block = 4800; // 0.1 s at a time
-  for (let at = 0; at < frames; at += block) {
-    const n = Math.min(block, frames - at);
-    const planar = new Float32Array(n * channels);
-    for (let c = 0; c < channels; c++) planar.set(pcm.getChannelData(c).subarray(at, at + n), c * n);
-    const data = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: n, numberOfChannels: channels, timestamp: Math.round((at / sampleRate) * 1e6), data: planar });
-    encoder.encode(data);
-    data.close();
+  try {
+    const block = 4800; // 0.1 s at a time
+    for (let at = 0; at < frames; at += block) {
+      const n = Math.min(block, frames - at);
+      const planar = new Float32Array(n * channels);
+      for (let c = 0; c < channels; c++) planar.set(pcm.getChannelData(c).subarray(at, at + n), c * n);
+      const data = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: n, numberOfChannels: channels, timestamp: Math.round((at / sampleRate) * 1e6), data: planar });
+      encoder.encode(data);
+      data.close();
+    }
+    await encoder.flush();
+  } finally {
+    if (encoder.state !== 'closed') encoder.close();
   }
-  await encoder.flush();
-  encoder.close();
   if (failure) throw failure;
   return { codec: pick.codec, sampleRate, channels, description, codecPrivate: pick.codec === 'opus' ? description : null, chunks };
 }

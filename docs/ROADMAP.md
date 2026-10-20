@@ -47,6 +47,7 @@ on-device AI models. Not approved: a collaboration server.
 - [ ] Presenter view with notes and a timer
 - [ ] Documents: long text with headings, lists and images
 - [ ] Whiteboards: infinite canvas, sticky notes, connectors
+- [ ] Carried over from v0.4 review: keep pictures, videos and sounds in their own store (as files, not text inside each saved design), so big videos don't slow saving
 
 ## v0.6 Online extras (opt-in)
 

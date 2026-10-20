@@ -403,7 +403,7 @@ export function isEmptyFrame(doc, el) {
 /** Check that a parsed file looks like a Paperwall design. Throws a readable error if not. */
 /** An animation or transition from a file: a known type and numbers in range, else nothing. */
 function cleanMotion(m, kinds, ranges) {
-  if (!m || typeof m !== 'object' || !kinds[m.type] || m.type === 'none') return undefined;
+  if (!m || typeof m !== 'object' || !Object.hasOwn(kinds, m.type) || m.type === 'none') return undefined;
   const out = { type: m.type };
   for (const [k, [lo, hi]] of Object.entries(ranges)) if (Number.isFinite(+m[k])) out[k] = Math.max(lo, Math.min(hi, +m[k]));
   return out;

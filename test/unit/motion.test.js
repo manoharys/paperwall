@@ -272,3 +272,17 @@ test('[MOT-03] a transition never runs longer than half its page', async () => {
   assert.equal(transitionOf({ duration: 0.5, transition: { type: 'fade' } }).duration, 0.25);
   assert.equal(transitionOf({ duration: 5, transition: { type: 'fade' } }).duration, 0.6);
 });
+
+test('[MOT-03] motion types are checked as the design\'s own names, not inherited ones', async () => {
+  const { transitionOf, animationOf, pageMoves } = await import('../../src/model/motion.js');
+  const { createDesign, createVideo, validateDesign } = await import('../../src/model/doc.js');
+  assert.equal(transitionOf({ transition: { type: 'toString' } }).type, 'none');
+  assert.equal(animationOf({ elements: [], anim: { type: 'constructor' } }, { id: 'x', anim: { type: '__proto__' } }), null);
+  const doc = createDesign({ width: 100, height: 100 });
+  doc.pages[0].transition = { type: 'toString' };
+  validateDesign(doc);
+  assert.equal(doc.pages[0].transition, undefined);
+  // A page whose only motion is a video moves.
+  doc.pages[0].elements.push(createVideo('a'));
+  assert.ok(pageMoves(doc.pages[0]));
+});
