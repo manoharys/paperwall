@@ -256,3 +256,62 @@ export function fontPicker({ label = 'Font', value, fonts, kinds, onChange, test
   });
   return h('div', { class: 'field' }, h('span', null, label), btn);
 }
+
+/** Ready-made gradients, two to four colors each. */
+export const GRADIENT_PRESETS = [
+  ['Sunset', '#ff7a45', '#ff4d6d', '#8e44ad'],
+  ['Peach', '#ffecd2', '#fcb69f'],
+  ['Ocean', '#2193b0', '#6dd5ed'],
+  ['Lagoon', '#43cea2', '#185a9d'],
+  ['Citrus', '#f9d423', '#ff4e50'],
+  ['Berry', '#8e2de2', '#ff0080', '#ffb199'],
+  ['Mint', '#d4fc79', '#96e6a1'],
+  ['Night', '#0f2027', '#203a43', '#2c5364'],
+  ['Candy', '#a18cd1', '#fbc2eb'],
+  ['Fire', '#f12711', '#f5af19'],
+  ['Rainbow', '#ff5f6d', '#ffc371', '#47e891', '#3a86ff'],
+  ['Mono', '#ffffff', '#d9d9d9'],
+].map(([name, ...colors]) => ({ name, stops: colors.map((color, i) => ({ offset: i / (colors.length - 1), color })) }));
+
+function cssGradient(g, angle = 90) {
+  const stops = [...g.stops].sort((a, b) => a.offset - b.offset).map((s) => `${s.color} ${Math.round(s.offset * 100)}%`).join(', ');
+  return `linear-gradient(${angle}deg, ${stops})`;
+}
+
+function mixHex(a, b, t) {
+  const p = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const [x, y] = [p(a), p(b)];
+  return `#${x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * Edit a gradient with any number of colors: each stop has a color and a
+ * position; add and remove stops, switch linear/radial, set the angle, or
+ * start from a preset. onChange(gradient, isLive).
+ */
+export function gradientEditor({ label, value, onChange, getContext, testid }) {
+  const g = value;
+  const stops = [...g.stops].sort((a, b) => a.offset - b.offset);
+  const emit = (patch, live = false) => onChange({ ...g, ...patch }, live);
+  const setStop = (i, patch, live) => emit({ stops: stops.map((s, k) => (k === i ? { ...s, ...patch } : s)) }, live);
+  const addStop = () => {
+    // Put the new color in the middle of the widest gap.
+    let at = 0;
+    for (let i = 1; i < stops.length - 1; i++) if (stops[i + 1].offset - stops[i].offset > stops[at + 1].offset - stops[at].offset) at = i;
+    const [a, b] = [stops[at], stops[at + 1]];
+    emit({ stops: [...stops.slice(0, at + 1), { offset: Math.round(((a.offset + b.offset) / 2) * 100) / 100, color: mixHex(a.color, b.color, 0.5) }, ...stops.slice(at + 1)] });
+  };
+  return h('div', { class: 'grad-editor', 'data-testid': testid },
+    h('div', { class: 'grad-bar', style: { background: cssGradient(g) } }),
+    stops.map((s, i) => h('div', { class: 'grad-stop', 'data-testid': 'grad-stop' },
+      colorButton({ label: `${label} color ${i + 1}`, value: s.color, getContext, testid: `grad-color-${i}`, onChange: (c, l) => setStop(i, { color: c }, l) }),
+      h('input', { type: 'range', min: 0, max: 100, value: Math.round(s.offset * 100), 'aria-label': `${label} color ${i + 1} position`, 'data-testid': `grad-pos-${i}`, onInput: (e) => setStop(i, { offset: +e.target.value / 100 }, true), onChange: (e) => setStop(i, { offset: +e.target.value / 100 }) }),
+      stops.length > 2 ? iconButton('close', `Remove color ${i + 1}`, () => emit({ stops: stops.filter((_, k) => k !== i) }), { 'data-testid': `grad-remove-${i}` }) : h('span', { class: 'grad-spacer' }))),
+    stops.length < 8 ? h('button', { type: 'button', class: 'link-btn', 'data-testid': 'grad-add', onClick: addStop }, '+ Add a color') : null,
+    segmented({ label: 'Gradient style', value: g.type, onChange: (type) => emit({ type }), options: [{ value: 'linear', label: 'Linear', text: 'Linear' }, { value: 'radial', label: 'Radial', text: 'Radial' }] }),
+    g.type === 'linear' ? slider({ label: 'Angle', value: g.angle ?? 180, min: 0, max: 360, unit: '°', testid: 'grad-angle', onChange: (v, l) => emit({ angle: v }, l) }) : null,
+    h('div', { class: 'grad-presets', role: 'group', 'aria-label': 'Ready-made gradients' }, GRADIENT_PRESETS.map((p) => h('button', {
+      type: 'button', class: 'grad-preset', title: p.name, 'aria-label': p.name, 'data-testid': `grad-preset-${p.name}`, style: { background: cssGradient(p, 135) },
+      onClick: () => emit({ stops: p.stops.map((s) => ({ ...s })) }),
+    }))));
+}

@@ -7,7 +7,7 @@ import {
   pointInBox, rectFromPoints, rectsIntersect, HANDLES,
 } from '../model/geometry.js';
 import { resizeElement, coverCrop } from '../model/commands.js';
-import { clone } from '../model/doc.js';
+import { clone, DRAW_TOOLS } from '../model/doc.js';
 import { measure } from './fonts.js';
 import { h, dataUrlToBlob, toast, pickFile } from './ui.js';
 import * as store from './store.js';
@@ -52,6 +52,7 @@ export class Canvas {
     });
     editor.on((what) => {
       if (what === 'live') return this.schedule();
+      if (what === 'tool') return void this.el.classList.toggle('drawing', !!editor.drawTool);
       // Discrete changes draw right away; drags are batched per frame.
       if (this.frame) cancelAnimationFrame(this.frame);
       this.frame = 0;
@@ -222,6 +223,15 @@ export class Canvas {
       return;
     }
     const p = this.toPage(e);
+    if (ed.drawTool) {
+      // Drawing: every press on the page starts a new stroke.
+      e.preventDefault();
+      ed.deselect();
+      this.drag = { mode: 'draw', points: [[p.x, p.y]] };
+      this.el.setPointerCapture(e.pointerId);
+      this.drawStroke();
+      return;
+    }
     const handle = e.target.closest?.('[data-handle]')?.getAttribute('data-handle');
     if (handle) {
       e.preventDefault();
@@ -283,6 +293,14 @@ export class Canvas {
         this.hover = id;
         this.drawOverlay();
       }
+      return;
+    }
+    if (d.mode === 'draw') {
+      for (const ev of e.getCoalescedEvents?.() || [e]) {
+        const q = this.toPage(ev);
+        d.points.push([q.x, q.y]);
+      }
+      this.drawStroke();
       return;
     }
     if (d.mode === 'pan') {
@@ -382,6 +400,12 @@ export class Canvas {
       return;
     }
     if (d.mode === 'pan') return;
+    if (d.mode === 'draw') {
+      this.stroke?.remove();
+      this.stroke = null;
+      ed.addDrawing(d.points);
+      return;
+    }
     ed.guides = [];
     if (d.moved) ed.afterChange();
     else {
@@ -508,6 +532,21 @@ export class Canvas {
       ed.afterChange();
     }
     this.el.focus({ preventScroll: true });
+  }
+
+  /** Show the stroke being drawn, on top of the page. */
+  drawStroke() {
+    const t = this.ed.drawTool;
+    const d = this.drag;
+    if (!t || !d) return;
+    const z = this.ed.zoom;
+    if (!this.stroke?.isConnected) {
+      this.stroke = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      this.stroke.setAttribute('class', 'live-stroke');
+      this.overlay.append(this.stroke);
+    }
+    Object.entries({ points: d.points.map(([x, y]) => `${x * z},${y * z}`).join(' '), fill: 'none', stroke: t.color, 'stroke-width': t.size * z, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: DRAW_TOOLS[t.tool].opacity })
+      .forEach(([k, v]) => this.stroke.setAttribute(k, v));
   }
 
   /** Choose a photo from the device for an empty frame. */

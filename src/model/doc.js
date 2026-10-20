@@ -152,7 +152,7 @@ export function createLine(props = {}) {
   });
 }
 
-export const DEFAULT_FILTERS = { brightness: 100, contrast: 100, saturation: 100, grayscale: 0, sepia: 0, blur: 0 };
+export const DEFAULT_FILTERS = { brightness: 100, contrast: 100, saturation: 100, grayscale: 0, sepia: 0, blur: 0, warmth: 0, tint: 0, hue: 0, vignette: 0, duotone: null };
 
 export function createImage(assetId, props = {}) {
   return base('image', {
@@ -165,6 +165,46 @@ export function createImage(assetId, props = {}) {
     mask: 'none',
     ...props,
   });
+}
+
+export const DRAW_TOOLS = {
+  pen: { strokeWidth: 6, opacity: 1 },
+  marker: { strokeWidth: 18, opacity: 1 },
+  highlighter: { strokeWidth: 36, opacity: 0.4 },
+};
+
+/**
+ * A freehand stroke from points in page pixels. The points are stored as
+ * shares of the stroke's box, so the drawing stretches when it's resized.
+ */
+export function createDrawing(points, { tool = 'pen', stroke = '#1a1a2e', strokeWidth, ...props } = {}) {
+  const width = strokeWidth ?? DRAW_TOOLS[tool]?.strokeWidth ?? 6;
+  const pad = width / 2;
+  const xs = points.map((p) => p[0]);
+  const ys = points.map((p) => p[1]);
+  const x = Math.min(...xs) - pad;
+  const y = Math.min(...ys) - pad;
+  const w = Math.max(1, Math.max(...xs) + pad - x);
+  const h = Math.max(1, Math.max(...ys) + pad - y);
+  const r4 = (n) => Math.round(n * 10000) / 10000;
+  return base('draw', {
+    x, y, w, h, tool, stroke, strokeWidth: width,
+    opacity: DRAW_TOOLS[tool]?.opacity ?? 1,
+    points: points.map(([px, py]) => [r4((px - x) / w), r4((py - y) / h)]),
+    ...props,
+  });
+}
+
+/** Drop points closer than `min` px to the last kept one (they add size, not shape). */
+export function thinPoints(points, min = 2) {
+  const out = [];
+  for (const p of points) {
+    const q = out[out.length - 1];
+    if (!q || Math.hypot(p[0] - q[0], p[1] - q[1]) >= min) out.push(p);
+  }
+  const last = points[points.length - 1];
+  if (last && out[out.length - 1] !== last) out.push(last);
+  return out;
 }
 
 /** A photo frame: an image in a shape, empty until a photo is dropped in. */
@@ -301,6 +341,7 @@ export function validateDesign(doc) {
   const clean = (els) => els.filter((el) => el && typeof el === 'object' && typeof el.type === 'string' && typeof el.id === 'string').map((el) => {
     for (const k of NUMERIC) if (k in el && el[k] !== null) el[k] = Number.isFinite(+el[k]) ? +el[k] : 0;
     if (el.type === 'group') el.children = Array.isArray(el.children) ? clean(el.children) : [];
+    if (el.type === 'draw') el.points = (Array.isArray(el.points) ? el.points : []).filter((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite));
     return el;
   });
   for (const p of doc.pages) {

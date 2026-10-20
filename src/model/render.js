@@ -1,7 +1,7 @@
 // Turns a page into SVG markup. The editor and every export use this same
 // renderer, so what you see is exactly what you download.
 
-import { shapePath, dashArray, maskPath } from './shapes.js';
+import { shapePath, dashArray, maskPath, drawPath } from './shapes.js';
 import { layoutText, displayText, approxMeasure } from './text-layout.js';
 import { iconById, stickerById } from './graphics.js';
 import { qrMatrix, qrPath } from './qr.js';
@@ -83,6 +83,18 @@ function imageFilter(ctx, fl) {
     ];
     parts.push(`<feColorMatrix type="matrix" values="${m.map(f).join(' ')}"/>`);
   }
+  // Warmth shifts red against blue; tint shifts green against magenta (-100..100).
+  const warm = (fl.warmth ?? 0) / 100 * 0.12;
+  const tint = (fl.tint ?? 0) / 100 * 0.1;
+  if (warm || tint) parts.push(`<feColorMatrix type="matrix" values="1 0 0 0 ${f(warm)} 0 1 0 0 ${f(tint)} 0 0 1 0 ${f(-warm)} 0 0 0 1 0"/>`);
+  if (fl.hue) parts.push(`<feColorMatrix type="hueRotate" values="${f(fl.hue)}"/>`);
+  if (fl.duotone?.dark && fl.duotone?.light) {
+    // Shadows become one color, highlights another, by brightness.
+    const rgb = (hex) => [1, 3, 5].map((i) => parseInt(String(hex).slice(i, i + 2), 16) / 255 || 0);
+    const [d, l] = [rgb(fl.duotone.dark), rgb(fl.duotone.light)];
+    parts.push('<feColorMatrix type="matrix" values="0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0 0 0 1 0"/>');
+    parts.push(`<feComponentTransfer>${['R', 'G', 'B'].map((c, i) => `<feFunc${c} type="table" tableValues="${f(d[i])} ${f(l[i])}"/>`).join('')}</feComponentTransfer>`);
+  }
   if ((fl.blur ?? 0) > 0) parts.push(`<feGaussianBlur stdDeviation="${f(fl.blur)}"/>`);
   if (!parts.length) return null;
   const id = ctx.id('fx');
@@ -140,7 +152,15 @@ function renderImage(ctx, el) {
   const clip = ctx.id('clip');
   ctx.defs.push(`<clipPath id="${clip}"><path d="${outline}"/></clipPath>`);
   const fx = imageFilter(ctx, el.filters);
-  return `<g clip-path="url(#${clip})"><image href="${esc(href)}" x="${f(-crop.x * iw)}" y="${f(-crop.y * ih)}" width="${f(iw)}" height="${f(ih)}" preserveAspectRatio="none"${fx ? ` filter="url(#${fx})"` : ''}/></g>`;
+  // A vignette darkens the edges with a soft radial shade on top.
+  const v = (el.filters?.vignette ?? 0) / 100;
+  let shade = '';
+  if (v > 0) {
+    const id = ctx.id('vig');
+    ctx.defs.push(`<radialGradient id="${id}" cx="50%" cy="50%" r="72%"><stop offset="${f(0.75 - v * 0.45)}" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="${f(0.25 + v * 0.6)}"/></radialGradient>`);
+    shade = `<rect width="${f(el.w)}" height="${f(el.h)}" fill="url(#${id})"/>`;
+  }
+  return `<g clip-path="url(#${clip})"><image href="${esc(href)}" x="${f(-crop.x * iw)}" y="${f(-crop.y * ih)}" width="${f(iw)}" height="${f(ih)}" preserveAspectRatio="none"${fx ? ` filter="url(#${fx})"` : ''}/>${shade}</g>`;
 }
 
 function renderIcon(ctx, el) {
@@ -414,6 +434,7 @@ const RENDERERS = {
   sticker: renderSticker,
   qr: renderQr,
   text: renderText,
+  draw: (ctx, el) => `<path d="${drawPath(el)}" fill="none" stroke="${esc(el.stroke)}" stroke-width="${f(el.strokeWidth)}" stroke-linecap="round" stroke-linejoin="round"/>`,
   group: (ctx, el) => el.children.map((c) => renderElement(ctx, c)).join(''),
 };
 

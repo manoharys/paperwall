@@ -6,7 +6,13 @@ export function h(tag, attrs, ...children) {
     for (const [k, v] of Object.entries(attrs)) {
       if (v === undefined || v === null || v === false) continue;
       if (k === 'class') el.className = v;
-      else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+      else if (k === 'style' && typeof v === 'object') {
+        // Custom properties (--name) only work through setProperty.
+        for (const [p, val] of Object.entries(v)) {
+          if (p.startsWith('--')) el.style.setProperty(p, val);
+          else el.style[p] = val;
+        }
+      }
       else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
       else if (k === 'html') el.innerHTML = v;
       else if (v === true) el.setAttribute(k, '');
@@ -84,6 +90,7 @@ const UI_ICONS = {
   open: '<path d="M3.5 7.5V18.5h17v-9h-9l-2-2z"/>',
   save: '<path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/>',
   crop: '<path d="M7 3v14h14M3 7h14v14"/>',
+  draw: '<path d="M4 20c2-1 3-4 5-4s2 3 4 3 3-5 7-8"/><path d="M15 4l5 5"/>',
   paint: '<rect x="4" y="3.5" width="14" height="6" rx="1"/><path d="M18 6.5h2v5h-8v3M11 14.5h2v6h-2z"/>',
   pasteStyle: '<rect x="3.5" y="3.5" width="11" height="5" rx="1"/><path d="M14.5 6h2v4h-6.5v2.5M9 12.5h2v5H9z"/><path d="M16 15.5h5M18.5 13v5"/>',
   dropper: '<path d="M14.5 5.5l4 4M17 3.5a2.1 2.1 0 0 1 3 3l-2 2-3-3zM15 7.5l-9 9-1.5 3.5L8 18.5l9-9"/>',

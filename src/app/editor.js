@@ -4,7 +4,7 @@
 import { History } from '../model/history.js';
 import * as cmd from '../model/commands.js';
 import {
-  createText, createShape, createLine, createImage, createFrame, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
+  createText, createShape, createLine, createImage, createFrame, createDrawing, thinPoints, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
   TEXT_STYLES, clone,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
@@ -29,6 +29,7 @@ export class Editor {
     this.history = new History();
     this.editingTextId = null;
     this.cropId = null;
+    this.drawTool = null; // { tool, color, size } while drawing
     this.guides = [];
     this.listeners = new Set();
     this.onOpenDesign = onOpenDesign;
@@ -270,6 +271,15 @@ export class Editor {
       if ((!el.assetId || (el.mask && el.mask !== 'none')) && pointInBox(p.x, p.y, el)) return el;
     }
     return null;
+  }
+
+  /** Turn a freehand stroke (page points) into a drawing with the current tool. */
+  addDrawing(points) {
+    const t = this.drawTool;
+    if (!t || !points.length) return null;
+    const el = createDrawing(thinPoints(points, 1.5 / this.zoom), { tool: t.tool, stroke: t.color, strokeWidth: t.size });
+    this.change(() => cmd.addElement(this.doc, this.page, el));
+    return el;
   }
 
   addFrame(mask = 'none', props = {}) {

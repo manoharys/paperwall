@@ -355,3 +355,30 @@ kbd { font: 12px ui-monospace, monospace; background: var(--panel-2); border: 1p
 .combo { display: flex; align-items: center; justify-content: center; aspect-ratio: 4 / 3; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; }
 .combo:hover { border-color: var(--accent); }
 .combo svg { display: block; max-width: 100%; max-height: 100%; overflow: visible; }
+
+/* Gradient editor */
+.grad-editor { display: grid; gap: 8px; }
+.grad-bar { height: 18px; border-radius: 6px; border: 1px solid var(--line); }
+.grad-stop { display: grid; grid-template-columns: auto 1fr 28px; gap: 8px; align-items: center; }
+.grad-stop input[type="range"] { width: 100%; min-width: 0; accent-color: var(--accent); }
+.grad-spacer { width: 28px; }
+.grad-presets { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.grad-preset { aspect-ratio: 1; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+.grad-preset:hover { outline: 2px solid var(--accent); }
+
+/* Duotone */
+.duo-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.duo { aspect-ratio: 1; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--muted); font-size: 11px; cursor: pointer; padding: 0; }
+.duo.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Drawing */
+.stage.drawing, .stage.drawing * { cursor: crosshair !important; }
+.tool-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+.tool { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); cursor: pointer; font-size: 12px; }
+.tool.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.tool-tip { display: block; width: 10px; height: 28px; border-radius: 3px 3px 6px 6px; border: 1px solid rgba(0, 0, 0, .15); }
+.tool-tip.marker { width: 16px; }
+.tool-tip.highlighter { width: 22px; opacity: .55; border-radius: 3px; }
+.draw-colors { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
+.draw-colors .swatch.on { outline: 2px solid var(--accent); outline-offset: 2px; }
+.live-stroke { pointer-events: none; }

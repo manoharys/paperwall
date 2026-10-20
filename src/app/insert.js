@@ -1,11 +1,11 @@
 // The left-hand panel: everything you can add to a page.
 
 import { h, icon, iconButton, clear, toast, pickFile, mod } from './ui.js';
-import { colorButton, selectField, section } from './widgets.js';
+import { colorButton, selectField, section, slider } from './widgets.js';
 import { FONTS, FONT_PAIRS } from '../model/fonts.js';
 import { ALL_ICONS, ALL_STICKERS, searchGraphics } from '../model/graphics.js';
 import { renderPage, renderElementOnly } from '../model/render.js';
-import { createShape, createFrame, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES } from '../model/doc.js';
+import { DRAW_TOOLS, createShape, createFrame, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES } from '../model/doc.js';
 import { GRIDS, gridBoxes } from '../model/grids.js';
 import { collectColors, scaleElement } from '../model/commands.js';
 import { TEMPLATES, TEMPLATE_CATEGORIES, TEMPLATE_FORMATS, searchTemplates, templateFormatLabel } from '../templates/index.js';
@@ -22,6 +22,7 @@ const TABS = [
   { id: 'graphics', label: 'Graphics', icon: 'graphics' },
   { id: 'uploads', label: 'Uploads', icon: 'uploads' },
   { id: 'charts', label: 'Charts', icon: 'chart' },
+  { id: 'draw', label: 'Draw', icon: 'draw' },
   { id: 'qr', label: 'QR code', icon: 'qr' },
   { id: 'brand', label: 'Brand', icon: 'brand' },
 ];
@@ -76,6 +77,10 @@ export class InsertPanel {
     this.rail = h('nav', { class: 'rail', 'aria-label': 'Add to your design' },
       TABS.map((t) => h('button', { type: 'button', 'data-tab': t.id, 'data-testid': `rail-${t.id}`, onClick: () => this.open(t.id) }, icon(t.icon, 22), h('span', null, t.label))));
     this.el = h('div', { class: 'insert' }, this.rail, h('div', { class: 'insert-panel', 'data-testid': 'insert-panel' }, this.body));
+    this.pen = { tool: 'pen', color: '#1a1a2e', size: DRAW_TOOLS.pen.strokeWidth };
+    editor.on((what) => {
+      if (what === 'stop-drawing') this.open('templates');
+    });
     this.render();
   }
 
@@ -100,6 +105,12 @@ export class InsertPanel {
 
   render() {
     for (const b of this.rail.children) b.setAttribute('aria-current', String(b.dataset.tab === this.tab));
+    // The Draw tab turns drawing on; leaving it (or closing the panel) turns it off.
+    const drawing = this.tab === 'draw' && !this.el.classList.contains('collapsed');
+    if (!!this.ed.drawTool !== drawing || (drawing && this.ed.drawTool !== this.pen)) {
+      this.ed.drawTool = drawing ? this.pen : null;
+      this.ed.emit('tool');
+    }
     forget(this.body);
     clear(this.body);
     const fn = {
@@ -111,6 +122,7 @@ export class InsertPanel {
       charts: () => this.charts(),
       qr: () => this.qr(),
       brand: () => this.brand(),
+      draw: () => this.draw(),
     }[this.tab];
     this.body.append(...[].concat(fn()));
   }
@@ -152,6 +164,29 @@ export class InsertPanel {
       ed.setPage(0);
     }
     toast(`Added "${t.name}"`);
+  }
+
+  // ---------- drawing ----------
+
+  draw() {
+    const pen = this.pen;
+    const pick = (patch) => {
+      Object.assign(pen, patch);
+      this.render();
+    };
+    const COLORS = ['#1a1a2e', '#ffffff', '#f25c2a', '#ffd166', '#06d6a0', '#118ab2', '#5b5bd6', '#ff4d6d'];
+    return [
+      section('Draw',
+        h('p', { class: 'hint' }, 'Draw on the page with your mouse, pen or finger. Each stroke can be moved, resized and recolored. Press Esc to stop.'),
+        h('div', { class: 'tool-row', role: 'group', 'aria-label': 'Drawing tool', 'data-testid': 'draw-tools' }, Object.keys(DRAW_TOOLS).map((tool) => h('button', {
+          type: 'button', class: `tool${pen.tool === tool ? ' on' : ''}`, 'aria-pressed': String(pen.tool === tool), 'data-testid': `draw-tool-${tool}`,
+          onClick: () => pick({ tool, size: DRAW_TOOLS[tool].strokeWidth, color: tool === 'highlighter' && pen.color === '#1a1a2e' ? '#ffd166' : pen.color }),
+        }, h('span', { class: `tool-tip ${tool}`, style: { background: pen.color } }), tool[0].toUpperCase() + tool.slice(1)))),
+        h('div', { class: 'swatches draw-colors' }, COLORS.map((c) => h('button', { type: 'button', class: `swatch${pen.color === c ? ' on' : ''}`, style: { '--swatch': c }, title: c, 'aria-label': `Draw in ${c}`, 'data-testid': `draw-color-${c.slice(1)}`, onClick: () => pick({ color: c }) })),
+          colorButton({ label: 'Drawing color', value: pen.color, onChange: (c) => pick({ color: c }) })),
+        slider({ label: 'Size', value: pen.size, min: 1, max: 120, testid: 'draw-size', onChange: (v) => (pen.size = v) }),
+        h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'draw-stop', onClick: () => this.open('templates') }, 'Done drawing')),
+    ];
   }
 
   // ---------- text ----------

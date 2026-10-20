@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { newDesign, state, elements, addShape, clickElement, elementCenter, drag, teardown, makePng, uploadImages, mod, openTab } from './helpers.js';
+import { newDesign, state, elements, addShape, clickElement, elementCenter, drag, teardown, makePng, uploadImages, mod, openTab, screenPoint } from './helpers.js';
 
 after(teardown);
 
@@ -288,6 +288,7 @@ test('[CLR-02] [CLR-04] colors already in the design and ready-made palettes', a
   await page.click('[data-testid="fill-color"]');
   const used = page.locator('.swatch-group', { hasText: 'In this design' }).locator('.swatch[title="#123456"]');
   assert.equal(await used.count(), 1);
+  assert.equal(await used.evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(18, 52, 86)', 'swatches show their color');
   await used.click();
   assert.equal((await last(page)).fill, '#123456');
   const palettes = await page.locator('.color-pop .swatch-group').count();
@@ -529,5 +530,76 @@ test('[IMG-15] photo grids for collages', async () => {
   await uploadImages(page, [await makePng(page, { w: 400, h: 400 })]);
   await dragUploadOnto(page, frames[2].id);
   await page.waitForFunction((id) => window.paperwall.editor.pageData.elements.find((e) => e.id === id).assetId, frames[2].id);
+  await context.close();
+});
+
+// ---------- gradients, photo color, drawing ----------
+
+test('[CLR-05] gradients with any number of colors, and ready-made gradients', async () => {
+  const { page, context } = await newDesign('square');
+  const s = await addShape(page, 'Square');
+  await page.click('[data-testid="fill-type"] [data-value="gradient"]');
+  assert.equal(await page.locator('[data-testid="fill-gradient"] [data-testid="grad-stop"]').count(), 2);
+  await page.click('[data-testid="grad-add"]');
+  let fill = (await last(page)).fill;
+  assert.equal(fill.stops.length, 3);
+  assert.equal(fill.stops[1].offset, 0.5, 'a new color goes in the middle');
+  await page.locator('[data-testid="grad-pos-1"]').fill('30');
+  fill = (await last(page)).fill;
+  assert.equal(fill.stops[1].offset, 0.3);
+  await page.click('[data-testid="grad-preset-Rainbow"]');
+  fill = (await last(page)).fill;
+  assert.equal(fill.stops.length, 4);
+  assert.equal(await dom(page, s.id).locator('stop').count(), 0, 'stops live in defs');
+  assert.equal(await page.locator('[data-testid="page"] linearGradient stop').count(), 4);
+  await page.click('[data-testid="grad-remove-0"]');
+  assert.equal((await last(page)).fill.stops.length, 3);
+  await context.close();
+});
+
+test('[IMG-16] duotone, warmth, tint, hue and vignette', async () => {
+  const { page, context } = await withImage();
+  await page.click('[data-testid="duotone-Ocean"]');
+  const f = (await last(page)).filters;
+  assert.deepEqual(f.duotone, { dark: '#0b2a45', light: '#7fd1c7' });
+  assert.ok((await page.locator('[data-testid="page"] filter feFuncR[type="table"]').count()) >= 1);
+  await setNumber(page, 'warmth', 40);
+  await setNumber(page, 'vignette', 60);
+  const g = (await last(page)).filters;
+  assert.equal(g.warmth, 40);
+  assert.equal(g.vignette, 60);
+  assert.ok(g.duotone, 'other adjustments stay');
+  assert.equal(await page.locator('[data-testid="page"] radialGradient').count(), 1, 'vignette shade');
+  await page.click('[data-testid="duotone-none"]');
+  assert.equal((await last(page)).filters.duotone, null);
+  await context.close();
+});
+
+test('[ELM-09] freehand drawing with a pen, marker or highlighter', async () => {
+  const { page, context } = await newDesign('square');
+  await openTab(page, 'draw');
+  assert.equal(await state(page, (ed) => ed.drawTool?.tool), 'pen');
+  const a = await screenPoint(page, 200, 300);
+  const b = await screenPoint(page, 700, 500);
+  await drag(page, a, b, { steps: 20 });
+  let d = await last(page);
+  assert.equal(d.type, 'draw');
+  assert.ok(d.points.length >= 3, `${d.points.length} points`);
+  assert.ok(Math.abs(d.x - 197) < 6 && Math.abs(d.x + d.w - 703) < 6, 'the box wraps the stroke');
+  assert.equal(await page.locator(`[data-testid="page"] [data-id="${d.id}"] path`).count(), 1);
+  await page.click('[data-testid="draw-tool-highlighter"]');
+  await drag(page, await screenPoint(page, 200, 800), await screenPoint(page, 800, 800), { steps: 10 });
+  d = await last(page);
+  assert.equal(d.tool, 'highlighter');
+  assert.equal(d.opacity, 0.4);
+  assert.equal(d.strokeWidth, 36);
+  assert.equal((await elements(page)).filter((e) => e.type === 'draw').length, 2);
+  // Esc stops drawing; then a stroke can be selected and recolored like anything else.
+  await page.keyboard.press('Escape');
+  assert.equal(await state(page, (ed) => ed.drawTool), null);
+  const first = (await elements(page))[0];
+  await clickElement(page, first.id);
+  await pickColor(page, 'draw-color', '#ff006e');
+  assert.equal((await elements(page))[0].stroke, '#ff006e');
   await context.close();
 });

@@ -92,6 +92,21 @@ export function shapePath(el) {
   }
 }
 
+/** A smooth path through a drawing's points (stored as shares of its box). */
+export function drawPath(el) {
+  const pts = (el.points || []).map(([x, y]) => [x * el.w, y * el.h]);
+  if (!pts.length) return '';
+  if (pts.length === 1) return `M${f(pts[0][0])} ${f(pts[0][1])} l0.01 0`;
+  let d = `M${f(pts[0][0])} ${f(pts[0][1])}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const mx = (pts[i][0] + pts[i + 1][0]) / 2;
+    const my = (pts[i][1] + pts[i + 1][1]) / 2;
+    d += ` Q${f(pts[i][0])} ${f(pts[i][1])} ${f(mx)} ${f(my)}`;
+  }
+  const z = pts[pts.length - 1];
+  return `${d} L${f(z[0])} ${f(z[1])}`;
+}
+
 /** The outline a photo is clipped to: its frame shape, or a (rounded) rectangle. */
 export function maskPath(el) {
   const shape = !el.mask || el.mask === 'none' ? 'rect' : el.mask === 'circle' ? 'ellipse' : el.mask;

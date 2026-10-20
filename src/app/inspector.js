@@ -2,7 +2,7 @@
 // is, and the layers list.
 
 import { h, icon, iconButton, clear, toast, pickFile, readFileAsDataUrl, dialog, mod } from './ui.js';
-import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover, popoverOpen, PALETTES, fontPicker } from './widgets.js';
+import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover, popoverOpen, PALETTES, fontPicker, gradientEditor } from './widgets.js';
 import { FONTS, FONT_KINDS } from '../model/fonts.js';
 import { SHAPES, FRAME_MASKS, createText, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, parseChartData, chartDataText, parseTable, tableText } from '../model/doc.js';
 
@@ -10,12 +10,17 @@ const MASK_LABELS = { none: 'Rectangle', circle: 'Circle', arch: 'Arch', blob: '
 import { collectColors, cropZoom } from '../model/commands.js';
 import { renderElementOnly, TEXT_EFFECTS } from '../model/render.js';
 
+const DUOTONES = [
+  ['Ink', '#1a1a2e', '#f7f4ef'], ['Ocean', '#0b2a45', '#7fd1c7'], ['Sunset', '#5b1a6e', '#ffb36b'], ['Berry', '#3b1426', '#ff8fa3'],
+  ['Forest', '#1f3a2e', '#e9c46a'], ['Pop', '#2a1bd6', '#ff6b9a'], ['Citrus', '#14532d', '#fde047'], ['Sepia', '#3a2418', '#f4d6a0'],
+];
+
 const EFFECT_NAMES = { none: 'None', lift: 'Lift', hollow: 'Hollow', splice: 'Splice', echo: 'Echo', glitch: 'Glitch', glow: 'Glow', neon: 'Neon' };
 import { measure, addCustomFont, customFontNames, ensureFont } from './fonts.js';
 import { iconById, stickerById } from '../model/graphics.js';
 import { getSetting } from './store.js';
 
-const TYPE_NAMES = { text: 'Text', shape: 'Shape', line: 'Line', image: 'Image', icon: 'Icon', sticker: 'Sticker', qr: 'QR code', group: 'Group', chart: 'Chart', table: 'Table' };
+const TYPE_NAMES = { text: 'Text', shape: 'Shape', line: 'Line', image: 'Image', icon: 'Icon', sticker: 'Sticker', qr: 'QR code', group: 'Group', chart: 'Chart', table: 'Table', draw: 'Drawing' };
 const SHAPE_NAMES = { rect: 'Rectangle', ellipse: 'Circle', triangle: 'Triangle', star: 'Star', polygon: 'Polygon', heart: 'Heart', arrow: 'Arrow', bubble: 'Speech bubble', diamond: 'Diamond', arch: 'Arch', blob: 'Blob' };
 
 const FILTER_PRESETS = {
@@ -196,6 +201,9 @@ export class Inspector {
       image: () => this.imagePanel(el),
       icon: () => [section('Color', h('div', { class: 'field inline' }, h('span', null, 'Icon color'), colorButton({ label: 'Icon color', testid: 'icon-color', value: el.color, getContext: this.colorContext, onChange: (c, l) => this.up({ color: c }, l ? 'color' : null) })),
         slider({ label: 'Line weight', value: el.strokeWidth || 1.8, min: 0.5, max: 4, step: 0.1, onChange: (v, l) => this.up({ strokeWidth: v }, l ? 'sw' : null) }))],
+      draw: () => [section('Drawing',
+        h('div', { class: 'field inline' }, h('span', null, 'Color'), colorButton({ label: 'Drawing color', testid: 'draw-color', value: el.stroke, getContext: this.colorContext, onChange: (c, l) => this.up({ stroke: c }, l ? 'stroke' : null) })),
+        slider({ label: 'Thickness', value: Math.round(el.strokeWidth), min: 1, max: 120, testid: 'draw-width', onChange: this.live('strokeWidth') }))],
       qr: () => this.qrPanel(el),
       chart: () => this.chartPanel(el),
       table: () => this.tablePanel(el),
@@ -301,10 +309,6 @@ export class Inspector {
     const isGradient = el.fill && typeof el.fill === 'object';
     const fill = isGradient ? el.fill : null;
     const solid = isGradient ? fill.stops[0].color : el.fill;
-    const setStop = (i) => (c, l) => {
-      const stops = fill.stops.map((s, k) => (k === i ? { ...s, color: c } : s));
-      this.up({ fill: { ...fill, stops } }, l ? 'grad' : null);
-    };
     return [
       section('Shape',
         selectField({ label: 'Shape', value: el.shape, testid: 'shape-select', options: SHAPES.map((s) => ({ value: s, label: SHAPE_NAMES[s] })), onChange: (shape) => this.up({ shape }) }),
@@ -313,11 +317,7 @@ export class Inspector {
           if (t === 'solid' && isGradient) this.up({ fill: solid });
         }, options: [{ value: 'solid', label: 'Solid', text: 'Solid' }, { value: 'gradient', label: 'Gradient', text: 'Gradient' }] }),
         isGradient
-          ? h('div', { class: 'sub' },
-            h('div', { class: 'field inline' }, h('span', null, 'From'), colorButton({ label: 'Gradient start', value: fill.stops[0].color, getContext: this.colorContext, onChange: setStop(0) }),
-              h('span', null, 'to'), colorButton({ label: 'Gradient end', value: fill.stops[fill.stops.length - 1].color, getContext: this.colorContext, onChange: setStop(fill.stops.length - 1) })),
-            segmented({ label: 'Gradient style', value: fill.type, onChange: (type) => this.up({ fill: { ...fill, type } }), options: [{ value: 'linear', label: 'Linear', text: 'Linear' }, { value: 'radial', label: 'Radial', text: 'Radial' }] }),
-            fill.type === 'linear' ? slider({ label: 'Angle', value: fill.angle ?? 180, min: 0, max: 360, unit: '°', onChange: (v, l) => this.up({ fill: { ...el.fill, angle: v } }, l ? 'grad' : null) }) : null)
+          ? h('div', { class: 'sub' }, gradientEditor({ label: 'Fill gradient', value: fill, getContext: this.colorContext, testid: 'fill-gradient', onChange: (g, l) => this.up({ fill: g }, l ? 'grad' : null) }))
           : h('div', { class: 'field inline' }, h('span', null, 'Fill'), colorButton({ label: 'Fill color', testid: 'fill-color', value: el.fill, getContext: this.colorContext, onChange: (c, l) => this.up({ fill: c }, l ? 'fill' : null) })),
         el.shape === 'rect' ? slider({ label: 'Corner rounding', value: el.radius || 0, min: 0, max: Math.round(Math.min(el.w, el.h) / 2), testid: 'corner-radius', onChange: this.live('radius') }) : null,
         el.shape === 'polygon' || el.shape === 'star' ? slider({ label: el.shape === 'star' ? 'Points' : 'Sides', value: el.sides, min: 3, max: el.shape === 'star' ? 24 : 12, testid: 'sides', onChange: this.live('sides') }) : null,
@@ -421,7 +421,18 @@ export class Inspector {
         slider({ label: 'Brightness', value: f.brightness, min: 0, max: 200, testid: 'brightness', onChange: filt('brightness') }),
         slider({ label: 'Contrast', value: f.contrast, min: 0, max: 200, testid: 'contrast', onChange: filt('contrast') }),
         slider({ label: 'Saturation', value: f.saturation, min: 0, max: 200, testid: 'saturation', onChange: filt('saturation') }),
-        slider({ label: 'Blur', value: f.blur, min: 0, max: 40, testid: 'blur', onChange: filt('blur') })),
+        slider({ label: 'Blur', value: f.blur, min: 0, max: 40, testid: 'blur', onChange: filt('blur') }),
+        slider({ label: 'Warmth', value: f.warmth, min: -100, max: 100, testid: 'warmth', onChange: filt('warmth') }),
+        slider({ label: 'Tint', value: f.tint, min: -100, max: 100, testid: 'tint', onChange: filt('tint') }),
+        slider({ label: 'Hue', value: f.hue, min: 0, max: 360, unit: '°', testid: 'hue', onChange: filt('hue') }),
+        slider({ label: 'Vignette', value: f.vignette, min: 0, max: 100, testid: 'vignette', onChange: filt('vignette') })),
+      section('Duotone',
+        h('div', { class: 'duo-grid', role: 'group', 'aria-label': 'Duotone', 'data-testid': 'duotone' },
+          h('button', { type: 'button', class: `duo${f.duotone ? '' : ' on'}`, 'data-testid': 'duotone-none', onClick: () => this.up({ filters: { duotone: null } }) }, 'None'),
+          DUOTONES.map(([name, dark, light]) => h('button', { type: 'button', class: `duo${f.duotone?.dark === dark && f.duotone?.light === light ? ' on' : ''}`, title: name, 'aria-label': `Duotone ${name}`, 'data-testid': `duotone-${name}`, style: { background: `linear-gradient(135deg, ${dark} 50%, ${light} 50%)` }, onClick: () => this.up({ filters: { duotone: { dark, light } } }) }))),
+        f.duotone ? h('div', { class: 'field inline' },
+          h('span', null, 'Shadows'), colorButton({ label: 'Duotone shadows', value: f.duotone.dark, getContext: this.colorContext, onChange: (c, l) => this.up({ filters: { duotone: { ...f.duotone, dark: c } } }, l ? 'duo' : null) }),
+          h('span', null, 'Highlights'), colorButton({ label: 'Duotone highlights', value: f.duotone.light, getContext: this.colorContext, onChange: (c, l) => this.up({ filters: { duotone: { ...f.duotone, light: c } } }, l ? 'duo' : null) })) : null),
       shape,
     ];
   }
@@ -499,7 +510,6 @@ export class Inspector {
     const unit = doc.unit || 'px';
     const size = unit === 'px' ? `${doc.width} × ${doc.height} px` : `${fromPx(doc.width, unit)} × ${fromPx(doc.height, unit)} ${unit}`;
     const grad = bg.type === 'gradient' ? bg.gradient : null;
-    const setStop = (i) => (c, l) => ed.setBackground({ type: 'gradient', gradient: { ...grad, stops: grad.stops.map((s, k) => (k === i ? { ...s, color: c } : s)) } }, l ? 'grad' : null);
     return [
       h('div', { class: 'panel-head' }, h('h2', { 'data-testid': 'selection-title' }, `Page ${ed.page + 1} of ${doc.pages.length}`)),
       section('Background',
@@ -509,11 +519,7 @@ export class Inspector {
           if (t === 'image') toast('Select an image on the page and choose "Use as page background", or add one from Uploads.');
         }, options: [{ value: 'color', label: 'Color', text: 'Color' }, { value: 'gradient', label: 'Gradient', text: 'Gradient' }, { value: 'image', label: 'Image', text: 'Image' }] }),
         bg.type === 'color' ? h('div', { class: 'field inline' }, h('span', null, 'Color'), colorButton({ label: 'Background color', testid: 'bg-color', value: bg.color, getContext: this.colorContext, onChange: (c, l) => ed.setBackground({ type: 'color', color: c }, l ? 'color' : null) })) : null,
-        grad ? h('div', { class: 'sub' },
-          h('div', { class: 'field inline' }, h('span', null, 'From'), colorButton({ label: 'Background gradient start', value: grad.stops[0].color, getContext: this.colorContext, onChange: setStop(0) }),
-            h('span', null, 'to'), colorButton({ label: 'Background gradient end', value: grad.stops[grad.stops.length - 1].color, getContext: this.colorContext, onChange: setStop(grad.stops.length - 1) })),
-          segmented({ label: 'Gradient style', value: grad.type, onChange: (type) => ed.setBackground({ type: 'gradient', gradient: { ...grad, type } }), options: [{ value: 'linear', label: 'Linear', text: 'Linear' }, { value: 'radial', label: 'Radial', text: 'Radial' }] }),
-          grad.type === 'linear' ? slider({ label: 'Angle', value: grad.angle ?? 180, min: 0, max: 360, unit: '°', onChange: (v, l) => ed.setBackground({ type: 'gradient', gradient: { ...ed.pageData.background.gradient, angle: v } }, l ? 'angle' : null) }) : null) : null,
+        grad ? h('div', { class: 'sub' }, gradientEditor({ label: 'Background gradient', value: grad, getContext: this.colorContext, testid: 'bg-gradient', onChange: (g, l) => ed.setBackground({ type: 'gradient', gradient: g }, l ? 'grad' : null) })) : null,
         bg.type === 'image' ? h('button', { type: 'button', class: 'btn small wide', onClick: () => ed.setBackground({ type: 'color', color: '#ffffff' }) }, 'Remove background image') : null),
       section('Design',
         h('p', { class: 'meta', 'data-testid': 'design-size' }, size),

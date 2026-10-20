@@ -322,3 +322,22 @@ test('[TXT-23] text combinations use bundled fonts and stack without overlapping
     assert.ok(Math.abs(g.x + g.w / 2 - 500) <= 1 && Math.abs(g.y + g.h / 2 - 500) <= 1, `${c.id}: centered`);
   }
 });
+
+test('[ELM-09] drawings keep their shape when resized', async () => {
+  const { createDrawing, thinPoints } = await import('../../src/model/doc.js');
+  const { scaleElement } = await import('../../src/model/commands.js');
+  const pts = thinPoints([[100, 100], [100.5, 100.2], [150, 120], [200, 200], [300, 150]], 2);
+  assert.equal(pts.length, 4, 'near-duplicate points are dropped');
+  const d = createDrawing(pts, { tool: 'marker', stroke: '#ff006e' });
+  assert.equal(d.strokeWidth, 18);
+  assert.deepEqual([d.x, d.y, d.w, d.h], [91, 91, 218, 118]);
+  assert.ok(d.points.every(([x, y]) => x >= 0 && x <= 1 && y >= 0 && y <= 1));
+  const doc = createDesign({ width: 600, height: 400 });
+  addElement(doc, 0, d);
+  const before = renderPage(doc, 0, { measure: approxMeasure }).match(/<path d="([^"]+)" fill="none" stroke="#ff006e"/)[1];
+  scaleElement(d, 2, 2);
+  assert.equal(d.strokeWidth, 36);
+  const after2 = renderPage(doc, 0, { measure: approxMeasure }).match(/<path d="([^"]+)" fill="none" stroke="#ff006e"/)[1];
+  assert.notEqual(before, after2);
+  assert.equal(after2.split(' ').length, before.split(' ').length, 'same points, twice the size');
+});

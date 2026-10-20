@@ -79,6 +79,7 @@ export function bindShortcuts(editor, canvas, actions) {
     if (m) return;
     if (e.key === 'Delete' || e.key === 'Backspace') return done(), editor.deleteSelection();
     if (e.key === 'Escape') {
+      if (editor.drawTool) return editor.emit('stop-drawing');
       if (editor.cropId) {
         editor.cropId = null;
         return editor.emit('selection');
