@@ -4,6 +4,7 @@ import { h, dialog, clear, toast } from './ui.js';
 import { renderPage } from '../model/render.js';
 import { measure, ensureDesignFonts } from './fonts.js';
 import * as store from './store.js';
+import { lazily } from './insert.js';
 
 function when(at) {
   const d = new Date(at);
@@ -24,10 +25,11 @@ export function historyDialog(editor) {
     if (!rows.length) list.append(h('p', { class: 'empty-note' }, 'No versions yet. One is kept every few minutes while you work, and whenever you leave a design you changed.'));
     for (const v of rows) {
       const img = h('span', { class: 'version-img', style: { aspectRatio: `${v.width} / ${v.height}` } });
-      store.versionDoc(v).then(async (doc) => {
+      // Previews load as they scroll into view, each with its own images.
+      lazily(img, () => store.versionDoc(v).then(async (doc) => {
         await ensureDesignFonts(doc);
         img.innerHTML = renderPage(doc, 0, { measure, noSize: true, idPrefix: `v${v.at}` });
-      });
+      }).catch(() => img.classList.add('broken')));
       list.append(h('li', { class: 'version', 'data-testid': 'version' },
         img,
         h('div', { class: 'version-meta' },

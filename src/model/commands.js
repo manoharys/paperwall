@@ -84,10 +84,14 @@ function freshCopies(els) {
     walk(copy);
     return copy;
   });
-  for (const c of copies) {
-    if (c.type !== 'connector') continue;
-    for (const k of ['start', 'end']) c[k] = { id: c[k]?.id ? map.get(c[k].id) ?? null : null };
-  }
+  const remap = (els) => {
+    for (const c of els) {
+      if (c.type === 'group') remap(c.children);
+      if (c.type !== 'connector') continue;
+      for (const k of ['start', 'end']) c[k] = { id: c[k]?.id ? map.get(c[k].id) ?? null : null };
+    }
+  };
+  remap(copies);
   return copies;
 }
 

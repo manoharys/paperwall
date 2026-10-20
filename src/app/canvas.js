@@ -7,9 +7,9 @@ import {
   pointInBox, rectFromPoints, rectsIntersect, HANDLES,
 } from '../model/geometry.js';
 import { resizeElement, coverCrop } from '../model/commands.js';
-import { clone, DRAW_TOOLS, fromPx } from '../model/doc.js';
+import { clone, DRAW_TOOLS, DPI } from '../model/doc.js';
 import { gridStep, marginSize, BLEED } from './editor.js';
-import { endsOf, setEnds } from '../model/connectors.js';
+import { endsOf, setEnds, connectorHit } from '../model/connectors.js';
 import { measure } from './fonts.js';
 import { h, dataUrlToBlob, toast, pickFile } from './ui.js';
 import * as store from './store.js';
@@ -220,7 +220,11 @@ export class Canvas {
     for (let i = els.length - 1; i >= 0; i--) {
       const el = els[i];
       if (el.hidden) continue;
-      if (pointInBox(p.x, p.y, el, el.type === 'line' || el.type === 'connector' ? Math.max(margin, 10 / this.ed.zoom) : margin)) return el;
+      if (el.type === 'connector') {
+        if (connectorHit(el, p, Math.max(el.strokeWidth / 2, 0) + Math.max(margin, 8 / this.ed.zoom))) return el;
+        continue;
+      }
+      if (pointInBox(p.x, p.y, el, el.type === 'line' ? Math.max(margin, 10 / this.ed.zoom) : margin)) return el;
     }
     return null;
   }
@@ -519,7 +523,7 @@ export class Canvas {
     };
     const uploadId = e.dataTransfer?.getData('application/x-paperwall-upload');
     if (uploadId) {
-      const upload = (await store.listUploads()).find((u) => u.id === uploadId);
+      const upload = await store.getUpload(uploadId);
       if (upload) await place(upload);
       return;
     }
@@ -647,23 +651,35 @@ export class Canvas {
     this.rulerX.hidden = this.rulerY.hidden = !on;
     if (!on) return;
     const z = ed.zoom;
-    // A tick step that stays readable at any zoom: 1, 2 or 5 × a power of ten.
-    const raw = 60 / z;
+    const { width: W, height: H } = ed.doc;
+    const unit = ed.doc.unit || 'px';
+    // Only redraw when something the rulers show has changed.
+    const key = `${z}|${W}|${H}|${unit}`;
+    if (key === this.rulerKey) return;
+    this.rulerKey = key;
+    // Ticks in the design's own unit, on a step that stays readable: 1, 2 or 5 × a power of ten.
+    const perUnit = unit === 'mm' ? DPI / 25.4 : unit === 'in' ? DPI : 1;
+    const raw = 60 / (z * perUnit);
     const pow = 10 ** Math.floor(Math.log10(raw));
     const step = [1, 2, 5, 10].map((k) => k * pow).find((s) => s >= raw);
-    const ticks = (len, vertical) => {
+    const digits = step < 1 ? 1 : 0;
+    const ticks = (lenPx, vertical) => {
       const out = [];
-      for (let v = 0; v <= len; v += step / 5) {
-        const major = Math.abs(v / step - Math.round(v / step)) < 1e-6;
-        const p = v * z;
+      const len = lenPx / perUnit;
+      for (let k = 0; k * (step / 5) <= len + 1e-9; k++) {
+        const v = k * (step / 5);
+        const major = k % 5 === 0;
+        const p = v * perUnit * z;
         out.push(vertical ? `<line x1="${major ? 0 : 14}" y1="${p}" x2="20" y2="${p}"/>` : `<line x1="${p}" y1="${major ? 0 : 14}" x2="${p}" y2="20"/>`);
-        const label = ed.doc.unit && ed.doc.unit !== 'px' ? fromPx(v, ed.doc.unit) : Math.round(v);
-        if (major) out.push(vertical ? `<text x="2" y="${p + 10}">${label}</text>` : `<text x="${p + 3}" y="10">${label}</text>`);
+        if (major) {
+          const label = v.toFixed(digits);
+          out.push(vertical ? `<text x="2" y="${p + 10}">${label}</text>` : `<text x="${p + 3}" y="10">${label}</text>`);
+        }
       }
       return out.join('');
     };
-    this.rulerX.innerHTML = `<svg width="${ed.doc.width * z}" height="20">${ticks(ed.doc.width, false)}</svg>`;
-    this.rulerY.innerHTML = `<svg width="20" height="${ed.doc.height * z}">${ticks(ed.doc.height, true)}</svg>`;
+    this.rulerX.innerHTML = `<svg width="${W * z}" height="20">${ticks(W, false)}</svg>`;
+    this.rulerY.innerHTML = `<svg width="20" height="${H * z}">${ticks(H, true)}</svg>`;
   }
 
   /** The element a connector end would attach to at p (not connectors, not itself). */

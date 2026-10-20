@@ -60,7 +60,16 @@ const center = (box) => {
  */
 export function updateConnectors(page) {
   let changed = false;
-  const byId = new Map(page.elements.map((e) => [e.id, e]));
+  // An element inside a group is reached through its group: the end
+  // attaches to the group's box and follows the group.
+  const byId = new Map();
+  const index = (els, top) => {
+    for (const e of els) {
+      byId.set(e.id, top || e);
+      if (e.type === 'group') index(e.children, top || e);
+    }
+  };
+  index(page.elements, null);
   for (const el of page.elements) {
     if (el.type !== 'connector') continue;
     const [a0, b0] = endsOf(el);
@@ -112,6 +121,43 @@ export function connectorGeometry(el) {
     return { d: `M${f(a[0])} ${f(a[1])} C${f(c1[0])} ${f(c1[1])} ${f(c2[0])} ${f(c2[1])} ${f(b[0])} ${f(b[1])}`, startDir: [c1[0] - a[0], c1[1] - a[1]], endDir: [b[0] - c2[0], b[1] - c2[1]] };
   }
   return { d: `M${f(a[0])} ${f(a[1])} L${f(b[0])} ${f(b[1])}`, startDir: [b[0] - a[0], b[1] - a[1]], endDir: [b[0] - a[0], b[1] - a[1]] };
+}
+
+/** Points along the drawn line, in page pixels (curves are sampled). */
+export function connectorPolyline(el) {
+  const [a, b] = el.points.map(([fx, fy]) => [fx * el.w, fy * el.h]);
+  const { d } = connectorGeometry(el);
+  let pts;
+  if (el.route === 'curved') {
+    const nums = d.match(/-?[\d.]+/g).map(Number);
+    const [c1, c2] = [[nums[2], nums[3]], [nums[4], nums[5]]];
+    pts = Array.from({ length: 21 }, (_, i) => {
+      const t = i / 20;
+      const u = 1 - t;
+      return [0, 1].map((k) => u * u * u * a[k] + 3 * u * u * t * c1[k] + 3 * u * t * t * c2[k] + t * t * t * b[k]);
+    });
+  } else if (el.route === 'elbow') {
+    pts = [a];
+    let cur = a;
+    for (const [, cmd, v] of d.matchAll(/([HV])(-?[\d.]+)/g)) {
+      cur = cmd === 'H' ? [+v, cur[1]] : [cur[0], +v];
+      pts.push(cur);
+    }
+  } else pts = [a, b];
+  return pts.map(([x, y]) => [el.x + x, el.y + y]);
+}
+
+/** Whether point p is within `tol` px of the connector's line. */
+export function connectorHit(el, p, tol) {
+  const pts = connectorPolyline(el);
+  for (let i = 1; i < pts.length; i++) {
+    const [ax, ay] = pts[i - 1];
+    const [bx, by] = pts[i];
+    const len2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
+    const t = Math.max(0, Math.min(1, ((p.x - ax) * (bx - ax) + (p.y - ay) * (by - ay)) / len2));
+    if (Math.hypot(p.x - (ax + t * (bx - ax)), p.y - (ay + t * (by - ay))) <= tol) return true;
+  }
+  return false;
 }
 
 /** An arrowhead at point p, pointing along direction dir. */

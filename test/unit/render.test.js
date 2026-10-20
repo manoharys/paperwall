@@ -371,3 +371,25 @@ test('[ELM-10] connectors attach to elements and follow them', async () => {
     assert.ok(!/NaN/.test(connectorGeometry(c).d), route);
   }
 });
+
+test('[ELM-10] connectors are clicked on their line, and can attach inside groups', async () => {
+  const { createConnector, connectorHit, updateConnectors, endsOf } = await import('../../src/model/connectors.js');
+  const c = createConnector({ from: [100, 100], to: [900, 900] });
+  assert.ok(connectorHit(c, { x: 500, y: 500 }, 5), 'on the line');
+  assert.ok(!connectorHit(c, { x: 800, y: 200 }, 5), 'inside the box but far from the line');
+  c.route = 'elbow';
+  assert.ok(connectorHit(c, { x: 500, y: 700 }, 5), 'on the elbow');
+  c.route = 'curved';
+  assert.ok(!connectorHit(c, { x: 850, y: 150 }, 5));
+  // An end attached to a shape that gets grouped follows the group.
+  const page = { elements: [] };
+  const a = createShape('rect', { x: 0, y: 0, w: 100, h: 100 });
+  const b = createShape('rect', { x: 600, y: 0, w: 100, h: 100 });
+  const k = createConnector({ from: [0, 0], to: [1, 1], start: a.id, end: b.id });
+  page.elements.push({ id: 'g1', type: 'group', x: 0, y: 0, w: 100, h: 100, rotation: 0, children: [{ ...a, x: 0, y: 0 }] }, b, k);
+  updateConnectors(page);
+  assert.equal(k.start.id, a.id, 'still attached');
+  page.elements[0].y = 300;
+  updateConnectors(page);
+  assert.ok(endsOf(k)[0][1] > 300, 'follows the group');
+});

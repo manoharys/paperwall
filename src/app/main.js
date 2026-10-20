@@ -17,7 +17,7 @@ import { fontsUsed } from '../model/fonts.js';
 import { menuButton, toggle, segmented } from './widgets.js';
 import { findDialog } from './find.js';
 import { historyDialog } from './history.js';
-import { listVersions } from './store.js';
+import { hasVersions } from './store.js';
 
 const root = document.getElementById('app');
 let current = null; // { editor, unbind }
@@ -120,7 +120,7 @@ async function openEditor(id) {
   });
   // The first time a design is opened, keep its original as a version; after
   // that, the next version comes after a few minutes of work.
-  listVersions(doc.id).then((v) => (v.length ? (editor.versionAt = Date.now()) : editor.saveVersion('Original'))).catch(() => null);
+  hasVersions(doc.id).then((has) => (has ? (editor.versionAt = Date.now()) : editor.saveVersion('Original'))).catch(() => null);
   if (pendingFit) {
     editor.refitAllText();
     pendingFit = false;

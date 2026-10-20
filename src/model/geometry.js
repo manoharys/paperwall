@@ -146,12 +146,9 @@ export function snapAngle(deg, step = 15) {
 }
 
 /**
- * Snap a moving box to the page and to other boxes.
- * Returns the correction (dx, dy) and the guide lines to draw.
- */
-/**
  * Snap a moving box to the page edges and center, other elements, and any
- * `extra` lines ({ x: [], y: [] }: your guides, grid lines).
+ * `extra` lines ({ x: [], y: [] }: your guides, grid lines). Returns the
+ * correction (dx, dy) and the guide lines to draw.
  */
 export function snapMove(moving, others, page, threshold = 6, extra = {}) {
   const m = boundsOf(moving);

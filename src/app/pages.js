@@ -39,18 +39,23 @@ export class PageStrip {
           h('span', { class: 'page-no' }, String(i + 1)),
           p.hidden ? h('span', { class: 'page-hidden-mark', 'aria-hidden': 'true' }, icon('eyeOff', 14)) : null),
         p.title ? h('span', { class: 'page-title', 'data-testid': 'page-title-label' }, p.title) : null);
-      item.addEventListener('dragstart', (e) => e.dataTransfer.setData('application/x-paperwall-page', String(i)));
-      item.addEventListener('dragover', (e) => e.preventDefault());
-      item.addEventListener('drop', (e) => {
-        e.preventDefault();
-        const raw = e.dataTransfer.getData('application/x-paperwall-page');
-        const from = raw === '' ? NaN : Number(raw); // other drags (an upload, a file) carry no page
-        if (Number.isInteger(from) && from !== i) ed.movePage(from, i);
-      });
+      pageDrag(item, i, (from) => ed.movePage(from, i));
       this.list.append(item);
     });
     this.zoomLabel.textContent = `${Math.round(ed.zoom * 100)}%`;
   }
+}
+
+/** Let a page's thumbnail be dragged onto another to move it there. */
+function pageDrag(el, i, onMove) {
+  el.addEventListener('dragstart', (e) => e.dataTransfer.setData('application/x-paperwall-page', String(i)));
+  el.addEventListener('dragover', (e) => e.preventDefault());
+  el.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const raw = e.dataTransfer.getData('application/x-paperwall-page');
+    const from = raw === '' ? NaN : Number(raw); // other drags (an upload, a file) carry no page
+    if (Number.isInteger(from) && from !== i) onMove(from);
+  });
 }
 
 export function pageName(page, i) {
@@ -76,16 +81,9 @@ export function pageGrid(editor, canvas) {
             editor.setPageHidden(i, !p.hidden);
             fill();
           }, { 'data-testid': 'page-grid-hide' })));
-      card.addEventListener('dragstart', (e) => e.dataTransfer.setData('application/x-paperwall-page', String(i)));
-      card.addEventListener('dragover', (e) => e.preventDefault());
-      card.addEventListener('drop', (e) => {
-        e.preventDefault();
-        const raw = e.dataTransfer.getData('application/x-paperwall-page');
-        const from = raw === '' ? NaN : Number(raw); // other drags (an upload, a file) carry no page
-        if (Number.isInteger(from) && from !== i) {
-          editor.movePage(from, i);
-          fill();
-        }
+      pageDrag(card, i, (from) => {
+        editor.movePage(from, i);
+        fill();
       });
       grid.append(card);
     });

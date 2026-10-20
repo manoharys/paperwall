@@ -101,6 +101,8 @@ export class Editor {
   }
 
   afterChange(quiet = false) {
+    // Connectors on every page follow what they're attached to.
+    for (const p of this.doc.pages) updateConnectors(p);
     this.doc.updatedAt = Date.now();
     this.changedSinceVersion = true;
     this.selection = this.selection.filter((id) => cmd.findElement(this.pageData, id));
@@ -361,11 +363,6 @@ export class Editor {
   }
 
   /** Guides are part of the page, so they're saved and can be undone. */
-  addGuide(axis, pos) {
-    this.change(() => (this.pageData.guides = [...(this.pageData.guides || []), { axis, pos: Math.round(pos) }]));
-    return this.pageData.guides.length - 1;
-  }
-
   moveGuide(i, pos, live = false) {
     const g = this.pageData.guides?.[i];
     if (!g) return;
@@ -374,11 +371,6 @@ export class Editor {
       return this.emit('aids');
     }
     this.change(() => (g.pos = Math.round(pos)));
-  }
-
-  removeGuide(i) {
-    if (!this.pageData.guides?.[i]) return;
-    this.change(() => this.pageData.guides.splice(i, 1));
   }
 
   clearGuides() {

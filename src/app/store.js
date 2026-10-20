@@ -26,8 +26,15 @@ function open() {
     };
     req.onsuccess = () => {
       const db = req.result;
-      // Let a newer version of Paperwall in another tab upgrade the database.
-      db.onversionchange = () => db.close();
+      // Let a newer version of Paperwall in another tab upgrade the database;
+      // the next read or write here opens it again.
+      db.onversionchange = () => {
+        db.close();
+        dbPromise = null;
+      };
+      db.onclose = () => {
+        dbPromise = null;
+      };
       resolve(db);
     };
     req.onblocked = () => {
@@ -131,15 +138,27 @@ async function valuesIn(prefix) {
 export async function saveVersion(doc, { label = '' } = {}) {
   const at = Date.now();
   const key = vKey(doc.id, at);
-  const { assets, ...rest } = JSON.parse(JSON.stringify(doc));
+  const { assets, ...meta } = doc;
+  const rest = JSON.parse(JSON.stringify(meta)); // the images are stored separately, once
   const have = new Set(await keysIn(`${doc.id}|a|`));
   for (const [id, a] of Object.entries(assets || {})) {
     if (!have.has(aKey(doc.id, id))) await put('versions', aKey(doc.id, id), a);
   }
   await put('versions', key, { key, designId: doc.id, at, label, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, assetIds: Object.keys(assets || {}), doc: rest });
   const keys = await keysIn(`${doc.id}|v|`);
-  for (const old of keys.slice(0, Math.max(0, keys.length - MAX_VERSIONS))) await del('versions', old);
+  const drop = keys.slice(0, Math.max(0, keys.length - MAX_VERSIONS));
+  if (drop.length) {
+    for (const old of drop) await del('versions', old);
+    // Images no longer used by any kept version go too.
+    const used = new Set((await valuesIn(`${doc.id}|v|`)).flatMap((v) => v.assetIds || []));
+    for (const k of await keysIn(`${doc.id}|a|`)) if (!used.has(k.slice(`${doc.id}|a|`.length))) await del('versions', k);
+  }
   return key;
+}
+
+/** Whether a design has any versions yet (reads keys only). */
+export async function hasVersions(designId) {
+  return (await keysIn(`${designId}|v|`)).length > 0;
 }
 
 /** A design's saved versions (without their images), newest first. */
@@ -169,6 +188,10 @@ export async function saveUpload(upload) {
 
 export async function listUploads() {
   return (await all('uploads')).sort((a, b) => b.addedAt - a.addedAt);
+}
+
+export async function getUpload(id) {
+  return get('uploads', id);
 }
 
 export async function deleteUpload(id) {

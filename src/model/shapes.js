@@ -110,7 +110,7 @@ export function drawPath(el) {
 /** The outline a photo is clipped to: its frame shape, or a (rounded) rectangle. */
 export function maskPath(el) {
   const shape = !el.mask || el.mask === 'none' ? 'rect' : el.mask === 'circle' ? 'ellipse' : el.mask;
-  return shapePath({ w: el.w, h: el.h, shape, radius: shape === 'rect' ? el.radius : 0, sides: el.sides || 6, innerRatio: el.innerRatio ?? 0.5 });
+  return shapePath({ w: el.w, h: el.h, shape, radius: shape === 'rect' ? el.radius : 0, sides: el.sides, innerRatio: el.innerRatio });
 }
 
 export function dashArray(dash, width) {
