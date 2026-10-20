@@ -402,3 +402,22 @@ test('[IMG-13] plain backgrounds are removed; the subject and enclosed areas sta
   assert.equal(alpha(10, 10), 255, 'a white area inside the subject is not background');
   assert.equal(cleared, 20 * 20 - 10 * 10);
 });
+
+test('[EDIT-19] find and replace across pages, groups, tables and charts', async () => {
+  const { findText, replaceText } = await import('../../src/model/find.js');
+  const { createDesign, createText, createTable, createChart, createGroup, createPage } = await import('../../src/model/doc.js');
+  const doc = createDesign({ width: 500, height: 500 });
+  doc.pages.push(createPage());
+  doc.pages[0].elements.push(createText({ text: 'Summer sale: summer prices' }), createTable({ rows: [['Item', 'Summer'], ['Hat', '5']] }));
+  doc.pages[1].elements.push(createGroup([createText({ text: 'Last summer' }), createText({ text: 'Summertime' })]), createChart('bar', { data: [{ label: 'summer', value: 3 }] }));
+  const hits = findText(doc, 'summer');
+  assert.deepEqual(hits.map((h) => [h.page, h.count]), [[0, 2], [0, 1], [1, 2], [1, 1]]);
+  assert.equal(findText(doc, 'summer', { matchCase: true }).reduce((s, h) => s + h.count, 0), 3);
+  assert.equal(findText(doc, 'summer', { wholeWord: true }).reduce((s, h) => s + h.count, 0), 5, 'not "Summertime"');
+  const r = replaceText(doc, 'summer', 'Winter $5', { wholeWord: true });
+  assert.equal(r.count, 5);
+  assert.equal(doc.pages[0].elements[0].text, 'Winter $5 sale: Winter $5 prices');
+  assert.equal(doc.pages[1].elements[0].children[1].text, 'Summertime');
+  assert.deepEqual(findText(doc, ''), []);
+  assert.deepEqual(findText(doc, 'a.b'), [], 'the query is plain text, not a pattern');
+});

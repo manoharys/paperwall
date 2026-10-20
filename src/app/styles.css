@@ -405,3 +405,27 @@ kbd { font: 12px ui-monospace, monospace; background: var(--panel-2); border: 1p
 .overlay .handle.end { cursor: move; }
 .overlay .handle.end.attached { fill: var(--sel); }
 .overlay .drop-target { fill: rgba(47, 111, 237, .08); stroke: var(--sel); stroke-width: 2; stroke-dasharray: 5 4; }
+
+/* Page titles, hidden pages, page grid */
+.page-list li { position: relative; }
+.page-list li.hidden-page .page-img { opacity: .4; }
+.page-hidden-mark { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: rgba(0, 0, 0, .65); color: #fff; }
+.page-title { display: block; max-width: 96px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--muted); text-align: center; }
+.page-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
+.pg-card { display: flex; flex-direction: column; gap: 6px; }
+.pg-card.on .page-img { outline: 3px solid var(--accent); }
+.pg-card.hidden-page .page-img { opacity: .4; }
+.pg-open { border: 0; padding: 0; background: none; cursor: pointer; }
+.pg-open .page-img { display: block; width: 100%; border-radius: 6px; overflow: hidden; box-shadow: var(--shadow); background: #fff; }
+.pg-open .page-img svg { display: block; width: 100%; height: 100%; }
+.pg-meta { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.pg-meta span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.pg-meta small { color: var(--danger); }
+
+/* Version history */
+.versions { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.version { display: grid; grid-template-columns: 72px 1fr auto; gap: 12px; align-items: center; padding: 8px; border: 1px solid var(--line); border-radius: 10px; }
+.version-img { display: block; width: 72px; max-height: 96px; border-radius: 4px; overflow: hidden; background: #fff; box-shadow: var(--shadow); }
+.version-img svg { display: block; width: 100%; height: 100%; }
+.version-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.version-meta small { color: var(--muted); }

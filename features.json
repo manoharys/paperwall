@@ -15,7 +15,8 @@
         { "id": "DOC-08", "title": "Reopen a design exactly as you left it after closing the tab" },
         { "id": "DOC-09", "title": "Save a design to a file and open it again later or on another computer" },
         { "id": "DOC-10", "title": "Resize a design to another format with everything rescaled to fit" },
-        { "id": "DOC-11", "title": "Print sizes in millimetres and inches" }
+        { "id": "DOC-11", "title": "Print sizes in millimetres and inches" },
+        { "id": "DOC-12", "title": "Version history on your device: go back to an earlier version" }
       ]
     },
     {
@@ -29,7 +30,10 @@
         { "id": "PAGE-05", "title": "Page background color" },
         { "id": "PAGE-06", "title": "Page background gradient" },
         { "id": "PAGE-07", "title": "Page background image" },
-        { "id": "PAGE-08", "title": "Move between pages from a page strip" }
+        { "id": "PAGE-08", "title": "Move between pages from a page strip" },
+        { "id": "PAGE-09", "title": "Page titles" },
+        { "id": "PAGE-10", "title": "Hide pages from presenting and downloads" },
+        { "id": "PAGE-11", "title": "See all pages in a grid and reorder them there" }
       ]
     },
     {
@@ -85,7 +89,9 @@
         { "id": "EDIT-15", "title": "Flip horizontally and vertically" },
         { "id": "EDIT-16", "title": "Transparency" },
         { "id": "EDIT-17", "title": "Copy the style of one element onto another" },
-        { "id": "EDIT-18", "title": "Keyboard shortcuts, with a cheat sheet" }
+        { "id": "EDIT-18", "title": "Keyboard shortcuts, with a cheat sheet" },
+        { "id": "EDIT-19", "title": "Find and replace text across every page" },
+        { "id": "EDIT-20", "title": "Spell check while editing text" }
       ]
     },
     {

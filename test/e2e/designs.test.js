@@ -216,3 +216,40 @@ test('[EDIT-01] undo works across a reload-free session and the button reflects 
   assert.equal((await elements(page)).length, 0);
   await context.close();
 });
+
+test('[DOC-12] version history on your device', async () => {
+  const { page, context } = await newDesign('square');
+  await addText(page);
+  await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    ed.change(() => (ed.pageData.elements[0].text = 'First draft'));
+  });
+  await page.click('[data-testid="history-btn"]');
+  await page.click('[data-testid="version-save"]');
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid="version"]').length >= 2);
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    ed.change(() => (ed.pageData.elements[0].text = 'Second draft'));
+  });
+  await page.click('[data-testid="history-btn"]');
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid="version"]').length >= 2);
+  // Newest first: the one we saved has "First draft"; the oldest is the blank original.
+  const labels = await page.$$eval('[data-testid="version"] small', (els) => els.map((e) => e.textContent));
+  assert.match(labels[0], /Saved by you/);
+  assert.match(labels.at(-1), /Original/);
+  await page.click('[data-testid="version-restore"] >> nth=0');
+  assert.equal(await state(page, (ed) => ed.pageData.elements[0].text), 'First draft');
+  await page.keyboard.press(`${mod}+z`);
+  assert.equal(await state(page, (ed) => ed.pageData.elements[0].text), 'Second draft', 'restoring can be undone');
+  // Leaving a changed design keeps a version too.
+  await page.click('[data-testid="home-link"]');
+  await page.waitForSelector('[data-testid="my-designs"] [data-testid="design-card"]');
+  const count = await page.evaluate(async () => {
+    const req = indexedDB.open('paperwall');
+    const db = await new Promise((ok) => (req.onsuccess = () => ok(req.result)));
+    return new Promise((ok) => (db.transaction('versions').objectStore('versions').count().onsuccess = (e) => ok(e.target.result)));
+  });
+  assert.ok(count >= 3, `${count} versions`);
+  await context.close();
+});

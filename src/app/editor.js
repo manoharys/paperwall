@@ -14,6 +14,7 @@ import { gridBoxes } from '../model/grids.js';
 import { createConnector, updateConnectors } from '../model/connectors.js';
 
 const VIEW_KEY = 'paperwall-view';
+const VERSION_EVERY = 5 * 60 * 1000;
 const DEFAULT_VIEW = { rulers: false, grid: false, gridSize: 'medium', snapGrid: true, margins: false, bleed: false };
 
 function loadView() {
@@ -101,6 +102,7 @@ export class Editor {
 
   afterChange(quiet = false) {
     this.doc.updatedAt = Date.now();
+    this.changedSinceVersion = true;
     this.selection = this.selection.filter((id) => cmd.findElement(this.pageData, id));
     if (!quiet) this.emit('doc');
     this.save();
@@ -110,6 +112,8 @@ export class Editor {
   async persist() {
     try {
       await store.saveDesign(this.doc);
+      // Every few minutes of work, keep a version to go back to.
+      if (Date.now() - (this.versionAt || 0) > VERSION_EVERY) await this.saveVersion();
     } catch (e) {
       toast(`Couldn't save on this device: ${e.message}`, 'error');
     }
@@ -127,6 +131,29 @@ export class Editor {
   /** Save now. Resolves when the design is on disk. */
   flush() {
     return this.save.flush();
+  }
+
+  /** Keep a copy of the design as it is now in its version history. */
+  async saveVersion(label = '') {
+    this.versionAt = Date.now();
+    this.changedSinceVersion = false;
+    try {
+      await store.saveVersion(this.doc, { label });
+    } catch {
+      /* history is a convenience; saving the design itself matters more */
+    }
+  }
+
+  /** Put the design back the way a version had it, as one undo step. */
+  restoreVersion(versionDoc) {
+    const v = JSON.parse(JSON.stringify(versionDoc));
+    this.change(() => {
+      Object.assign(this.doc, { name: v.name, width: v.width, height: v.height, unit: v.unit, pages: v.pages, assets: v.assets });
+    });
+    this.selection = [];
+    this.page = -1;
+    this.setPage(0);
+    this.emit('name');
   }
 
   undo() {
@@ -310,7 +337,7 @@ export class Editor {
     } catch {
       /* private mode: fine for this session */
     }
-    this.emit('view');
+    this.emit('aids');
   }
 
   /** Lines to snap to besides elements: your guides, and the grid when snapping to it. */
@@ -343,7 +370,7 @@ export class Editor {
     if (!g) return;
     if (live) {
       g.pos = Math.round(pos);
-      return this.emit('view');
+      return this.emit('aids');
     }
     this.change(() => (g.pos = Math.round(pos)));
   }
@@ -653,6 +680,20 @@ export class Editor {
     const n = this.change(() => cmd.deletePage(this.doc, i));
     this.page = -1;
     this.setPage(n);
+  }
+
+  /** A page's title shows in the page strip and grid view; it isn't printed on the page. */
+  setPageTitle(i, title) {
+    const clean = String(title || '').trim().slice(0, 120);
+    if ((this.doc.pages[i].title || '') === clean) return;
+    this.change(() => (this.doc.pages[i].title = clean || undefined), { key: `title:${i}` });
+    this.emit('page');
+  }
+
+  /** Hidden pages stay in the design but are skipped when presenting and downloading. */
+  setPageHidden(i, hidden) {
+    this.change(() => (this.doc.pages[i].hidden = hidden || undefined));
+    this.emit('page');
   }
 
   movePage(from, to) {

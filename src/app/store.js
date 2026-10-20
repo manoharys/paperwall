@@ -2,8 +2,8 @@
 // you've added, and your brand kit. Nothing is ever sent anywhere.
 
 const DB_NAME = 'paperwall';
-const DB_VERSION = 1;
-const STORES = ['designs', 'uploads', 'settings'];
+const DB_VERSION = 2;
+const STORES = ['designs', 'uploads', 'settings', 'versions'];
 
 let dbPromise = null;
 const memory = Object.fromEntries(STORES.map((s) => [s, new Map()]));
@@ -91,6 +91,37 @@ export async function listDesigns() {
 
 export async function deleteDesign(id) {
   await del('designs', id);
+  for (const v of await listVersions(id)) await del('versions', v.key);
+}
+
+// ---------- version history (per design, on this device) ----------
+
+export const MAX_VERSIONS = 30;
+const versionKey = (designId, at) => `${designId}|${String(at).padStart(15, '0')}`;
+
+/** Keep a copy of the design as it is now. The oldest copies beyond MAX_VERSIONS are dropped. */
+export async function saveVersion(doc, { label = '' } = {}) {
+  const at = Date.now();
+  const key = versionKey(doc.id, at);
+  await put('versions', key, { key, designId: doc.id, at, label, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, doc: JSON.parse(JSON.stringify(doc)) });
+  const list = await listVersions(doc.id);
+  for (const old of list.slice(MAX_VERSIONS)) await del('versions', old.key);
+  return key;
+}
+
+/** A design's saved versions, newest first. */
+export async function listVersions(designId) {
+  const db = await open();
+  const lo = `${designId}|`;
+  const hi = `${designId}|\uffff`;
+  let rows;
+  if (!db) rows = [...memory.versions.values()].filter((v) => v.key >= lo && v.key <= hi);
+  else rows = await tx(db, 'versions', 'readonly', (s) => s.getAll(IDBKeyRange.bound(lo, hi)));
+  return rows.sort((a, b) => b.at - a.at);
+}
+
+export async function loadVersion(key) {
+  return get('versions', key);
 }
 
 // ---------- uploads (reusable across designs) ----------

@@ -46,7 +46,7 @@ export class Inspector {
     this.stale = false;
     editor.on((what) => {
       if (what === 'live') return this.refreshGeometry();
-      if (what === 'view' || what === 'tool' || what === 'stop-drawing') return; // not about the selection
+      if (what === 'aids' || what === 'tool' || what === 'stop-drawing') return; // not about the selection
       // Don't pull the rug out from under a field or color picker in use.
       const busy = (this.el.contains(document.activeElement) && document.activeElement.tagName !== 'BUTTON') || popoverOpen();
       if (what === 'doc' && busy) {
@@ -83,9 +83,9 @@ export class Inspector {
     this.geo = null;
     if (this.tab === 'layers') return this.body.append(this.layers());
     const sel = this.ed.selected;
-    if (!sel.length) return this.body.append(...this.pagePanel());
+    if (!sel.length) return this.body.append(...this.pagePanel().filter(Boolean));
     if (sel.length > 1) return this.body.append(...this.multiPanel(sel));
-    this.body.append(...this.elementPanel(sel[0]));
+    this.body.append(...this.elementPanel(sel[0]).filter(Boolean));
   }
 
   // ---------- helpers ----------
@@ -228,7 +228,7 @@ export class Inspector {
       joinable ? section('Connect', h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'connect', onClick: () => this.ed.connect() }, icon('connect'), 'Connect with a line')) : null,
       this.arrange(sel.length),
       this.effects(),
-    ];
+    ].filter(Boolean);
   }
 
   textPanel(el) {
@@ -522,6 +522,14 @@ export class Inspector {
     const grad = bg.type === 'gradient' ? bg.gradient : null;
     return [
       h('div', { class: 'panel-head' }, h('h2', { 'data-testid': 'selection-title' }, `Page ${ed.page + 1} of ${doc.pages.length}`)),
+      section('Page',
+        (() => {
+          const input = h('input', { type: 'text', value: ed.pageData.title || '', maxlength: '120', placeholder: 'Add a page title', 'aria-label': 'Page title', 'data-testid': 'page-title' });
+          input.addEventListener('change', () => ed.setPageTitle(ed.page, input.value));
+          input.addEventListener('keydown', (e) => e.key === 'Enter' && input.blur());
+          return h('label', { class: 'field' }, h('span', null, 'Title'), input);
+        })(),
+        toggle({ label: 'Hide this page when presenting and downloading', checked: !!ed.pageData.hidden, testid: 'page-hidden', onChange: (on) => ed.setPageHidden(ed.page, on) })),
       section('Background',
         segmented({ label: 'Background type', value: bg.type, testid: 'bg-type', onChange: (t) => {
           if (t === 'color') ed.setBackground({ type: 'color', color: bg.color || grad?.stops[0].color || '#ffffff' });

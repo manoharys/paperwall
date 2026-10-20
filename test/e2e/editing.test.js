@@ -419,3 +419,44 @@ test('[VIEW-07] grid with snapping, safe margins and print bleed', async () => {
   assert.equal(Math.round(moved.x) % 54, 0, `x ${moved.x} is on the grid`);
   await context.close();
 });
+
+// ---------- find and replace, spelling ----------
+
+test('[EDIT-19] find and replace text across every page', async () => {
+  const { page, context } = await newDesign('square');
+  await addText(page);
+  await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    ed.change(() => (ed.pageData.elements[0].text = 'Summer sale'));
+  });
+  await page.click('[data-testid="strip-add-page"]');
+  await addText(page);
+  await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    ed.change(() => (ed.pageData.elements[0].text = 'See you this summer'));
+  });
+  await page.keyboard.press(`${mod}+f`);
+  await page.fill('[data-testid="find-input"]', 'summer');
+  assert.match(await page.textContent('[data-testid="find-status"]'), /^2 matches in 2 places/);
+  await page.click('[data-testid="find-next"]');
+  assert.equal(await state(page, (ed) => ed.page), 0, 'jumps to the first page');
+  await page.click('[data-testid="find-next"]');
+  assert.equal(await state(page, (ed) => ed.page), 1);
+  await page.fill('[data-testid="replace-input"]', 'winter');
+  await page.click('[data-testid="replace-all"]');
+  const texts = await state(page, (ed) => ed.doc.pages.map((p) => p.elements[0].text));
+  assert.deepEqual(texts, ['winter sale', 'See you this winter']);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press(`${mod}+z`);
+  assert.deepEqual(await state(page, (ed) => ed.doc.pages.map((p) => p.elements[0].text)), ['Summer sale', 'See you this summer'], 'one undo puts it all back');
+  await context.close();
+});
+
+test('[EDIT-20] spell check while editing text', async () => {
+  const { page, context } = await newDesign('square');
+  const t = await addText(page);
+  const p = await elementCenter(page, t.id);
+  await page.mouse.dblclick(p.x, p.y);
+  assert.equal(await page.getAttribute('[data-testid="text-editor"]', 'spellcheck'), 'true');
+  await context.close();
+});

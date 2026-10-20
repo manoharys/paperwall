@@ -138,7 +138,8 @@ export async function readProjectFile(file) {
 
 export function exportDialog(editor) {
   const doc = editor.doc;
-  const state = { format: 'png', scale: 1, transparent: false, quality: 92, pages: new Set(doc.pages.map((_, i) => i)) };
+  // Hidden pages start unticked; tick one to download it anyway.
+  const state = { format: 'png', scale: 1, transparent: false, quality: 92, pages: new Set(doc.pages.map((p, i) => (p.hidden ? -1 : i)).filter((i) => i >= 0)) };
   const body = h('div', { class: 'export' });
   const draw = () => {
     body.replaceChildren(...[
@@ -167,7 +168,8 @@ export function exportDialog(editor) {
         const cb = h('input', { type: 'checkbox', 'data-testid': `export-page-${i + 1}` });
         cb.checked = state.pages.has(i);
         cb.addEventListener('change', () => (cb.checked ? state.pages.add(i) : state.pages.delete(i)));
-        return h('label', { class: 'toggle' }, cb, h('span', null, `Page ${i + 1}`));
+        const p = doc.pages[i];
+        return h('label', { class: 'toggle' }, cb, h('span', null, `Page ${i + 1}${p.title ? `: ${p.title}` : ''}${p.hidden ? ' (hidden)' : ''}`));
       }))) : null,
       h('div', { class: 'export-actions' },
         h('button', { type: 'button', class: 'btn primary big', 'data-testid': 'export-download', onClick: () => run() }, icon('download'), 'Download'),

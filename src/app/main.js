@@ -15,6 +15,9 @@ import * as store from './store.js';
 import { validateDesign } from '../model/doc.js';
 import { fontsUsed } from '../model/fonts.js';
 import { menuButton, toggle, segmented } from './widgets.js';
+import { findDialog } from './find.js';
+import { historyDialog } from './history.js';
+import { listVersions } from './store.js';
 
 const root = document.getElementById('app');
 let current = null; // { editor, unbind }
@@ -68,6 +71,8 @@ async function closeEditor() {
   current = null;
   editor.closed = true;
   unbind();
+  // Leaving a design you changed keeps a version of it.
+  if (editor.changedSinceVersion) await editor.saveVersion();
   window.paperwall = null;
   await editor.flush();
   // Make sure the home screen has a preview, even for a design opened and left unchanged.
@@ -113,6 +118,9 @@ async function openEditor(id) {
     onOpenDesign: (newId) => (location.hash = `#/d/${newId}`),
     makeThumb: thumbnail,
   });
+  // The first time a design is opened, keep its original as a version; after
+  // that, the next version comes after a few minutes of work.
+  listVersions(doc.id).then((v) => (v.length ? (editor.versionAt = Date.now()) : editor.saveVersion('Original'))).catch(() => null);
   if (pendingFit) {
     editor.refitAllText();
     pendingFit = false;
@@ -143,6 +151,8 @@ async function openEditor(id) {
     h('div', { class: 'top-group right' },
       iconButton('present', 'Present', () => present(editor, canvas), { 'data-testid': 'present' }),
       iconButton('save', 'Save to file', () => saveProjectFile(editor.doc), { 'data-testid': 'save-file' }),
+      iconButton('search', 'Find and replace (Ctrl+F)', () => findDialog(editor), { 'data-testid': 'find-btn' }),
+      iconButton('history', 'Version history', () => historyDialog(editor), { 'data-testid': 'history-btn' }),
       menuButton({ iconName: 'ruler', label: 'View: rulers, guides, grid', testid: 'view', content: () => viewMenu(editor) }),
       iconButton('keyboard', 'Keyboard shortcuts (?)', () => cheatSheet(), { 'data-testid': 'shortcuts-btn' }),
       iconButton('moon', 'Dark mode', toggleTheme, { 'data-testid': 'theme-toggle' }),
@@ -167,7 +177,7 @@ async function openEditor(id) {
   forget(root);
   clear(root);
   root.append(h('div', { class: 'editor' }, top, workspace, strip.el));
-  const unbindKeys = bindShortcuts(editor, canvas, { exportDialog: () => exportDialog(editor) });
+  const unbindKeys = bindShortcuts(editor, canvas, { exportDialog: () => exportDialog(editor), findDialog: () => findDialog(editor) });
   const offTop = editor.on(syncTop);
   const onResize = () => canvas.layout();
   window.addEventListener('resize', onResize);

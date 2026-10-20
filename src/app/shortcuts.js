@@ -19,6 +19,9 @@ export const SHORTCUTS = [
   ['Edit selected text', 'Enter'],
   ['Add text, rectangle, circle, line', 'T, R, O, L'],
   ['Zoom in / out / fit', `${mod}+= / ${mod}+- / ${mod}+0`],
+  ['Find and replace', `${mod}+F`],
+  ['Rulers on / off', 'Shift+R'],
+  ['Stop drawing', 'Esc'],
   ['Zoom with the mouse', `${mod}+scroll`],
   ['Move around', 'Scroll, or hold Space and drag'],
   ['Keep proportions while resizing', 'Shift'],
@@ -71,6 +74,7 @@ export function bindShortcuts(editor, canvas, actions) {
     if (m && e.key === '-') return done(), canvas.zoomBy(1 / 1.25);
     if (m && e.key === '0') return done(), canvas.zoomToFit();
     if (m && k === 'e') return done(), actions.exportDialog();
+    if (m && k === 'f') return done(), actions.findDialog();
     if (m && k === 's') {
       done();
       editor.flush();

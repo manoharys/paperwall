@@ -1,14 +1,14 @@
 {
   "summary": {
     "date": "2026-10-20",
-    "total": 139,
-    "verified": 138,
+    "total": 155,
+    "verified": 154,
     "failing": 0,
     "todo": 1,
-    "e2eTests": 106,
-    "e2ePassing": 106,
-    "unitTests": 58,
-    "unitPassing": 58
+    "e2eTests": 122,
+    "e2ePassing": 122,
+    "unitTests": 65,
+    "unitPassing": 65
   },
   "areas": [
     {
@@ -69,6 +69,11 @@
           "id": "DOC-11",
           "title": "Print sizes in millimetres and inches",
           "status": "verified"
+        },
+        {
+          "id": "DOC-12",
+          "title": "Version history on your device: go back to an earlier version",
+          "status": "verified"
         }
       ]
     },
@@ -115,6 +120,21 @@
           "id": "PAGE-08",
           "title": "Move between pages from a page strip",
           "status": "verified"
+        },
+        {
+          "id": "PAGE-09",
+          "title": "Page titles",
+          "status": "verified"
+        },
+        {
+          "id": "PAGE-10",
+          "title": "Hide pages from presenting and downloads",
+          "status": "verified"
+        },
+        {
+          "id": "PAGE-11",
+          "title": "See all pages in a grid and reorder them there",
+          "status": "verified"
         }
       ]
     },
@@ -145,6 +165,16 @@
         {
           "id": "VIEW-05",
           "title": "Present pages full screen and move with the arrow keys",
+          "status": "verified"
+        },
+        {
+          "id": "VIEW-06",
+          "title": "Rulers and guides you drag out, which elements snap to",
+          "status": "verified"
+        },
+        {
+          "id": "VIEW-07",
+          "title": "Grid with snapping, safe margins and print bleed",
           "status": "verified"
         }
       ]
@@ -313,6 +343,16 @@
           "id": "EDIT-18",
           "title": "Keyboard shortcuts, with a cheat sheet",
           "status": "verified"
+        },
+        {
+          "id": "EDIT-19",
+          "title": "Find and replace text across every page",
+          "status": "verified"
+        },
+        {
+          "id": "EDIT-20",
+          "title": "Spell check while editing text",
+          "status": "verified"
         }
       ]
     },
@@ -423,6 +463,16 @@
         {
           "id": "TXT-21",
           "title": "90+ open-license font families in a searchable picker, loaded only when used",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-22",
+          "title": "Text effects: lift, hollow, splice, echo, glitch, glow, neon",
+          "status": "verified"
+        },
+        {
+          "id": "TXT-23",
+          "title": "Ready-made text combinations",
           "status": "verified"
         }
       ]
@@ -541,6 +591,21 @@
           "id": "IMG-13",
           "title": "Remove a plain, single-color background (logos, product shots) on your device",
           "status": "verified"
+        },
+        {
+          "id": "IMG-14",
+          "title": "Photo frames: drop a photo into a shape",
+          "status": "verified"
+        },
+        {
+          "id": "IMG-15",
+          "title": "Photo grids for collages",
+          "status": "verified"
+        },
+        {
+          "id": "IMG-16",
+          "title": "Duotone, warmth, tint, hue and vignette",
+          "status": "verified"
         }
       ]
     },
@@ -587,6 +652,16 @@
           "id": "ELM-08",
           "title": "150+ stickers and illustrations",
           "status": "verified"
+        },
+        {
+          "id": "ELM-09",
+          "title": "Freehand drawing with a pen, marker or highlighter",
+          "status": "verified"
+        },
+        {
+          "id": "ELM-10",
+          "title": "Connector lines (straight, elbow, curved) that stay attached to elements",
+          "status": "verified"
         }
       ]
     },
@@ -612,6 +687,11 @@
         {
           "id": "CLR-04",
           "title": "Ready-made palettes",
+          "status": "verified"
+        },
+        {
+          "id": "CLR-05",
+          "title": "Gradients with any number of colors, and ready-made gradients",
           "status": "verified"
         }
       ]

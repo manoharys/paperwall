@@ -58,7 +58,7 @@ export class Canvas {
     editor.on((what) => {
       if (what === 'live') return this.schedule();
       if (what === 'tool') return void this.el.classList.toggle('drawing', !!editor.drawTool);
-      if (what === 'view') return void this.drawOverlay();
+      if (what === 'aids') return void this.drawOverlay();
       // Discrete changes draw right away; drags are batched per frame.
       if (this.frame) cancelAnimationFrame(this.frame);
       this.frame = 0;

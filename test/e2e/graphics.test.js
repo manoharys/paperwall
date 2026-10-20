@@ -363,7 +363,8 @@ test('no panel ever shows stray "null" or "undefined" text', async () => {
   const { page, context } = await newDesign('square');
   const check = async (what) => {
     const text = await page.innerText('body');
-    assert.ok(!/\bnull\b|\bundefined\b|NaN/.test(text), `${what}: ${text.match(/.{20}(null|undefined|NaN).{20}/)?.[0]}`);
+    const at = text.search(/\bnull\b|\bundefined\b|NaN/);
+    assert.ok(at < 0, `${what}: ${JSON.stringify(text.slice(Math.max(0, at - 40), at + 30))}`);
   };
   await check('page panel');
   await addShape(page, 'Star');
@@ -395,7 +396,16 @@ test('no panel ever shows stray "null" or "undefined" text', async () => {
   await check('group');
   await page.click('[data-testid="tab-layers"]');
   await check('layers');
-  for (const tab of ['templates', 'text', 'uploads', 'brand']) {
+  await page.click('[data-testid="tab-edit"]').catch(() => {});
+  await openTab(page, 'shapes');
+  await page.click('[data-testid="frame-Circle frame"]');
+  await check('empty frame');
+  await page.click('[data-testid="connector-elbow"]');
+  await check('connector');
+  await page.click('[data-testid="view"]');
+  await check('view menu');
+  await page.keyboard.press('Escape');
+  for (const tab of ['templates', 'text', 'uploads', 'brand', 'draw']) {
     await openTab(page, tab);
     await check(tab);
   }

@@ -23,16 +23,16 @@ on-device AI models. Not approved: a collaboration server.
 
 ## v0.3 Editor pro
 
-- [ ] Photo frames (shapes you drop a photo into) and grid collages
-- [ ] More text effects: glow, hollow, echo, splice, lift, neon
-- [ ] Ready-made text combinations
-- [ ] Multi-stop gradients; duotone and more photo adjustments
-- [ ] Freehand drawing (pen, marker, highlighter)
-- [ ] Rulers, guides, margins, bleed, grid snapping
-- [ ] Elbow and curved connector lines
-- [ ] Find and replace text; spell check while editing
-- [ ] Page grid view, hidden pages, page titles
-- [ ] Version history on your device
+- [x] Photo frames (shapes you drop a photo into) and grid collages (IMG-14, IMG-15)
+- [x] More text effects: glow, hollow, echo, splice, lift, neon, glitch (TXT-22)
+- [x] Ready-made text combinations (TXT-23)
+- [x] Multi-stop gradients; duotone and more photo adjustments (CLR-05, IMG-16)
+- [x] Freehand drawing (pen, marker, highlighter) (ELM-09)
+- [x] Rulers, guides, margins, bleed, grid snapping (VIEW-06, VIEW-07)
+- [x] Elbow and curved connector lines (ELM-10)
+- [x] Find and replace text; spell check while editing (EDIT-19, EDIT-20)
+- [x] Page grid view, hidden pages, page titles (PAGE-09 to PAGE-11)
+- [x] Version history on your device (DOC-12)
 
 ## v0.4 Motion
 

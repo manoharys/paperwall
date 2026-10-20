@@ -33,9 +33,16 @@ smaller way.
 | Area | Paperwall | Notes |
 | --- | --- | --- |
 | Size presets and custom sizes (px, mm, in) | ✅ | 13 presets |
-| Text: fonts, size, styles, spacing, lists, effects, curved text | ✅ | 20 text features verified |
-| Shapes, lines, arrows, gradients, borders | ✅ | |
-| Images: add, drag in, paste, crop, filters, rounded/circle, replace | ✅ | |
+| Text: fonts, size, styles, spacing, lists, effects, curved text | ✅ | 23 text features verified, including lift, hollow, splice, echo, glitch, glow and neon effects and ready-made combinations |
+| Shapes, lines, arrows, gradients, borders | ✅ | gradients with up to eight colors |
+| Photo frames and photo grids | ✅ | nine frame shapes, twelve grid layouts |
+| Freehand drawing | ✅ | pen, marker, highlighter |
+| Connector lines that stay attached | ✅ | straight, elbow, curved |
+| Rulers, guides, grid, margins, print bleed | ✅ | |
+| Find and replace, spell check | ✅ | |
+| Page titles, hidden pages, page grid view | ✅ | |
+| Version history | ✅ | kept on your device |
+| Images: add, drag in, paste, crop, filters, duotone, frames, replace | ✅ | |
 | Layers, align, distribute, group, lock, flip, transparency | ✅ | |
 | Undo/redo, copy/paste, duplicate, keyboard shortcuts | ✅ | |
 | Snapping with guides | ✅ | to the page and to other elements |
@@ -59,7 +66,6 @@ smaller way.
 | Templates | 🟡 | 397 original templates in 44 categories, including multi-page decks, calendars, menus and planners. Canva's library is still far larger. |
 | Fonts | 🟡 | 92 open-license families with a searchable picker, plus your own font files |
 | Icons and graphics | 🟡 | 1,956 icons (our own plus Lucide) and 198 stickers; no photo library yet |
-| Photo frames and grid layouts | 🟡 | rounded and circle crops only |
 | Presentations | 🟡 | present full screen; no speaker notes, transitions or recording |
 
 ## Not in Paperwall (yet)
@@ -72,6 +78,5 @@ smaller way.
 | Video, animation, GIF/MP4 export | Roadmap: simple animated GIF/MP4 export. |
 | Real-time collaboration, comments, share links | Not planned: there's no server. You can send the design file. |
 | Cloud sync across devices | Left out on purpose. Save to a file to move a design. |
-| Version history | Roadmap. Undo works within a session. |
 | Whiteboards, documents, websites, social scheduling, print ordering | Out of scope. |
 
