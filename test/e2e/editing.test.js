@@ -609,7 +609,8 @@ test('[EDIT-01] leaving the design mid-drag finishes the drag and saves it', asy
   await page.mouse.down();
   await page.mouse.move(c.x + 120, c.y + 80, { steps: 6 });
   await page.evaluate(() => (location.hash = '#/')); // the back button, say
-  await page.waitForFunction(() => !window.paperwall);
+  // The home screen shows once closing (saving, keeping a version) is done.
+  await page.waitForSelector('[data-testid="my-designs"]');
   await page.mouse.up();
   const saved = await page.evaluate(async (designId) => {
     const req = indexedDB.open('paperwall');

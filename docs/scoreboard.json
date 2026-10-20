@@ -2,11 +2,11 @@
   "summary": {
     "date": "2026-10-20",
     "total": 155,
-    "verified": 153,
-    "failing": 1,
+    "verified": 154,
+    "failing": 0,
     "todo": 1,
     "e2eTests": 134,
-    "e2ePassing": 133,
+    "e2ePassing": 134,
     "unitTests": 100,
     "unitPassing": 100
   },
@@ -257,7 +257,7 @@
         {
           "id": "EDIT-01",
           "title": "Undo",
-          "status": "failing"
+          "status": "verified"
         },
         {
           "id": "EDIT-02",

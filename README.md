@@ -45,7 +45,7 @@ end-to-end test in a real browser** or listed as **not done yet**. This table
 is generated from the test run, never written by hand.
 
 <!-- scoreboard:start -->
-**153 of 155 features verified** by browser tests · 1 not done yet · [full scoreboard](SCOREBOARD.md)
+**154 of 155 features verified** by browser tests · 1 not done yet · [full scoreboard](SCOREBOARD.md)
 
 | Area | Verified |
 | --- | --- |
@@ -53,7 +53,7 @@ is generated from the test run, never written by hand.
 | Pages | 11 / 11 |
 | Viewing | 7 / 7 |
 | Selecting and moving | 13 / 13 |
-| Editing | 19 / 20 |
+| Editing | 20 / 20 |
 | Text | 23 / 23 |
 | Shapes and lines | 8 / 8 |
 | Images | 15 / 16 |
@@ -64,7 +64,7 @@ is generated from the test run, never written by hand.
 | Export | 12 / 12 |
 | The app | 6 / 6 |
 
-Not done yet: undo; remove an image's background on your device.
+Not done yet: remove an image's background on your device.
 <!-- scoreboard:end -->
 
 ## Use it
