@@ -78,7 +78,9 @@ export async function videoInfo(file) {
     c.width = Math.max(1, Math.round(v.videoWidth * s));
     c.height = Math.max(1, Math.round(v.videoHeight * s));
     c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
-    return { width: v.videoWidth || 640, height: v.videoHeight || 360, duration, poster: c.toDataURL('image/jpeg', 0.82) };
+    // `sound`: a file with no picture at all (music saved as .webm or .mp4).
+    if (!v.videoWidth || !v.videoHeight) return { sound: true, duration };
+    return { width: v.videoWidth, height: v.videoHeight, duration, poster: c.toDataURL('image/jpeg', 0.82) };
   } finally {
     v.removeAttribute('src');
     v.load();

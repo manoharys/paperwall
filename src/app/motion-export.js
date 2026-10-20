@@ -34,7 +34,7 @@ export function frameSize(doc, kind, wanted = null) {
  * timeSeconds, same)` in order (`same`: the picture hasn't changed since the
  * frame before). `pages` are the page indexes to play.
  */
-async function eachFrame(doc, pages, { fps, width, height, onProgress, signal }, each) {
+async function eachFrame(doc, pages, { fps, width, height, onProgress, signal, readBack = false }, each) {
   const tl = timeline(doc, pages);
   if (!tl.parts.length) throw new Error('Pick at least one page.');
   const count = Math.max(1, Math.round(tl.total * fps));
@@ -42,7 +42,9 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal },
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  // GIFs read every frame's pixels back (kept on the CPU for that); videos
+  // hand the canvas to the encoder as it is.
+  const ctx = canvas.getContext('2d', { willReadFrequently: !!readBack });
   // Videos on the pages are shown frame by frame, each at its exact moment.
   const videos = videosOn(doc, pages).length ? new VideoFrames(doc) : null;
   let last = null; // the last frame's picture, as SVG: a still moment isn't drawn again
@@ -99,7 +101,7 @@ export async function exportGif(doc, pages, { size = null, onProgress, signal } 
   // GIF delays are whole hundredths of a second: each frame gets its share of
   // the clock, rounded, so the whole GIF keeps time (no drift).
   const at = (i) => Math.round((i * 100) / fps) * 10;
-  await eachFrame(doc, pages, { fps, width, height, onProgress, signal }, (canvas, ctx, i, t, same) => {
+  await eachFrame(doc, pages, { fps, width, height, onProgress, signal, readBack: true }, (canvas, ctx, i, t, same) => {
     if (same && i > 0) return gif.hold(at(i + 1) - at(i));
     gif.add(ctx.getImageData(0, 0, width, height).data, at(i + 1) - at(i));
   });

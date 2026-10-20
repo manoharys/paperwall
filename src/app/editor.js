@@ -462,11 +462,16 @@ export class Editor {
 
   /** A picture, video or sound from this device, kept in Uploads too. */
   async importMediaFile(file) {
-    const kind = mediaKind(file);
+    let kind = mediaKind(file);
     if (kind === 'image') return this.importImageFile(file);
     if (!kind) throw new Error(`${file.name} isn't a picture, video or sound`);
     checkSize(file, kind);
-    const [dataUrl, info] = await Promise.all([readFileAsDataUrl(file), kind === 'video' ? videoInfo(file) : audioInfo(file)]);
+    let [dataUrl, info] = await Promise.all([readFileAsDataUrl(file), kind === 'video' ? videoInfo(file) : audioInfo(file)]);
+    // A "video" with no picture is a sound (so it can be the soundtrack).
+    if (info.sound) {
+      kind = 'audio';
+      info = { duration: info.duration };
+    }
     const upload = { id: uid('u'), name: file.name, mime: file.type, dataUrl, kind, ...info, addedAt: Date.now() };
     // It's used either way; Uploads just can't keep a copy when storage is full.
     await store.saveUpload(upload).catch(() => toast(`${file.name} couldn't be kept in Uploads: this browser's storage is full.`, 'error'));
