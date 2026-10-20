@@ -109,9 +109,10 @@ export function updateConnectors(page, { refit = true } = {}) {
   const visit = (els, ox, oy) => {
     for (const el of els) {
       if (el.type === 'group') {
-        // A turned or mirrored group moves as one picture, connectors and all;
-        // only an end whose element is gone comes loose.
-        if (el.rotation || el.flipX || el.flipY) freeMissing(el.children);
+        // A turned or mirrored group moves as one picture, connectors and all.
+        // An end on an element outside it (or one that's gone) comes loose:
+        // it can't follow without bending the picture.
+        if (el.rotation || el.flipX || el.flipY) freeOutside(el.children, idsIn(el.children));
         else {
           const before = changed;
           changed = false;
@@ -129,12 +130,19 @@ export function updateConnectors(page, { refit = true } = {}) {
       if (el.type === 'connector' && sync(el, ox, oy)) changed = true;
     }
   };
-  const freeMissing = (els) => {
+  const idsIn = (els, out = new Set()) => {
     for (const e of els) {
-      if (e.type === 'group') freeMissing(e.children);
+      out.add(e.id);
+      if (e.type === 'group') idsIn(e.children, out);
+    }
+    return out;
+  };
+  const freeOutside = (els, inside) => {
+    for (const e of els) {
+      if (e.type === 'group') freeOutside(e.children, inside);
       if (e.type !== 'connector') continue;
       for (const k of ['start', 'end']) {
-        if (e[k]?.id && !byId.has(e[k].id)) {
+        if (e[k]?.id && !inside.has(e[k].id)) {
           e[k] = { id: null, side: e[k].side };
           changed = true;
         }

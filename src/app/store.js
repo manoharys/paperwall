@@ -155,7 +155,8 @@ export async function listDesigns() {
 
 export async function deleteDesign(id) {
   await del('designs', id);
-  await deleteVersions(id);
+  // The design is gone either way; its history is cleaned up as well as it can be.
+  await deleteVersions(id).catch(() => null);
 }
 
 // ---------- version history (per design, on this device) ----------

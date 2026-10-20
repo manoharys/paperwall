@@ -552,3 +552,15 @@ test('[ELM-10] a connector in a turned group comes loose when its element is del
   assert.equal(c.start.id, a.id, 'still on its element');
   assert.equal(c.end.id, null, 'loose: its element is gone');
 });
+
+test('[ELM-10] in a turned group, an end on an element outside the group comes loose', async () => {
+  const { createConnector, updateConnectors } = await import('../../src/model/connectors.js');
+  const { createShape, createGroup } = await import('../../src/model/doc.js');
+  const a = createShape('rect', { x: 0, y: 0, w: 100, h: 100 });
+  const b = createShape('rect', { x: 400, y: 0, w: 100, h: 100 });
+  const c = createConnector({ from: [100, 50], to: [400, 50], start: a.id, end: b.id });
+  const g = createGroup([a, c], { flipX: true });
+  updateConnectors({ elements: [g, b] });
+  assert.equal(c.start.id, a.id);
+  assert.equal(c.end.id, null);
+});

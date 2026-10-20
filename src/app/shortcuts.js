@@ -49,6 +49,12 @@ export function bindShortcuts(editor, canvas, actions) {
 
   const onKey = (e) => {
     if (typing(e) || document.querySelector('.backdrop, .presenter')) return;
+    // While a drag is going it holds parts of the design: keys wait (and a
+    // cancelled drag then puts back exactly what it changed).
+    if (editor.isDragging?.()) {
+      if (/^[a-z]$|^(delete|backspace|arrow\w+)$/.test(e.key.toLowerCase())) e.preventDefault();
+      return;
+    }
     const m = e.metaKey || e.ctrlKey;
     const k = e.key.toLowerCase();
     const done = () => e.preventDefault();

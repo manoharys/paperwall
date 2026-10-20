@@ -146,6 +146,7 @@ export class Editor {
 
   async persistThumb() {
     if (!this.makeThumb) return;
+    if (this.isDragging?.()) return void this.thumb(); // not a half-moved picture: after the drag
     try {
       const at = this.doc.updatedAt;
       const url = await this.makeThumb(this.doc);

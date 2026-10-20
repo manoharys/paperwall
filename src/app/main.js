@@ -228,7 +228,8 @@ document.addEventListener('visibilitychange', () => {
   const { editor } = current;
   editor.flush();
   // Not on every quick switch to another tab: at most once a minute.
-  if (editor.changedSinceVersion && Date.now() - (editor.versionAt || 0) > 60_000) editor.saveVersion('', { quick: true });
+  // Not mid-drag either: the design is half-moved then.
+  if (editor.changedSinceVersion && !editor.isDragging?.() && Date.now() - (editor.versionAt || 0) > 60_000) editor.saveVersion('', { quick: true });
 });
 
 async function boot() {

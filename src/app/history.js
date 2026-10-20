@@ -62,6 +62,8 @@ export function historyDialog(editor) {
   const d = dialog('Version history', h('div', { class: 'stack' },
     h('p', { class: 'hint' }, `The last ${store.MAX_VERSIONS} versions are kept in this browser, on this device.`),
     h('button', { type: 'button', class: 'btn small', 'data-testid': 'version-save', onClick: async () => {
+      // Saving the design mustn't start a timed version of its own as well.
+      editor.versionAt = Date.now();
       await editor.flush();
       if (!(await editor.saveVersion('Saved by you'))) toast("Couldn't save a version on this device.", 'error');
       fill();
