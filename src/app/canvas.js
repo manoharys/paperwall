@@ -7,7 +7,7 @@ import {
   pointInBox, rectFromPoints, rectsIntersect, HANDLES,
 } from '../model/geometry.js';
 import { resizeElement, coverCrop, topmost, findElement } from '../model/commands.js';
-import { clone, DRAW_TOOLS, pxPerUnit, isEmptyFrame } from '../model/doc.js';
+import { clone, DRAW_TOOLS, pxPerUnit, isEmptyFrame, restroke } from '../model/doc.js';
 import { gridLines, marginSize, bleedSize } from '../model/view.js';
 import { endsOf, setEnds, isLine, lineHit } from '../model/connectors.js';
 import { measure } from './fonts.js';
@@ -657,6 +657,12 @@ export class Canvas {
       return;
     }
     ed.guides = [];
+    // A resized drawing keeps its line width: its box is padded for it again.
+    if (d.moved && (d.mode === 'resize' || d.mode === 'resize-many')) {
+      for (const el of d.mode === 'resize' ? [d.el] : d.items.map((it) => it.el)) {
+        if (el.type === 'draw' && !el.rotation) Object.assign(el, restroke(el, el.strokeWidth));
+      }
+    }
     if (d.moved) ed.afterChange();
     else {
       ed.history.discard();

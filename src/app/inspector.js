@@ -34,7 +34,8 @@ const SHAPE_NAMES = { rect: 'Rectangle', ellipse: 'Circle', triangle: 'Triangle'
 
 // Presets set the basic adjustments only; warmth, tint, hue, vignette and
 // duotone are left as they are. Original puts everything back.
-const BASIC = { brightness: 100, contrast: 100, saturation: 100, grayscale: 0, sepia: 0, blur: 0 };
+// The basic adjustments, at their defaults.
+const BASIC = Object.fromEntries(['brightness', 'contrast', 'saturation', 'grayscale', 'sepia', 'blur'].map((k) => [k, DEFAULT_FILTERS[k]]));
 const FILTER_PRESETS = {
   original: { ...DEFAULT_FILTERS },
   bw: { ...BASIC, grayscale: 100, contrast: 110 },

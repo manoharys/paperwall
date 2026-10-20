@@ -5,7 +5,7 @@ import { History } from '../model/history.js';
 import * as cmd from '../model/commands.js';
 import {
   createText, createShape, createLine, createImage, createFrame, createDrawing, thinPoints, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
-  TEXT_STYLES, clone, versionSnapshot, isEmptyFrame,
+  TEXT_STYLES, versionSnapshot, isEmptyFrame,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
 import { curveGeometry } from '../model/render.js';
@@ -817,11 +817,13 @@ export class Editor {
     });
   }
 
-  // Align and flip work on the whole selection (its bounds include held
-  // connectors, which then follow their elements); distribute spaces out
-  // only what can move. A selection of nothing but held connectors is left alone.
+  // Align and distribute work on what can move; flip mirrors the whole
+  // selection (its bounds include held connectors, which then follow their
+  // elements). A selection of nothing but held connectors is left alone.
   align(how) {
-    if (this.movable.length) this.change(() => cmd.alignElements(this.doc, this.page, this.selection, how));
+    // Only what can move (one element alone is aligned to the page).
+    const ids = this.movable;
+    if (ids.length) this.change(() => cmd.alignElements(this.doc, this.page, ids, how));
   }
 
   distribute(axis) {

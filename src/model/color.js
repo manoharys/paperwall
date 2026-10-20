@@ -1,9 +1,11 @@
 // Color maths shared by the renderer, the color picker and the design checks.
 
 export function hexToRgb(hex) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
+  // #rrggbb, or the short #rgb (as files from elsewhere may have).
+  const m = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i.exec(String(hex).trim());
   if (!m) return null;
-  const n = parseInt(m[1], 16);
+  const full = m[1].length === 3 ? [...m[1]].map((c) => c + c).join('') : m[1];
+  const n = parseInt(full, 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 

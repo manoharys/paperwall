@@ -232,6 +232,8 @@ export function connectorGeometry(el, trim = { start: 0, end: 0 }) {
     const n = g.pts.length;
     trim = { start: Math.min(trim.start, leg(g.pts[0], g.pts[1])), end: Math.min(trim.end, leg(g.pts[n - 2], g.pts[n - 1])) };
   }
+  // A curve is cut out of itself: the same curve, just shorter.
+  if (el.route === 'curved' && g.bend) return { ...trimCurve([a, g.bend.c1, g.bend.c2, b], trim), startDir: g.startDir, endDir: g.endDir, horizontal: g.horizontal, bend: g.bend };
   const unit = ([x, y]) => {
     const l = Math.hypot(x, y) || 1;
     return [x / l, y / l];
@@ -242,6 +244,51 @@ export function connectorGeometry(el, trim = { start: 0, end: 0 }) {
   // Same route shape (and bend) as the untrimmed line, so it still meets the
   // arrowheads and runs where clicks find it.
   return { ...routeBetween(el, a2, b2, g.horizontal, g.bend), startDir: g.startDir, endDir: g.endDir };
+}
+
+const lerp = (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+
+/** The point at t on a cubic curve (four control points). */
+function onCubic([p0, p1, p2, p3], t) {
+  const u = 1 - t;
+  return [0, 1].map((n) => u * u * u * p0[n] + 3 * u * u * t * p1[n] + 3 * u * t * t * p2[n] + t * t * t * p3[n]);
+}
+
+/** The part of a cubic curve between t0 and t1, as its own four control points (de Casteljau). */
+function cubicPart(c, t0, t1) {
+  const split = ([p0, p1, p2, p3], t) => {
+    const a = lerp(p0, p1, t);
+    const b = lerp(p1, p2, t);
+    const e = lerp(p2, p3, t);
+    const d = lerp(a, b, t);
+    const g = lerp(b, e, t);
+    const m = lerp(d, g, t);
+    return [[p0, a, d, m], [m, g, e, p3]];
+  };
+  const [left] = split(c, t1);
+  return t1 > 0 ? split(left, t0 / t1)[1] : left;
+}
+
+/** A cubic curve shortened by `trim` px of its length at each end. */
+function trimCurve(c, trim) {
+  // Lengths along the curve, from samples.
+  const N = 64;
+  const at = [onCubic(c, 0)];
+  const len = [0];
+  for (let i = 1; i <= N; i++) {
+    at.push(onCubic(c, i / N));
+    len.push(len[i - 1] + Math.hypot(at[i][0] - at[i - 1][0], at[i][1] - at[i - 1][1]));
+  }
+  const total = len[N];
+  const tAt = (s) => {
+    const i = len.findIndex((l) => l >= s);
+    if (i <= 0) return i === 0 ? 0 : 1;
+    return (i - 1 + (s - len[i - 1]) / (len[i] - len[i - 1] || 1)) / N;
+  };
+  const part = cubicPart(c, tAt(trim.start), tAt(total - trim.end));
+  const [p0, p1, p2, p3] = part;
+  const pts = Array.from({ length: 21 }, (_, i) => onCubic(part, i / 20));
+  return { d: `M${f(p0[0])} ${f(p0[1])} C${f(p1[0])} ${f(p1[1])} ${f(p2[0])} ${f(p2[1])} ${f(p3[0])} ${f(p3[1])}`, pts };
 }
 
 function routeBetween(el, a, b, horizontal, bend) {
@@ -281,16 +328,10 @@ function route(el, a, b, horizontal, bend) {
     };
     const ds = dirFor(el.start?.side, a, b);
     const de = dirFor(el.end?.side, b, a);
-    // A trimmed curve keeps the untrimmed one's control points, so it's the
-    // same curve, just shorter.
-    const c1 = bend?.c1 || [a[0] + ds[0] * k, a[1] + ds[1] * k];
-    const c2 = bend?.c2 || [b[0] + de[0] * k, b[1] + de[1] * k];
+    const c1 = [a[0] + ds[0] * k, a[1] + ds[1] * k];
+    const c2 = [b[0] + de[0] * k, b[1] + de[1] * k];
     // Sampled along the curve, for hit testing.
-    const pts = Array.from({ length: 21 }, (_, i) => {
-      const t = i / 20;
-      const u = 1 - t;
-      return [0, 1].map((n) => u * u * u * a[n] + 3 * u * u * t * c1[n] + 3 * u * t * t * c2[n] + t * t * t * b[n]);
-    });
+    const pts = Array.from({ length: 21 }, (_, i) => onCubic([a, c1, c2, b], i / 20));
     return done({ bend: { c1, c2 }, d: `M${f(a[0])} ${f(a[1])} C${f(c1[0])} ${f(c1[1])} ${f(c2[0])} ${f(c2[1])} ${f(b[0])} ${f(b[1])}`, pts, startDir: [c1[0] - a[0], c1[1] - a[1]], endDir: [b[0] - c2[0], b[1] - c2[1]] });
   }
   return done({ d: path([a, b]), pts: [a, b], startDir: [b[0] - a[0], b[1] - a[1]], endDir: [b[0] - a[0], b[1] - a[1]] });

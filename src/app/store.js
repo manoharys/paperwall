@@ -164,14 +164,20 @@ const dKey = (designId, at) => `${designId}|d|${stamp(at)}`;
 const aKey = (designId, assetId) => `${designId}|a|${assetId}`;
 const range = (prefix) => [prefix, `${prefix}\uffff`];
 
+/** Without IndexedDB: the in-memory versions under a prefix, as [key, value] in key order. */
+const inMemory = (prefix) => {
+  const [lo, hi] = range(prefix);
+  return [...memory.versions.entries()].filter(([k]) => k >= lo && k <= hi).sort(([a], [b]) => (a < b ? -1 : 1));
+};
+
 function keysIn(prefix) {
   const [lo, hi] = range(prefix);
-  return run('versions', 'readonly', (s) => s.getAllKeys(IDBKeyRange.bound(lo, hi)), () => [...memory.versions.keys()].filter((k) => k >= lo && k <= hi).sort());
+  return run('versions', 'readonly', (s) => s.getAllKeys(IDBKeyRange.bound(lo, hi)), () => inMemory(prefix).map(([k]) => k));
 }
 
 function valuesIn(prefix) {
   const [lo, hi] = range(prefix);
-  return run('versions', 'readonly', (s) => s.getAll(IDBKeyRange.bound(lo, hi)), () => [...memory.versions.entries()].filter(([k]) => k >= lo && k <= hi).map(([, v]) => v));
+  return run('versions', 'readonly', (s) => s.getAll(IDBKeyRange.bound(lo, hi)), () => inMemory(prefix).map(([, v]) => v));
 }
 
 /** Several values by key, in one transaction (undefined where missing). */
@@ -250,15 +256,15 @@ async function prune(designId, drop) {
       m.delete(k);
       m.delete(k.replace('|v|', '|d|'));
     }
-    const used = new Set([...m.entries()].filter(([k]) => k >= vlo && k <= vhi).flatMap(([, v]) => v.assetIds || []));
-    for (const k of [...m.keys()]) if (k >= alo && k <= ahi && !used.has(k.slice(alo.length))) m.delete(k);
+    const used = new Set(inMemory(`${designId}|v|`).flatMap(([, v]) => v.assetIds || []));
+    for (const [k] of inMemory(`${designId}|a|`)) if (!used.has(k.slice(alo.length))) m.delete(k);
   });
 }
 
 /** Whether a design has any versions yet (just counts them). */
 export async function hasVersions(designId) {
   const [lo, hi] = range(`${designId}|v|`);
-  return (await run('versions', 'readonly', (s) => s.count(IDBKeyRange.bound(lo, hi)), () => [...memory.versions.keys()].filter((k) => k >= lo && k <= hi).length)) > 0;
+  return (await run('versions', 'readonly', (s) => s.count(IDBKeyRange.bound(lo, hi)), () => inMemory(`${designId}|v|`).length)) > 0;
 }
 
 /** A design's saved versions (just their details), newest first. */

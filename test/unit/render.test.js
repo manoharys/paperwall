@@ -615,3 +615,17 @@ test('[ELM-10] a live drag passing through a turn detaches nothing', async () =>
   updateConnectors(page);
   assert.equal(c.end.id, b.id);
 });
+
+test('[ELM-10] a trimmed curve is the same curve, just shorter', async () => {
+  const { createConnector, connectorGeometry } = await import('../../src/model/connectors.js');
+  const { nearPolyline } = await import('../../src/model/geometry.js');
+  const el = createConnector({ from: [0, 0], to: [300, 200], route: 'curved', strokeWidth: 20 });
+  el.start = { id: 'a', side: 'r' };
+  el.end = { id: 'b', side: 'l' };
+  const whole = connectorGeometry(el);
+  const cut = connectorGeometry(el, { start: 0, end: 51 });
+  // Densely sampled whole curve; every point of the cut one lies on it.
+  for (const [x, y] of cut.pts) assert.ok(nearPolyline(whole.pts, { x, y }, 2.5), `(${x}, ${y}) is on the curve`);
+  const [ex, ey] = cut.pts.at(-1);
+  assert.ok(Math.hypot(300 - ex, 200 - ey) > 40, 'and it stops short of the end');
+});
