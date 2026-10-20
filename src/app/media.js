@@ -104,7 +104,7 @@ export async function audioInfo(file) {
 
 /** A blob: URL for a stored data: URL (much quicker for players than the long string). */
 // (Not by fetch: the page's security policy allows no fetching at all, data: included.)
-export async function blobUrlFor(dataUrl) {
+export function blobUrlFor(dataUrl) {
   return URL.createObjectURL(dataUrlToBlob(dataUrl));
 }
 
@@ -126,7 +126,13 @@ export class VideoFrames {
   urlFor(assetId) {
     if (!this.urls.has(assetId)) {
       const asset = this.doc.assets[assetId];
-      this.urls.set(assetId, asset ? blobUrlFor(asset.dataUrl) : Promise.resolve(''));
+      let url = '';
+      try {
+        url = asset ? blobUrlFor(asset.dataUrl) : '';
+      } catch {
+        /* a damaged file: its poster shows */
+      }
+      this.urls.set(assetId, url);
     }
     return this.urls.get(assetId);
   }
@@ -141,7 +147,8 @@ export class VideoFrames {
     p = {
       video,
       // Resolves to whether it can play here; a damaged file just shows its poster.
-      ready: this.urlFor(el.assetId).then((url) => {
+      ready: Promise.resolve().then(() => {
+        const url = this.urlFor(el.assetId);
         if (!url || this.disposed) return false;
         video.src = url;
         return firstPicture(video).then(() => {
@@ -243,7 +250,7 @@ export class VideoFrames {
       video.load();
     }
     this.players.clear();
-    for (const url of this.urls.values()) url.then((u) => u && URL.revokeObjectURL(u), () => null);
+    for (const url of this.urls.values()) if (url) URL.revokeObjectURL(url);
     this.urls.clear();
   }
 }

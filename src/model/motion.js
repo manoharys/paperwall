@@ -102,8 +102,9 @@ function rankIn(order, id) {
   return r.get(id) ?? 0;
 }
 
-function clampNum(v, lo, hi, fallback) {
-  const n = v === undefined || v === null || v === '' ? NaN : Number(v);
+/** A number kept within [lo, hi]; `fallback` when missing, empty or not a number. */
+export function clampNum(v, lo, hi, fallback) {
+  const n = v === undefined || v === null || v === '' || typeof v === 'boolean' ? NaN : Number(v);
   return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fallback;
 }
 

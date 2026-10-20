@@ -5,7 +5,7 @@ import { renderPage, renderFrame } from '../model/render.js';
 import { animationsEnd, keepsMoving, hasLoop, pageDuration, pageFrame, transitionOf, timeline } from '../model/motion.js';
 import { VideoFrames, videosOn, blobUrlFor } from './media.js';
 import { measure } from './fonts.js';
-import { visiblePages, pageName, pageLabel } from '../model/doc.js';
+import { visiblePages, pageName, pageLabel, soundtrackOf } from '../model/doc.js';
 
 export class PageStrip {
   constructor(editor, canvas) {
@@ -279,9 +279,16 @@ const LIVE_VIDEO = typeof navigator === 'undefined' || !(/AppleWebKit/.test(navi
 
 /** The design's soundtrack as something to play from a point, or null if it has none. */
 function soundtrackPlayer(doc) {
-  const asset = doc.audio && doc.assets[doc.audio.assetId];
+  const asset = soundtrackOf(doc);
   if (!asset) return null;
   const audio = new Audio();
+  let url = '';
+  try {
+    url = blobUrlFor(asset.dataUrl);
+    audio.src = url;
+  } catch {
+    /* a damaged sound: the slides play in silence */
+  }
   // Volume through Web Audio where there is one (iPhones and iPads ignore a
   // player's own volume), else the player's.
   const volume = doc.audio.volume ?? 1;
@@ -301,12 +308,6 @@ function soundtrackPlayer(doc) {
   // Safari only lets a sound play later if it was started by a click.
   audio.play().catch(() => null);
   let stopped = false;
-  let url = null;
-  const loaded = blobUrlFor(asset.dataUrl).then((u) => {
-    url = u;
-    if (stopped) return URL.revokeObjectURL(u);
-    audio.src = u;
-  }).catch(() => null); // a damaged sound: the slides play in silence
   let wanted = null; // the latest place asked for, played once the sound is ready
   let wantedAt = 0; // when it was asked for: the sound has been due to play since
   const play = () => {
@@ -335,7 +336,7 @@ function soundtrackPlayer(doc) {
       audio.pause();
       mixer?.close?.().catch(() => null);
       audio.removeEventListener('loadedmetadata', play);
-      loaded.then(() => url && URL.revokeObjectURL(url));
+      if (url) URL.revokeObjectURL(url);
     },
   };
 }

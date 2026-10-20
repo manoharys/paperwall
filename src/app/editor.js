@@ -882,9 +882,9 @@ export class Editor {
   align(how) {
     // What can move, along the edges of the selection: locked elements count
     // (they stay), held connectors don't (they follow, so they'd shift the
-    // edges with every press). To the page when one thing is selected.
+    // edges with every press). To the page when that's one thing.
     const ids = this.movable;
-    if (ids.length) this.change(() => cmd.alignElements(this.doc, this.page, ids, how, { toPage: this.selection.length === 1, within: ids }));
+    if (ids.length) this.change(() => cmd.alignElements(this.doc, this.page, ids, how, { toPage: ids.length === 1, within: ids }));
   }
 
   distribute(axis) {

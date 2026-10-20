@@ -4,7 +4,7 @@
 import { renderPage, textRuns } from '../model/render.js';
 import { buildPdf } from '../model/pdf.js';
 import { buildZip } from '../model/zip.js';
-import { validateDesign, clone, visiblePages, printDpi, pageLabel, versionSnapshot } from '../model/doc.js';
+import { validateDesign, clone, visiblePages, printDpi, pageLabel, versionSnapshot, soundtrackOf } from '../model/doc.js';
 import { measure, fontCssFor, registerDesignFonts } from './fonts.js';
 import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage } from './ui.js';
 import { section, segmented, slider, toggle } from './widgets.js';
@@ -157,7 +157,7 @@ function motionNote(doc, pages) {
 
 /** The design's soundtrack, decoded, or null. (Soundtracks come with video elements and audio.) */
 export async function soundtrackBuffer(doc) {
-  const a = doc.audio && doc.assets[doc.audio.assetId];
+  const a = soundtrackOf(doc);
   if (!a) return null;
   const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
   if (!Ctx) return null;

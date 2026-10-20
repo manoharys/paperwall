@@ -168,6 +168,7 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
     if (encoder.state !== 'closed') encoder.close();
   }
   if (failure) throw failure;
+  if (pick.codec === 'avc' && !description) throw new Error("This browser's MP4 encoder left out what players need. Try WebM instead.");
   let sound = null;
   if (audio) {
     // The pictures are done: a sound that won't encode leaves a silent video, not nothing.

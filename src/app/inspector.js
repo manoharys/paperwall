@@ -5,7 +5,7 @@ import { h, icon, iconButton, clear, toast, pickFile, readFileAsDataUrl, dialog,
 import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover, popoverOpen, PALETTES, fontPicker, gradientEditor } from './widgets.js';
 import { FONTS, FONT_KINDS } from '../model/fonts.js';
 import { ANIMATIONS, PAGE_ANIMATIONS, TRANSITIONS, DEFAULT_ANIM_DURATION, DEFAULT_STAGGER, DEFAULT_TRANSITION_DURATION, LIMITS, pageDuration } from '../model/motion.js';
-import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, isEmptyFrame, parseChartData, chartDataText, parseTable, tableText } from '../model/doc.js';
+import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, isEmptyFrame, parseChartData, chartDataText, parseTable, tableText, soundtrackOf } from '../model/doc.js';
 import { collectColors, cropZoom } from '../model/commands.js';
 import { renderElementOnly, TEXT_EFFECTS } from '../model/render.js';
 import { measure, addCustomFont, customFontNames, ensureFont, fontSettled } from './fonts.js';
@@ -263,7 +263,7 @@ export class Inspector {
   /** The design's soundtrack: what it is, how loud, and taking it away. */
   soundtrackRow() {
     const ed = this.ed;
-    const a = ed.doc.audio && ed.doc.assets[ed.doc.audio.assetId];
+    const a = soundtrackOf(ed.doc);
     if (!a) return h('p', { class: 'hint', 'data-testid': 'soundtrack-none' }, 'Soundtrack: add a sound from Uploads. It plays when you press Play, and in videos you download.');
     return h('div', { class: 'sub', 'data-testid': 'soundtrack' },
       h('div', { class: 'field inline' }, h('span', null, 'Soundtrack'), h('b', { class: 'ellipsis' }, a.name || 'Sound'),

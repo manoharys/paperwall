@@ -1,7 +1,7 @@
 // The design document: pages of elements, plus the images they use.
 
 import { boxAround } from './geometry.js';
-import { ANIMATIONS, PAGE_ANIMATIONS, TRANSITIONS, LIMITS } from './motion.js';
+import { ANIMATIONS, PAGE_ANIMATIONS, TRANSITIONS, LIMITS, clampNum } from './motion.js';
 
 export const FORMAT_VERSION = 1;
 export const DPI = 300;
@@ -215,6 +215,11 @@ export function createVideo(assetId, props = {}) {
   });
 }
 
+/** The design's soundtrack (its stored sound), or null. */
+export function soundtrackOf(doc) {
+  return (doc.audio && doc.assets[doc.audio.assetId]) || null;
+}
+
 /** Where a video is (seconds into its file) at `local` seconds into its page. */
 export function videoTime(el, local, duration) {
   // A start point at or past the end means just before the end.
@@ -401,13 +406,14 @@ export function isEmptyFrame(doc, el) {
 }
 
 /** An animation or transition from a file: a known type and numbers in range, else nothing. */
-const isNum = (v) => v !== null && v !== '' && typeof v !== 'boolean' && Number.isFinite(+v);
-
 function cleanMotion(m, kinds, ranges) {
   if (!m || typeof m !== 'object' || !Object.hasOwn(kinds, m.type) || m.type === 'none') return undefined;
   const out = { type: m.type };
   // Missing, empty or not a number: left out, so the default applies (as when playing).
-  for (const [k, [lo, hi]] of Object.entries(ranges)) if (isNum(m[k])) out[k] = Math.max(lo, Math.min(hi, +m[k]));
+  for (const [k, [lo, hi]] of Object.entries(ranges)) {
+    const v = clampNum(m[k], lo, hi, undefined);
+    if (v !== undefined) out[k] = v;
+  }
   return out;
 }
 
@@ -446,7 +452,7 @@ export function validateDesign(doc) {
     if (p.guides !== undefined) p.guides = (Array.isArray(p.guides) ? p.guides : []).filter((g) => g && (g.axis === 'x' || g.axis === 'y') && Number.isFinite(+g.pos)).map((g) => ({ axis: g.axis, pos: +g.pos }));
     if (p.anim !== undefined) p.anim = cleanMotion(p.anim, PAGE_ANIMATIONS, { duration: LIMITS.duration, stagger: LIMITS.stagger });
     if (p.transition !== undefined) p.transition = cleanMotion(p.transition, TRANSITIONS, { duration: LIMITS.transition });
-    if (p.duration !== undefined) p.duration = isNum(p.duration) ? Math.max(LIMITS.page[0], Math.min(LIMITS.page[1], +p.duration)) : undefined;
+    if (p.duration !== undefined) p.duration = clampNum(p.duration, ...LIMITS.page, undefined);
   }
   for (const [id, a] of Object.entries(doc.assets)) {
     if (!a || typeof a.dataUrl !== 'string' || !/^data:(image|font|video|audio)\//.test(a.dataUrl)) delete doc.assets[id];
@@ -455,7 +461,7 @@ export function validateDesign(doc) {
   }
   // The soundtrack: a sound the design has, at a volume from 0 to 1.
   if (doc.audio !== undefined) {
-    const a = doc.audio && doc.assets[doc.audio.assetId];
+    const a = soundtrackOf(doc);
     doc.audio = a && a.type === 'audio' ? { assetId: doc.audio.assetId, volume: Number.isFinite(+doc.audio.volume) ? Math.max(0, Math.min(1, +doc.audio.volume)) : 1 } : undefined;
   }
   return doc;
