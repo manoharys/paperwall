@@ -292,11 +292,15 @@ export function gradientEditor({ label, value, onChange, getContext, testid, cur
   const now = () => current?.() || g;
   const nowStops = () => [...now().stops].sort((a, b) => a.offset - b.offset);
   const emit = (patch, live = false) => onChange({ ...now(), ...patch }, live);
+  // Where each row's stop is now: re-sorting moves stops around, and the
+  // panel isn't redrawn mid-drag, so rows follow their own stop.
+  let order = stops.map((_, i) => i);
   // Stops are kept in order, so the page draws the same gradient as the bar above.
   const setStop = (i, patch, live) => {
-    const list = nowStops();
-    const target = list[i] && stops[i] && list[i].color === stops[i].color ? i : list.findIndex((s) => s.color === stops[i]?.color);
-    emit({ stops: list.map((s, k) => (k === target ? { ...s, ...patch } : s)).sort((a, b) => a.offset - b.offset) }, live);
+    const tagged = nowStops().map((s, k) => ({ s: k === order[i] ? { ...s, ...patch } : s, k }));
+    tagged.sort((a, b) => a.s.offset - b.s.offset);
+    order = order.map((k) => tagged.findIndex((t) => t.k === k));
+    emit({ stops: tagged.map((t) => t.s) }, live);
   };
   const addStop = () => {
     // Put the new color in the middle of the widest gap.
@@ -310,7 +314,7 @@ export function gradientEditor({ label, value, onChange, getContext, testid, cur
     stops.map((s, i) => h('div', { class: 'grad-stop', 'data-testid': 'grad-stop' },
       colorButton({ label: `${label} color ${i + 1}`, value: s.color, getContext, testid: `grad-color-${i}`, onChange: (c, l) => setStop(i, { color: c }, l) }),
       h('input', { type: 'range', min: 0, max: 100, value: Math.round(s.offset * 100), 'aria-label': `${label} color ${i + 1} position`, 'data-testid': `grad-pos-${i}`, onInput: (e) => setStop(i, { offset: +e.target.value / 100 }, true), onChange: (e) => setStop(i, { offset: +e.target.value / 100 }) }),
-      stops.length > 2 ? iconButton('close', `Remove color ${i + 1}`, () => emit({ stops: nowStops().filter((_, k) => k !== i) }), { 'data-testid': `grad-remove-${i}` }) : h('span', { class: 'grad-spacer' }))),
+      stops.length > 2 ? iconButton('close', `Remove color ${i + 1}`, () => emit({ stops: nowStops().filter((_, k) => k !== order[i]) }), { 'data-testid': `grad-remove-${i}` }) : h('span', { class: 'grad-spacer' }))),
     stops.length < 8 ? h('button', { type: 'button', class: 'link-btn', 'data-testid': 'grad-add', onClick: addStop }, '+ Add a color') : null,
     segmented({ label: 'Gradient style', value: g.type, onChange: (type) => emit({ type }), options: [{ value: 'linear', label: 'Linear', text: 'Linear' }, { value: 'radial', label: 'Radial', text: 'Radial' }] }),
     g.type === 'linear' ? slider({ label: 'Angle', value: g.angle ?? 180, min: 0, max: 360, unit: '°', testid: 'grad-angle', onChange: (v, l) => emit({ angle: v }, l) }) : null,

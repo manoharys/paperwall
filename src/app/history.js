@@ -1,10 +1,9 @@
 // Version history: copies of this design kept on this device while you work.
 
-import { h, dialog, clear, toast } from './ui.js';
+import { h, dialog, clear, toast, lazily } from './ui.js';
 import { renderPage } from '../model/render.js';
 import { measure, ensureDesignFonts } from './fonts.js';
 import * as store from './store.js';
-import { lazily } from './insert.js';
 
 function when(at) {
   const d = new Date(at);

@@ -417,6 +417,9 @@ test('[ELM-10] a rotated or flipped connector is straightened where it is drawn'
   const g = { id: 'g', type: 'group', x: 100, y: 100, w: 450, h: 50, rotation: 0, children: [a, k] };
   updateConnectors({ elements: [g, b] });
   const [s, e] = endsOf(k);
-  assert.deepEqual([s[0] + 100, s[1] + 100].map(Math.round), [150, 125], 'starts on a, in page terms');
-  assert.deepEqual([e[0] + 100, e[1] + 100].map(Math.round), [400, 25], 'ends on b outside the group');
+  // The group's box grows to hold the re-routed connector, so read positions through it.
+  assert.deepEqual([s[0] + g.x, s[1] + g.y].map(Math.round), [150, 125], 'starts on a, in page terms');
+  assert.deepEqual([e[0] + g.x, e[1] + g.y].map(Math.round), [400, 25], 'ends on b outside the group');
+  const right = Math.max(...g.children.map((c) => c.x + c.w));
+  assert.ok(right <= g.w + 0.5, 'the group still wraps its children');
 });

@@ -12,6 +12,12 @@ import { curveGeometry } from '../model/render.js';
 import { unionBounds, pointInBox } from '../model/geometry.js';
 import { gridBoxes } from '../model/grids.js';
 import { createConnector, updateConnectors } from '../model/connectors.js';
+import { gridLines, marginSize } from '../model/view.js';
+
+import { measure, ensureFont } from './fonts.js';
+import { removePlainBackground } from '../model/bgremove.js';
+import { readFileAsDataUrl, loadImage, toast, debounce } from './ui.js';
+import * as store from './store.js';
 
 const VIEW_KEY = 'paperwall-view';
 const VERSION_EVERY = 5 * 60 * 1000;
@@ -24,24 +30,6 @@ function loadView() {
     return { ...DEFAULT_VIEW };
   }
 }
-
-/** Grid spacing in page px: a share of the page's shorter side. */
-export function gridStep(doc, size = 'medium') {
-  const share = { small: 1 / 40, medium: 1 / 20, large: 1 / 10 }[size] || 1 / 20;
-  return Math.max(4, Math.round(Math.min(doc.width, doc.height) * share));
-}
-
-/** Safe margin: keep important things inside it. */
-export function marginSize(doc) {
-  return Math.round(Math.min(doc.width, doc.height) * 0.05);
-}
-
-/** Print bleed: 3 mm at 300 dpi, the strip that may be trimmed off. */
-export const BLEED = 35;
-import { measure, ensureFont } from './fonts.js';
-import { removePlainBackground } from '../model/bgremove.js';
-import { readFileAsDataUrl, loadImage, toast, debounce } from './ui.js';
-import * as store from './store.js';
 
 let clipboard = null; // shared between designs, like a real clipboard
 let styleClipboard = null;
@@ -101,8 +89,9 @@ export class Editor {
   }
 
   afterChange(quiet = false) {
-    // Connectors on every page follow what they're attached to.
-    for (const p of this.doc.pages) updateConnectors(p);
+    // Connectors follow what they're attached to. Changes reach other pages
+    // only through syncAllConnectors() (find and replace, restoring).
+    updateConnectors(this.pageData);
     this.doc.updatedAt = Date.now();
     this.changedSinceVersion = true;
     this.selection = this.selection.filter((id) => cmd.findElement(this.pageData, id));
@@ -148,11 +137,12 @@ export class Editor {
 
   /** Put the design back the way a version had it, as one undo step. */
   restoreVersion(versionDoc) {
-    const v = JSON.parse(JSON.stringify(versionDoc));
+    const v = clone(versionDoc);
     this.change(() => {
       // Keep today's images too: undo snapshots share the design's assets.
       Object.assign(this.doc, { name: v.name, width: v.width, height: v.height, unit: v.unit, pages: v.pages, assets: { ...this.doc.assets, ...v.assets } });
       this.page = 0; // the version may have fewer pages than the one in view
+      this.syncAllConnectors();
     });
     this.selection = [];
     this.page = -1;
@@ -353,9 +343,9 @@ export class Editor {
     for (const g of this.pageData.guides || []) (g.axis === 'x' ? x : y).push(g.pos);
     const v = this.view;
     if (v.grid && v.snapGrid) {
-      const step = gridStep(this.doc, v.gridSize);
-      for (let p = step; p < this.doc.width; p += step) x.push(p);
-      for (let p = step; p < this.doc.height; p += step) y.push(p);
+      const g = gridLines(this.doc, v.gridSize);
+      x.push(...g.x);
+      y.push(...g.y);
     }
     if (v.margins) {
       const m = marginSize(this.doc);
@@ -408,6 +398,11 @@ export class Editor {
     });
     this.select([el.id]);
     return el;
+  }
+
+  /** Re-attach connectors on every page, after a change that touched several pages. */
+  syncAllConnectors() {
+    for (const p of this.doc.pages) updateConnectors(p);
   }
 
   /** Keep attached connector ends on their elements (called before every draw). */

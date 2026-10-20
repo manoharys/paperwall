@@ -1,11 +1,11 @@
 // Paperwall: boot, routing between the home screen and the editor, and the
 // editor's top bar.
 
-import { h, icon, iconButton, clear, toast, mod } from './ui.js';
+import { h, icon, iconButton, clear, toast, mod, forget } from './ui.js';
 import { Editor } from './editor.js';
 import { Canvas } from './canvas.js';
 import { Inspector, resizeDialog } from './inspector.js';
-import { InsertPanel, forget } from './insert.js';
+import { InsertPanel } from './insert.js';
 import { PageStrip, present } from './pages.js';
 import { bindShortcuts, cheatSheet } from './shortcuts.js';
 import { exportDialog, saveProjectFile, thumbnail, api as exportApi } from './export.js';

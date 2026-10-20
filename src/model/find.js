@@ -18,7 +18,7 @@ function* textSlots(doc) {
       for (const el of els) {
         const owner = top || el;
         // Locked and hidden things are left alone.
-        if (el.hidden || owner.hidden || owner.locked) continue;
+        if (el.hidden || el.locked || owner.hidden || owner.locked) continue;
         if (el.type === 'text') yield { page, el, owner, get: () => el.text, set: (v) => (el.text = v) };
         if (el.type === 'table') {
           for (const row of el.rows) for (let c = 0; c < row.length; c++) yield { page, el, owner, get: () => row[c], set: (v) => (row[c] = v) };

@@ -1,6 +1,6 @@
 // The left-hand panel: everything you can add to a page.
 
-import { h, icon, iconButton, clear, toast, pickFile, mod } from './ui.js';
+import { h, icon, iconButton, clear, toast, pickFile, mod, lazily, forget } from './ui.js';
 import { colorButton, selectField, section, slider } from './widgets.js';
 import { FONTS, FONT_PAIRS } from '../model/fonts.js';
 import { ALL_ICONS, ALL_STICKERS, searchGraphics } from '../model/graphics.js';
@@ -534,33 +534,4 @@ export function templateBrowser({ state, ids, onPick, pageSize = 48, gridClass =
     grid,
     more,
   ];
-}
-
-const pending = new WeakMap();
-const observer = typeof IntersectionObserver !== 'undefined'
-  ? new IntersectionObserver((entries) => {
-    for (const e of entries) {
-      if (!e.isIntersecting) continue;
-      observer.unobserve(e.target);
-      pending.get(e.target)?.();
-      pending.delete(e.target);
-    }
-  }, { rootMargin: '400px' })
-  : null;
-
-/** Run fn when el comes near the screen (right away where that can't be observed). */
-export function lazily(el, fn) {
-  if (!observer) return void fn();
-  pending.set(el, fn);
-  el.dataset.lazy = '';
-  observer.observe(el);
-}
-
-/** Stop waiting on everything inside root, before it is thrown away. */
-export function forget(root) {
-  if (!observer) return;
-  for (const el of root.querySelectorAll('[data-lazy]')) {
-    observer.unobserve(el);
-    pending.delete(el);
-  }
 }

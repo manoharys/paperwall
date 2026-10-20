@@ -1,8 +1,8 @@
 // The home screen: start a design, pick a template, see your designs.
 
-import { h, icon, iconButton, clear, toast, pickFile, dialog } from './ui.js';
+import { h, icon, iconButton, clear, toast, pickFile, dialog, forget } from './ui.js';
 import { PRESETS, createDesign, createDesignFromPreset, toPx, uid, clone } from '../model/doc.js';
-import { templateBrowser, forget } from './insert.js';
+import { templateBrowser } from './insert.js';
 import { readyTemplate } from './templates.js';
 import * as store from './store.js';
 import { readProjectFile } from './export.js';

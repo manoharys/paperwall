@@ -8,7 +8,7 @@ import {
 } from '../model/geometry.js';
 import { resizeElement, coverCrop } from '../model/commands.js';
 import { clone, DRAW_TOOLS, DPI } from '../model/doc.js';
-import { gridStep, marginSize, BLEED } from './editor.js';
+import { gridLines, marginSize, BLEED } from '../model/view.js';
 import { endsOf, setEnds, connectorHit } from '../model/connectors.js';
 import { measure } from './fonts.js';
 import { h, dataUrlToBlob, toast, pickFile } from './ui.js';
@@ -349,7 +349,7 @@ export class Canvas {
       ends[d.which] = [p.x, p.y];
       d.el[d.which ? 'end' : 'start'] = { id: null };
       setEnds(d.el, ends[0], ends[1]);
-      d.target = this.attachTarget(p, d.el);
+      d.target = this.attachTarget(p, d.el, d.which);
       ed.emit('live');
       return;
     }
@@ -644,10 +644,8 @@ export class Canvas {
     const W = ed.doc.width;
     const H = ed.doc.height;
     if (v.grid) {
-      const step = gridStep(ed.doc, v.gridSize);
-      const d = [];
-      for (let x = step; x < W; x += step) d.push(`M${x * z} 0V${H * z}`);
-      for (let y = step; y < H; y += step) d.push(`M0 ${y * z}H${W * z}`);
+      const g = gridLines(ed.doc, v.gridSize);
+      const d = [...g.x.map((x) => `M${x * z} 0V${H * z}`), ...g.y.map((y) => `M0 ${y * z}H${W * z}`)];
       parts.push(`<path class="grid-lines" data-testid="grid-lines" d="${d.join('')}"/>`);
     }
     if (v.margins) {
@@ -703,12 +701,16 @@ export class Canvas {
     this.rulerY.innerHTML = `<svg width="20" height="${H * z}">${ticks(H, true)}</svg>`;
   }
 
-  /** The element a connector end would attach to at p (not connectors, not itself). */
-  attachTarget(p, connector) {
+  /**
+   * The element a connector end would attach to at p: not a connector, and
+   * not the element the other end is already on.
+   */
+  attachTarget(p, connector, which) {
+    const other = (which ? connector.start : connector.end)?.id;
     const els = this.ed.pageData.elements;
     for (let i = els.length - 1; i >= 0; i--) {
       const el = els[i];
-      if (el.hidden || el.type === 'connector' || el === connector) continue;
+      if (el.hidden || el.type === 'connector' || el === connector || el.id === other) continue;
       if (pointInBox(p.x, p.y, el)) return el;
     }
     return null;

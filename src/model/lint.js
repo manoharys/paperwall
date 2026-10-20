@@ -23,7 +23,7 @@ function luminance([r, g, b]) {
 /** Mix two #rrggbb colors: t = 0 gives a, 1 gives b. Unreadable colors are returned as they are. */
 export function mixHex(a, b, t) {
   const [x, y] = [hexToRgb(a), hexToRgb(b)];
-  if (!x || !y) return x ? a : b;
+  if (!x || !y) return a;
   return `#${x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('')}`;
 }
 

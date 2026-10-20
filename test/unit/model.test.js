@@ -465,3 +465,16 @@ test('[EDIT-19] find and replace leaves locked and hidden things alone', async (
   assert.equal(replaceText(doc, 'Acme', 'Beta').count, 1);
   assert.deepEqual(doc.pages[0].elements.map((e) => e.text), ['Beta', 'Acme 2026', 'Acme hidden']);
 });
+
+test('[EDIT-01] a discarded step keeps redo available', async () => {
+  const { History } = await import('../../src/model/history.js');
+  const h = new History();
+  let doc = { pages: [{ elements: [] }], assets: {}, n: 1 };
+  h.record(doc);
+  doc.n = 2;
+  doc = h.undo(doc);
+  assert.ok(h.canRedo);
+  h.record(doc); // a press that turns out to change nothing...
+  h.discard(); // ...is dropped again
+  assert.ok(h.canRedo, 'redo still works');
+});

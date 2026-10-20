@@ -4,6 +4,7 @@
 
 import { uid } from './doc.js';
 import { boundsOf } from './geometry.js';
+import { refitGroup } from './commands.js';
 
 const f = (n) => Math.round(n * 100) / 100;
 
@@ -96,7 +97,14 @@ export function updateConnectors(page) {
   const visit = (els, ox, oy) => {
     for (const el of els) {
       if (el.type === 'group') {
-        if (!el.rotation && !el.flipX && !el.flipY) visit(el.children, ox + el.x, oy + el.y);
+        if (!el.rotation && !el.flipX && !el.flipY) {
+          const before = changed;
+          changed = false;
+          visit(el.children, ox + el.x, oy + el.y);
+          // A connector inside that moved may now reach past the group's box.
+          if (changed) refitGroup(el);
+          changed = changed || before;
+        }
         continue;
       }
       if (el.type === 'connector' && sync(el, ox, oy)) changed = true;

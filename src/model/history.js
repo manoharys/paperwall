@@ -32,6 +32,7 @@ export class History {
     }
     this.past.push(snapshot(doc));
     if (this.past.length > this.limit) this.past.shift();
+    this.discardedFuture = this.future; // brought back if this step is discarded
     this.future = [];
     this.lastKey = key;
     this.lastAt = now;
@@ -40,6 +41,8 @@ export class History {
   /** Forget the last recorded step, for a change that turned out to be nothing. */
   discard() {
     this.past.pop();
+    if (this.discardedFuture) this.future = this.discardedFuture;
+    this.discardedFuture = null;
     this.lastKey = null;
   }
 

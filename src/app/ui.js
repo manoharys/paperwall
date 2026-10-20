@@ -256,3 +256,34 @@ export function pickFile(accept, multiple = false) {
 
 export const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const mod = isMac ? '⌘' : 'Ctrl';
+
+// ---------- lazy loading ----------
+
+const pending = new WeakMap();
+const observer = typeof IntersectionObserver !== 'undefined'
+  ? new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      observer.unobserve(e.target);
+      pending.get(e.target)?.();
+      pending.delete(e.target);
+    }
+  }, { rootMargin: '400px' })
+  : null;
+
+/** Run fn when el comes near the screen (right away where that can't be observed). */
+export function lazily(el, fn) {
+  if (!observer) return void fn();
+  pending.set(el, fn);
+  el.dataset.lazy = '';
+  observer.observe(el);
+}
+
+/** Stop waiting on everything inside root, before it is thrown away. */
+export function forget(root) {
+  if (!observer) return;
+  for (const el of root.querySelectorAll('[data-lazy]')) {
+    observer.unobserve(el);
+    pending.delete(el);
+  }
+}
