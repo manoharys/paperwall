@@ -526,3 +526,46 @@ test('[EDIT-01] a field that commits as you start a drag neither cuts the drag s
   assert.ok(el.x > s.x + 50, `and the drag moved it (${s.x} → ${el.x})`);
   await context.close();
 });
+
+test('[EDIT-04] a command that lands mid-drag runs at once and gets its own undo step', async () => {
+  const { page, context } = await newDesign('square');
+  const s = await addShape(page, 'Square');
+  const c = await elementCenter(page, s.id);
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  // Before the drag moves: a duplicate (a button tapped with another finger, say).
+  const copies = await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    ed.duplicate();
+    return ed.selection.length;
+  });
+  assert.equal(copies, 1, 'it ran and selected its copy');
+  await page.mouse.move(c.x + 100, c.y + 100, { steps: 6 });
+  await page.mouse.up();
+  assert.equal((await elements(page)).length, 2);
+  // Undo takes back the move, then the duplicate.
+  const steps = await state(page, (ed) => ed.history.past.length);
+  assert.ok(steps >= 2);
+  await context.close();
+});
+
+test('[EDIT-04] a command that lands after a drag has moved finishes the drag first', async () => {
+  const { page, context } = await newDesign('square');
+  const s = await addShape(page, 'Square');
+  const c = await elementCenter(page, s.id);
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 100, c.y + 100, { steps: 6 });
+  const res = await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    ed.duplicate();
+    return { dragging: ed.isDragging(), selected: ed.selection.length, n: ed.pageData.elements.length };
+  });
+  await page.mouse.up();
+  assert.deepEqual(res, { dragging: false, selected: 1, n: 2 });
+  await page.keyboard.press(`${mod}+z`);
+  assert.equal((await elements(page)).length, 1, 'undo takes back the duplicate alone');
+  const back = (await elements(page))[0];
+  assert.notEqual(back.x, s.x, 'the finished move stays');
+  await context.close();
+});

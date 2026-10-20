@@ -19,6 +19,10 @@ export function findDialog(editor) {
     hits = findText(editor.doc, find.value, opts);
     matches = hits.flatMap((x) => Array.from({ length: x.count }, (_, nth) => ({ page: x.page, id: x.id, nth })));
     at = Math.min(at, matches.length - 1);
+    say();
+  };
+  // Just the status line, from the matches already found.
+  const say = () => {
     const n = total();
     status.textContent = !find.value ? 'Searches text on every page, in tables and chart labels too.'
       : n ? `${n} match${n === 1 ? '' : 'es'} in ${hits.length} place${hits.length === 1 ? '' : 's'}${at >= 0 ? ` · showing ${at + 1} of ${n}` : ''}`
@@ -31,7 +35,7 @@ export function findDialog(editor) {
     const hit = matches[at];
     if (editor.page !== hit.page) editor.setPage(hit.page);
     editor.select([hit.id]);
-    refresh();
+    say();
   };
   // Replacing changes text, so boxes are measured again for their new size.
   const refit = (changed) => {

@@ -114,19 +114,27 @@ export class Editor {
   /** Run a change as one undo step. `key` merges rapid repeats (typing, nudging). */
   change(fn, { key = null, quiet = false } = {}) {
     // A change that comes in mid-drag (a field committing as focus leaves it,
-    // a button, a timer) waits for the drag to end: the two never share an
-    // undo step, and the drag isn't cut short.
-    if (this.isDragging?.()) return void this.whenIdle(() => this.change(fn, { key, quiet }));
+    // a button, a timer) gets its own undo step, never the drag's: the canvas
+    // either lets a drag that hasn't moved carry on afterwards, or finishes one
+    // that has, first. Either way the change happens now.
+    const resume = this.isDragging?.() ? this.pauseDrag?.() : null;
     this.history.record(this.doc, key);
-    const result = fn();
-    this.afterChange(quiet);
-    return result;
+    this.changing = (this.changing || 0) + 1;
+    try {
+      const result = fn();
+      this.afterChange(quiet);
+      return result;
+    } finally {
+      this.changing -= 1;
+      resume?.();
+    }
   }
 
   /** After any change: save, refresh, keep connectors attached. `edit: false` for corrections (re-measuring), which don't call for a new version. */
   afterChange(quiet = false, { edit = true } = {}) {
-    // Mid-drag (text refitted as a font loads): after the drag, which it mustn't cut short.
-    if (this.isDragging?.()) return void this.whenIdle(() => this.afterChange(quiet, { edit }));
+    // Mid-drag, outside change() (text refitted as a font loads): after the
+    // drag, which it mustn't cut short.
+    if (this.isDragging?.() && !this.changing) return void this.whenIdle(() => this.afterChange(quiet, { edit }));
     // Connectors on every page follow what they're attached to (pages
     // without connectors return at once).
     this.syncAllConnectors();

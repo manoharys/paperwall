@@ -61,6 +61,37 @@ export class Canvas {
     });
     // Undo and redo wait while a drag is going (it holds parts of the design).
     editor.isDragging = () => !!this.drag;
+    // A change arrives mid-drag (see Editor.change). Drags that hold no part of
+    // the design (marquee, pan, a stroke not yet added) just carry on. One that
+    // has moved things is finished first. One that hasn't moved yet hands back
+    // its undo step and takes a fresh one, from the changed design, afterwards.
+    editor.pauseDrag = () => {
+      const d = this.drag;
+      if (!d?.recorded) return null;
+      if (d.moved) {
+        this.onUp();
+        settle();
+        return null;
+      }
+      editor.history.discard();
+      return () => {
+        if (this.drag !== d) return;
+        editor.history.record(editor.doc);
+        restart(d);
+      };
+    };
+    // Start values a drag works from, read again from the elements as they are now.
+    const restart = (d) => {
+      for (const it of d.items || []) {
+        if ('x' in it) Object.assign(it, { x: it.el.x, y: it.el.y });
+        if (it.shape) it.shape = { w: it.el.w, h: it.el.h, points: clone(it.el.points) };
+        if (it.orig) it.orig = clone(it.el);
+      }
+      if (d.mode === 'resize') d.orig = clone(d.el);
+      if (d.mode === 'resize-many') d.box = unionBounds(d.items.map((it) => it.el));
+      if (d.mode === 'crop') d.crop = { ...d.el.crop };
+      if (d.mode === 'guide' && !d.isNew) d.orig = editor.pageData.guides?.[d.index]?.pos;
+    };
     // Something else needs the design mid-drag: the drag ends here, as if let go.
     this.el.addEventListener('dblclick', (e) => this.onDouble(e));
     this.el.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });

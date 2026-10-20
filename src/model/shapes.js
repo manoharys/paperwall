@@ -110,10 +110,19 @@ export function drawPath(el) {
 }
 
 /** Whether point p (page px) is within `tol` px of a drawing's stroke (unrotated drawings). */
+const drawLines = new WeakMap(); // hover hit tests ask on every mouse move
+
 export function drawHit(el, p, tol) {
   // A flipped drawing is drawn mirrored about its centre; mirror the point to match.
   const q = { x: el.flipX ? 2 * el.x + el.w - p.x : p.x, y: el.flipY ? 2 * el.y + el.h - p.y : p.y };
-  return nearPolyline((el.points || []).map(([x, y]) => [el.x + x * el.w, el.y + y * el.h]), q, tol);
+  // The stroke in page px, worked out again only when the drawing changes.
+  const key = `${el.x},${el.y},${el.w},${el.h}`;
+  let line = drawLines.get(el);
+  if (line?.key !== key || line.points !== el.points) {
+    line = { key, points: el.points, pts: (el.points || []).map(([x, y]) => [el.x + x * el.w, el.y + y * el.h]) };
+    drawLines.set(el, line);
+  }
+  return nearPolyline(line.pts, q, tol);
 }
 
 /** The outline a photo is clipped to: its frame shape, or a (rounded) rectangle. */
