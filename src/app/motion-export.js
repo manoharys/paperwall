@@ -10,6 +10,7 @@ import { buildWebmParts } from '../model/webm.js';
 import { buildMp4Parts } from '../model/mp4.js';
 import { measure, fontCssFor } from './fonts.js';
 import { loadImage } from './ui.js';
+import { usedAssetIds } from '../model/doc.js';
 import { VideoFrames, videosOn } from './media.js';
 
 /** A copy of what an encoder hands over as bytes (an ArrayBuffer or a view of one). */
@@ -41,7 +42,7 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
   if (!tl.parts.length) throw new Error('Pick at least one page.');
   // Big photos made only as big as the frames can show, once, rather than
   // decoded at full size for every frame.
-  const doc = await fittedPictures(doc0, width, height);
+  const doc = await fittedPictures(doc0, pages, width, height);
   const count = Math.max(1, Math.round(tl.total * fps));
   // Fonts of just the pages being played (each frame carries them).
   const fontCss = await fontCssFor({ ...doc, pages: pages.map((i) => doc.pages[i]) });
@@ -114,11 +115,13 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
  * could use (twice their longest side, so a zoomed-in crop stays sharp).
  * A copy: the design itself keeps its pictures.
  */
-async function fittedPictures(doc, width, height) {
+async function fittedPictures(doc, pages, width, height) {
   const cap = Math.max(width, height) * 2;
   const assets = { ...doc.assets };
+  // (Only those on the pages being played.)
+  const used = usedAssetIds({ ...doc, pages: pages.map((i) => doc.pages[i]) });
   for (const [id, a] of Object.entries(doc.assets)) {
-    if (!a || (a.type && a.type !== 'image') || typeof a.dataUrl !== 'string') continue;
+    if (!used.has(id) || !a || (a.type && a.type !== 'image') || typeof a.dataUrl !== 'string') continue;
     if (!(Math.max(a.width || 0, a.height || 0) > cap) || a.dataUrl.startsWith('data:image/svg')) continue;
     try {
       const img = await loadImage(a.dataUrl);

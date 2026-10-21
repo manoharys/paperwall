@@ -696,13 +696,16 @@ export function renderElementOnly(doc, el, opts = {}) {
 export function textRuns(doc, pageIndex, measure = approxMeasure) {
   const runs = [];
   const visit = (els, ox, oy) => {
-    for (const el of els) {
-      if (el.hidden) continue;
-      if (el.type === 'group') {
-        if (!el.rotation) visit(el.children, ox + el.x, oy + el.y);
+    for (const el0 of els) {
+      if (el0.hidden) continue;
+      if (el0.type === 'group') {
+        if (!el0.rotation) visit(el0.children, ox + el0.x, oy + el0.y);
         continue;
       }
-      if (el.type !== 'text') continue;
+      if (el0.type !== 'text') continue;
+      // A sticky note's words sit inside its edges (the same middle, so it turns the same).
+      const inset = notePad(el0);
+      const el = inset ? { ...el0, note: null, x: el0.x + inset, y: el0.y + inset, w: Math.max(1, el0.w - inset * 2), h: Math.max(1, el0.h - inset * 2) } : el0;
       const x0 = ox + el.x;
       const y0 = oy + el.y;
       const cx = x0 + el.w / 2;

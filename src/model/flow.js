@@ -6,13 +6,14 @@
 
 import { fitHeight } from './text-layout.js';
 import { clone } from './doc.js';
+import { scaleElement } from './commands.js';
 
 export const DOCUMENT = { pageHeight: 1754, margin: 120, gap: 28 };
 export const BOARD = { grow: 1200, edge: 400, max: 24000 };
 
-/** The blocks of a page in flow order: top to bottom (as last placed). */
+/** The blocks of a page in flow order: top to bottom (as last placed). Lines between things follow them, so aren't blocks. */
 function blocks(page) {
-  return page.elements.filter((el) => !el.hidden).map((el, i) => ({ el, i })).sort((a, b) => a.el.y - b.el.y || a.i - b.i).map((b) => b.el);
+  return page.elements.filter((el) => !el.hidden && el.type !== 'connector').map((el, i) => ({ el, i })).sort((a, b) => a.el.y - b.el.y || a.i - b.i).map((b) => b.el);
 }
 
 /**
@@ -43,9 +44,9 @@ export function flowDocument(doc, measure) {
         set(el, 'w', inner);
         set(el, 'h', Math.round(inner * ratio));
       } else if (el.w > inner) {
-        const s = inner / el.w;
-        set(el, 'w', inner);
-        set(el, 'h', Math.round(el.h * s));
+        // Smaller as a whole (a group's insides too).
+        scaleElement(el, inner / el.w, inner / el.w);
+        changed = true;
       }
       set(el, 'x', opts.margin);
       set(el, 'y', y);

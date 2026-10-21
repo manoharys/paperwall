@@ -29,16 +29,16 @@ function breakWord(word, width, m) {
   return parts;
 }
 
-/**
- * Lay out a text element.
- * Returns lines with their text, left offset (x, for list indents) and width,
- * plus the line height and the total height.
- */
 /** How far a sticky note's text sits in from its edges (0 for plain text). */
 export function notePad(el) {
   return el.note ? Math.round(Math.max(16, el.size * 0.6)) : 0;
 }
 
+/**
+ * Lay out a text element.
+ * Returns lines with their text, left offset (x, for list indents) and width,
+ * plus the line height and the total height.
+ */
 export function layoutText(el, measure) {
   // A sticky note's text wraps inside its edges.
   if (el.note) return layoutText({ ...el, note: null, w: Math.max(1, el.w - notePad(el) * 2) }, measure);

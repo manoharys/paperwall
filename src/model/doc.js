@@ -532,7 +532,6 @@ export function validateDesign(doc) {
       if (a.duration !== undefined) a.duration = clampNum(a.duration, 0, 86400, undefined);
     }
   }
-  // The soundtrack: a sound the design has, at a volume from 0 to 1.
   // A document's flow, a whiteboard's growing: numbers in range, else plain.
   if (doc.document !== undefined) {
     const d = doc.document;
@@ -541,6 +540,7 @@ export function validateDesign(doc) {
       : undefined;
   }
   if (doc.board !== undefined) doc.board = doc.board === true || undefined;
+  // The soundtrack: a sound the design has, at a volume from 0 to 1.
   if (doc.audio !== undefined) {
     const a = soundtrackOf(doc);
     doc.audio = a && a.type === 'audio' ? { assetId: doc.audio.assetId, volume: clampNum(doc.audio.volume, 0, 1, 1) } : undefined;

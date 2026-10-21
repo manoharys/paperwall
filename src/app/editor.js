@@ -447,13 +447,30 @@ export class Editor {
     return this.insert(el);
   }
 
-  /** A video from Uploads, at its own shape, as big as fits nicely (or dropped `at` a point). */
   /**
    * Take a video's still picture (what shows on the page, in thumbnails and
    * in still downloads) from where it starts, full size (up to 1920 px).
-   * Not an undo step of its own: it follows the video's start point.
+   * Not an undo step of its own: it follows the video's start point. A
+   * moment after the last call for a video (a start point stepped through
+   * quickly loads the video once). Resolves when it's done.
    */
-  async refreshStill(id) {
+  refreshStill(id) {
+    this.stills ||= new Map(); // video id → { timer, done }
+    const before = this.stills.get(id);
+    if (before) {
+      clearTimeout(before.timer);
+      before.done();
+    }
+    return new Promise((done) => {
+      const timer = setTimeout(() => {
+        this.stills.delete(id);
+        this.takeStill(id).finally(done);
+      }, 250);
+      this.stills.set(id, { timer, done });
+    });
+  }
+
+  async takeStill(id) {
     const found = locate(this.doc, id, this.pageData.id);
     if (found?.el.type !== 'video') return;
     const start = found.el.trim?.start || 0;
@@ -473,6 +490,7 @@ export class Editor {
     }
   }
 
+  /** A video from Uploads, at its own shape, as big as fits nicely (or dropped `at` a point). */
   addVideo(upload, { at } = {}) {
     const assetId = addAsset(this.doc, { ...upload, kind: 'video' });
     // (A size it doesn't know: the usual 16:9.)
@@ -988,7 +1006,6 @@ export class Editor {
     this.emit('strip');
   }
 
-  /** Change a page's motion (anim, duration, transition); undefined clears one. */
   /** A page's speaker notes (shown in the presenter view, never on the page). */
   setPageNotes(i, text, key = null) {
     const page = this.doc.pages[i];
@@ -999,6 +1016,7 @@ export class Editor {
     }, { key });
   }
 
+  /** Change a page's motion (anim, duration, transition); undefined clears one. */
   setPageMotion(i, patch, key = null) {
     const page = this.doc.pages[i];
     if (!page) return;

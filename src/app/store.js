@@ -146,8 +146,19 @@ export async function getThumb(id) {
   return kept !== undefined ? kept : (await get('designs', id))?.thumb ?? null;
 }
 
+// Saves of one design go one at a time (one's clean-up mustn't remove a
+// file the next has just written).
+const saving = new Map(); // design id → its latest save
+
 /** Save a design with a small preview image (left as it was when `thumb` is undefined). */
-export async function saveDesign(doc, thumb) {
+export function saveDesign(doc, thumb) {
+  const job = (saving.get(doc.id) || Promise.resolve()).catch(() => null).then(() => writeDesign(doc, thumb));
+  saving.set(doc.id, job);
+  job.finally(() => saving.get(doc.id) === job && saving.delete(doc.id)).catch(() => null);
+  return job;
+}
+
+async function writeDesign(doc, thumb) {
   deleted.delete(doc.id); // (saved again: a design once more, say opened from a file)
   if (thumb !== undefined) await put('settings', thumbKey(doc.id), thumb);
   else {
@@ -163,37 +174,28 @@ export async function saveDesign(doc, thumb) {
     }
   }
   // Without files nothing uses any more (a deleted video, a replaced
-  // soundtrack). Each file goes in its own row, written once; the design
-  // keeps only where to find it.
+  // soundtrack). Each file goes in its own row, written when it isn't there
+  // (a file never changes once added: an asset id is always the same file);
+  // the design keeps only where to find it.
   const kept = keptAssets(doc);
+  const have = new Set(await mediaKeys(doc.id));
   const assets = {};
   const writes = [];
   for (const [id, a] of Object.entries(kept.assets)) {
     const key = mediaKey(doc.id, id);
     const { dataUrl, ...details } = a;
-    if (written.get(a) !== key) writes.push([key, dataUrl, a]);
+    if (!have.has(key) && typeof dataUrl === 'string') writes.push([key, dataUrl]);
     assets[id] = { ...details, stored: key };
   }
-  if (writes.length) {
-    await batch('media', writes.map(([key, dataUrl]) => [key, dataUrl]));
-    for (const [key, , a] of writes) written.set(a, key);
-  }
+  if (writes.length) await batch('media', writes);
   await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: doc.height, pages: doc.pages.length, thumb: thumb ?? null, doc: { ...kept, assets } });
-  // Files this design no longer uses go (when the set of files has changed).
-  const ids = Object.keys(assets).sort().join(',');
-  if (lastFiles.get(doc.id) !== ids) {
-    lastFiles.set(doc.id, ids);
-    const keep = new Set(Object.values(assets).map((a) => a.stored));
-    const stale = (await mediaKeys(doc.id)).filter((k) => !keep.has(k));
-    if (stale.length) await batch('media', stale.map((k) => [k, undefined]));
-  }
+  // Files this design no longer uses go.
+  const keep = new Set(Object.values(assets).map((a) => a.stored));
+  const stale = [...have].filter((k) => !keep.has(k));
+  if (stale.length) await batch('media', stale.map((k) => [k, undefined]));
 }
 
 const mediaKey = (designId, assetId) => `${designId}|${assetId}`;
-// Files already in the media store, by the asset object that holds them
-// (assets never change once added), so they aren't written again.
-const written = new WeakMap();
-const lastFiles = new Map(); // design id → its file ids at the last save
 
 function mediaKeys(designId) {
   const [lo, hi] = range(`${designId}|`);
@@ -208,10 +210,7 @@ export async function loadDesign(id) {
   const refs = Object.values(doc.assets).filter((a) => a && typeof a.stored === 'string');
   const data = await getMany('media', refs.map((a) => a.stored));
   refs.forEach((a, i) => {
-    if (typeof data[i] === 'string') {
-      a.dataUrl = data[i];
-      written.set(a, a.stored);
-    }
+    if (typeof data[i] === 'string') a.dataUrl = data[i];
     delete a.stored;
   });
   return doc;
@@ -238,7 +237,6 @@ export async function deleteDesign(id) {
   await del('settings', thumbKey(id)).catch(() => null);
   await del('designs', id);
   await mediaKeys(id).then((keys) => batch('media', keys.map((k) => [k, undefined]))).catch(() => null);
-  lastFiles.delete(id);
   // The design is gone either way; its history is cleaned up as well as it can be.
   await deleteVersions(id).catch(() => null);
 }

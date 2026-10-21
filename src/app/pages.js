@@ -126,7 +126,9 @@ export function pageGrid(editor, canvas) {
  */
 export function present(editor, canvas, { autoplay = false, only = false, host = window, onPage = null, onClose = null } = {}) {
   const hostDoc = host.document;
-  const raf = (fn) => host.requestAnimationFrame(fn);
+  // Timed by this window's clock, whichever window draws (another window's
+  // frame times count from when it opened).
+  const raf = (fn) => host.requestAnimationFrame(() => fn(performance.now()));
   const unraf = (id) => host.cancelAnimationFrame(id);
   const doc = editor.doc;
   const shown = only ? [editor.page] : visiblePages(doc);
