@@ -18,6 +18,7 @@ import { menuButton, toggle, segmented, closePopover } from './widgets.js';
 import { findDialog } from './find.js';
 import { historyDialog } from './history.js';
 import { openOnlineSettings } from './online-settings.js';
+import { withSmallPictures } from './media.js';
 
 const root = document.getElementById('app');
 let current = null; // { editor, unbind }
@@ -121,7 +122,8 @@ async function openEditor(id) {
   await ensureDesignFonts(doc);
   const editor = new Editor(doc, {
     onOpenDesign: (newId) => (location.hash = `#/d/${newId}`),
-    makeThumb: thumbnail,
+    // (From smaller copies of its photos: quicker, and just as sharp that small.)
+    makeThumb: async (d) => thumbnail(await withSmallPictures(d)),
   });
   if (pendingFit) {
     editor.refitAllText();

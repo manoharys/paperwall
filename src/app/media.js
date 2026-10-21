@@ -2,9 +2,9 @@
 // turning a video's picture at a moment into an image the renderer can draw,
 // for playing, presenting and downloading.
 
-import { videoTime } from '../model/doc.js';
+import { videoTime, usedAssetIds } from '../model/doc.js';
 import { videosIn } from '../model/motion.js';
-import { dataUrlToBlob } from './ui.js';
+import { dataUrlToBlob, loadImage } from './ui.js';
 
 const LIMITS = { video: 60e6, audio: 25e6 };
 
@@ -332,4 +332,38 @@ function seeThrough(v) {
 /** Every video element on the given pages (inside groups too) whose file the design has. */
 export function videosOn(doc, pageIndexes) {
   return pageIndexes.flatMap((i) => (doc.pages[i] ? videosIn(doc.pages[i], doc.assets) : []));
+}
+
+const smaller = new WeakMap(); // a picture → its smaller copy (a data: URL), or null if it's small already
+
+/**
+ * The design with the pictures on its first page no bigger than `side` px,
+ * for small previews: drawing one then doesn't copy and decode every
+ * full-size photo. Each picture is made smaller once. Not a copy: shares
+ * everything else with `doc`.
+ */
+export async function withSmallPictures(doc, side = 720) {
+  const ids = usedAssetIds({ pages: doc.pages.slice(0, 1) });
+  const assets = { ...doc.assets };
+  await Promise.all([...ids].map(async (id) => {
+    const a = doc.assets[id];
+    if (!a || (a.type || 'image') !== 'image' || typeof a.dataUrl !== 'string' || a.dataUrl.startsWith('data:image/svg')) return;
+    if (!smaller.has(a)) smaller.set(a, shrink(a.dataUrl, side).catch(() => null));
+    const dataUrl = await smaller.get(a);
+    if (dataUrl) assets[id] = { ...a, dataUrl };
+  }));
+  return { ...doc, assets };
+}
+
+/** A picture redrawn at most `side` px on a side (null if it's no bigger than that already). */
+async function shrink(dataUrl, side) {
+  const img = await loadImage(dataUrl);
+  const k = side / Math.max(img.naturalWidth, img.naturalHeight);
+  if (!(k < 0.75)) return null;
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(img.naturalWidth * k));
+  c.height = Math.max(1, Math.round(img.naturalHeight * k));
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  // (Photos stay JPEG; anything that may be see-through, PNG.)
+  return dataUrl.startsWith('data:image/jpeg') ? c.toDataURL('image/jpeg', 0.85) : c.toDataURL('image/png');
 }
