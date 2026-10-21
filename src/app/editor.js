@@ -818,6 +818,11 @@ export class Editor {
     return group ? cmd.findElement(this.pageData, group).children : frames;
   }
 
+  /** An element of the design by id (this page's first), or null. */
+  find(id) {
+    return locate(this.doc, id, this.pageData.id)?.el || null;
+  }
+
   /** Make a plain background see-through. Returns how much of the picture was cleared (0..1). */
   async removeBackground(tolerance = 0.12) {
     const el = this.single;
@@ -839,9 +844,39 @@ export class Editor {
     const now = locate(this.doc, el.id)?.el;
     if (!now || now.assetId !== el.assetId || this.closed) return 0;
     this.change(() => {
-      now.assetId = addAsset(this.doc, { mime: 'image/png', dataUrl, width: canvas.width, height: canvas.height, name: `${asset.name || 'image'} (no background)` });
+      now.assetId = addAsset(this.doc, { mime: 'image/png', dataUrl, width: canvas.width, height: canvas.height, name: `${asset.name || 'image'} (no background)`, credit: asset.credit });
     });
     return cleared / (canvas.width * canvas.height);
+  }
+
+  /**
+   * Put a remade picture in an image element, as one undo step (`key` merges
+   * steps, like a slider's). make(rgba, w, h) changes the pixels of the
+   * picture at `dataUrl` in place, and may take its time. Returns the new
+   * asset's id, or null if the element was changed or removed meanwhile.
+   */
+
+  async remakeImage(elId, dataUrl, make, { key = null, name = 'image', from = null } = {}) {
+    // (`from`: the picture it was asked for, when that was a while ago: a download, say.)
+    const before = from ?? locate(this.doc, elId)?.el?.assetId;
+    const img = await loadImage(dataUrl);
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const g = canvas.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0);
+    const pixels = g.getImageData(0, 0, canvas.width, canvas.height);
+    await make(pixels.data, canvas.width, canvas.height);
+    g.putImageData(pixels, 0, 0);
+    const out = canvas.toDataURL('image/png');
+    const now = locate(this.doc, elId)?.el;
+    if (!now || now.assetId !== before || this.closed) return null;
+    let id = null;
+    this.change(() => {
+      // (A stock photo's credit stays with it, background or not.)
+      id = now.assetId = addAsset(this.doc, { mime: 'image/png', dataUrl: out, width: canvas.width, height: canvas.height, name, credit: this.doc.assets[before]?.credit });
+    }, { key });
+    return id;
   }
 
   setImageAsBackground() {

@@ -1,8 +1,11 @@
 # Security
 
-Paperwall runs entirely in your browser and makes no network requests: the
-page's Content-Security-Policy sets `connect-src 'none'`, and only Paperwall's
-own hashed scripts may run.
+Paperwall runs entirely in your browser and makes no network requests unless
+you turn on an online extra (stock photos, AI writing or design with your own
+key, the background-removal model). The page's Content-Security-Policy lists
+exactly those providers' addresses in `connect-src` and nothing else, and
+only Paperwall's own hashed scripts may run. Keys stay on your device and go
+only to the provider they belong to.
 
 The main thing that reaches Paperwall from outside is **design files people
 send each other**. Opening one must never run code or reach the network.

@@ -449,8 +449,12 @@ export async function listUploads() {
   return rows.sort((a, b) => b.addedAt - a.addedAt);
 }
 
+/** Uploads still on their way (a stock photo fetched while it's dragged): getUpload waits for them. */
+export const comingUploads = new Map();
+
 /** An upload, whole. */
 export async function getUpload(id) {
+  if (comingUploads.has(id)) return comingUploads.get(id);
   const [upload, data] = await getMany('uploads', [id, `${DATA}${id}`]);
   if (!upload) return upload;
   return data ? { ...upload, ...data } : upload;

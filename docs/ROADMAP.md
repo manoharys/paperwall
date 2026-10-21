@@ -57,13 +57,13 @@ Give people every option they might want. Each online feature talks to a
 swappable provider, and keys stay on the device and go only to the provider
 picked. No ads, accounts or paid tiers.
 
-- [ ] Stock photo search: Openverse (no key), Unsplash and Pexels (your key),
+- [x] Stock photo search: Openverse (no key), Unsplash and Pexels (your key),
       with attribution
-- [ ] AI writing: write, rewrite, shorten, translate, with Claude, OpenAI or
+- [x] AI writing: write, rewrite, shorten, translate, with Claude, OpenAI or
       Gemini (your key) or a local model through Ollama (no key)
-- [ ] AI design: describe a design, get an editable one (same providers)
-- [ ] Background removal for any photo, on-device model
-- [ ] Provider settings: pick a provider per feature, test a key, forget keys
+- [x] AI design: describe a design, get an editable one (same providers)
+- [x] Background removal for any photo, on-device model
+- [x] Provider settings: pick a provider per feature, test a key, forget keys
 
 ## v0.7 Pro export
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.6.0 (unreleased): Online extras, all opt-in
+
+Nothing here goes online until you turn it on, and each one talks only to
+the provider you pick. Keys stay on your device. No ads, no accounts.
+
+- Stock photos: search Openverse (no key), or Unsplash and Pexels with your
+  own key. Each photo keeps its credit (creator, license, source), shown
+  with a "Copy credit" button.
+- AI writing: write, rewrite, shorten, lengthen, fix, change the tone of or
+  translate a text box, with Claude, OpenAI or Gemini (your key) or a model
+  on your own computer through Ollama. One undo step each.
+- AI design: describe a design and get an editable one (or three to pick
+  from), with Paperwall's own fonts and icons.
+- Background removal for any photo, by a small open-license model
+  (U²-Net small, 4.6 MB) downloaded once with your OK and run on your
+  device by Paperwall's own engine.
+- Online extras settings: turn each on or off, pick a provider, test a key,
+  forget all keys.
+- The page's security policy lists exactly these providers' addresses and
+  nothing else.
+
 ## 0.5.0 (unreleased): Present, docs and whiteboards
 
 - Speaker notes for each page, and a presenter view: the slides in a

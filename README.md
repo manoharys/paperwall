@@ -23,9 +23,10 @@ No account. No upload. No watermark. No "Pro" wall.
 
 Posters, social posts, invitations, menus, thumbnails and slides, made in
 your browser. Paperwall is **one HTML file**: open it once and it works offline,
-on a plane, forever. Your photos never leave your computer, because the page
-is not allowed to send anything anywhere: its security policy blocks every
-network request, and the browser enforces that.
+on a plane, forever. Your photos never leave your computer: the page's
+security policy lets it talk only to the few providers of the optional online
+extras (stock photos, AI with your own key), and Paperwall talks to none of
+them until you turn one on. The browser enforces that.
 
 ## What's free here
 
@@ -45,7 +46,7 @@ end-to-end test in a real browser** or listed as **not done yet**. This table
 is generated from the test run, never written by hand.
 
 <!-- scoreboard:start -->
-**169 of 170 features verified** by browser tests · 1 not done yet · [full scoreboard](SCOREBOARD.md)
+**175 of 175 features verified** by browser tests · 0 not done yet · [full scoreboard](SCOREBOARD.md)
 
 | Area | Verified |
 | --- | --- |
@@ -56,7 +57,7 @@ is generated from the test run, never written by hand.
 | Editing | 20 / 20 |
 | Text | 23 / 23 |
 | Shapes and lines | 8 / 8 |
-| Images | 15 / 16 |
+| Images | 16 / 16 |
 | Graphics | 10 / 10 |
 | Color | 5 / 5 |
 | Brand kit | 3 / 3 |
@@ -64,9 +65,10 @@ is generated from the test run, never written by hand.
 | Documents and whiteboards | 5 / 5 |
 | Motion | 8 / 8 |
 | Export | 12 / 12 |
+| Online extras (opt-in) | 5 / 5 |
 | The app | 6 / 6 |
 
-Not done yet: remove an image's background on your device.
+Not done yet: nothing.
 <!-- scoreboard:end -->
 
 ## Use it
@@ -104,8 +106,9 @@ end-to-end tests use Playwright.
 
 Paperwall covers making a design on your own, start to finish, including
 animated ones (GIF, MP4, WebM), documents, whiteboards and presenting with
-notes. It has no stock library, AI, collaboration or cloud, and no timeline
-video editor. The honest,
+notes. Stock photos and AI (writing, design) are opt-in extras that use free
+providers or your own key; there is no hosted library, no image generation,
+no collaboration or cloud, and no timeline video editor. The honest,
 area-by-area comparison is in [docs/PARITY.md](docs/PARITY.md).
 
 ## Contributing

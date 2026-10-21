@@ -1,14 +1,14 @@
 {
   "summary": {
     "date": "2026-10-21",
-    "total": 170,
-    "verified": 169,
+    "total": 175,
+    "verified": 175,
     "failing": 0,
-    "todo": 1,
-    "e2eTests": 148,
-    "e2ePassing": 148,
-    "unitTests": 153,
-    "unitPassing": 153
+    "todo": 0,
+    "e2eTests": 159,
+    "e2ePassing": 159,
+    "unitTests": 179,
+    "unitPassing": 179
   },
   "areas": [
     {
@@ -590,7 +590,7 @@
         {
           "id": "IMG-11",
           "title": "Remove an image's background on your device",
-          "status": "todo"
+          "status": "verified"
         },
         {
           "id": "IMG-12",
@@ -917,6 +917,37 @@
         {
           "id": "EXP-12",
           "title": "PDF with real, selectable and searchable text",
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "id": "ON",
+      "name": "Online extras (opt-in)",
+      "features": [
+        {
+          "id": "ON-01",
+          "title": "Search free stock photos (Openverse, no key) and add them with their credit",
+          "status": "verified"
+        },
+        {
+          "id": "ON-02",
+          "title": "Unsplash and Pexels photo search with your own key, credited as they ask",
+          "status": "verified"
+        },
+        {
+          "id": "ON-03",
+          "title": "AI writing: write, rewrite, shorten and translate text with Claude, OpenAI, Gemini (your key) or Ollama",
+          "status": "verified"
+        },
+        {
+          "id": "ON-04",
+          "title": "AI design: describe a design and get an editable one",
+          "status": "verified"
+        },
+        {
+          "id": "ON-05",
+          "title": "Online settings: off until turned on, a provider per feature, test a key, forget keys",
           "status": "verified"
         }
       ]

@@ -2,6 +2,7 @@
 
 import { boxAround } from './geometry.js';
 import { ANIMATIONS, PAGE_ANIMATIONS, TRANSITIONS, LIMITS, clampNum, shownPages } from './motion.js';
+import { cleanCredit } from './photos.js';
 
 export const FORMAT_VERSION = 1;
 export const DPI = 300;
@@ -436,14 +437,22 @@ const ASSET_KINDS = new Set(['image', 'font', 'video', 'audio']);
 export const KEEPS_RATIO = ['image', 'video', 'icon', 'sticker', 'qr'];
 
 /** Add a picture, video or sound to the design (once: the same file is shared). Returns the asset id. */
-export function addAsset(doc, { mime, dataUrl, width, height, name = '', kind = 'image', duration, poster }) {
+export function addAsset(doc, { mime, dataUrl, width, height, name = '', kind = 'image', duration, poster, credit }) {
   // The same file used the same way is stored once (a sound and a video of
   // the same bytes stay apart: each kind is checked as its own when loaded).
   for (const [id, a] of Object.entries(doc.assets)) {
-    if (a.dataUrl === dataUrl && (a.type || 'image') === kind) return id;
+    if (a.dataUrl !== dataUrl || (a.type || 'image') !== kind) continue;
+    // (Already here without a credit: a stock photo's credit still goes with it.)
+    if (!a.credit && credit) {
+      const cleaned = cleanCredit(credit);
+      if (cleaned) a.credit = cleaned;
+    }
+    return id;
   }
   const id = uid('a');
-  doc.assets[id] = { type: kind, mime, dataUrl, width, height, name, ...(duration !== undefined ? { duration } : {}), ...(poster ? { poster } : {}) };
+  // (A stock photo keeps its credit: who made it, its license, where it's from.)
+  const cleaned = cleanCredit(credit);
+  doc.assets[id] = { type: kind, mime, dataUrl, width, height, name, ...(duration !== undefined ? { duration } : {}), ...(poster ? { poster } : {}), ...(cleaned ? { credit: cleaned } : {}) };
   return id;
 }
 
@@ -557,6 +566,8 @@ export function validateDesign(doc) {
     if (a && doc.assets[id]) {
       for (const k of ['width', 'height']) if (a[k] !== undefined) a[k] = clampNum(a[k], 1, 100000, undefined);
       if (a.duration !== undefined) a.duration = clampNum(a.duration, 0, 86400, undefined);
+      // A photo's credit: plain text and https links, nothing else.
+      if (a.credit !== undefined) a.credit = cleanCredit(a.credit) || undefined;
     }
   }
   // A document's flow, a whiteboard's growing: numbers in range, else plain.

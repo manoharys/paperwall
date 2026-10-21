@@ -170,6 +170,11 @@ h1, h2, h3 { margin: 0; line-height: 1.15; }
 .upload-sound small { font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .upload-play { position: absolute; left: 6px; top: 6px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; pointer-events: none; }
 .upload-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.upload-img.photo.busy { opacity: 0.5; cursor: progress; }
+.upload-img.photo.missing { background: repeating-linear-gradient(45deg, var(--panel-2) 0 8px, var(--panel) 8px 16px); }
+.photos { display: flex; flex-direction: column; gap: 10px; }
+.credit { font-size: 13px; margin: 0; overflow-wrap: anywhere; }
+.online-feature { display: flex; flex-direction: column; gap: 8px; padding: 4px 0 12px; border-bottom: 1px solid var(--line); }
 .brand-colors { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .brand-color { position: relative; }
 .brand-color .icon-btn { position: absolute; top: -10px; right: -10px; width: 22px; height: 22px; background: var(--panel); border: 1px solid var(--line); border-radius: 50%; opacity: 0; }
@@ -277,6 +282,8 @@ h1, h2, h3 { margin: 0; line-height: 1.15; }
 .dialog h2 { font-size: 18px; }
 .dialog h3 { font-size: 14px; margin: 16px 0 8px; }
 .dialog-body { padding: 0 20px 20px; overflow-y: auto; }
+.cutout { max-width: 420px; }
+.cutout progress { width: 100%; height: 8px; accent-color: var(--accent); }
 .stack { display: flex; flex-direction: column; gap: 12px; }
 .export { display: flex; flex-direction: column; gap: 8px; }
 .export-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
@@ -462,3 +469,28 @@ textarea.notes { width: 100%; resize: vertical; font: inherit; }
 
 /* While a download is being made, its choices wait. */
 .export.busy .segmented, .export.busy .page-picks { opacity: .55; pointer-events: none; }
+
+/* AI writing and AI design (online extras) */
+.ai-writing, .ai-menu, .ai-setup { display: flex; flex-direction: column; gap: 8px; }
+.ai-setup { padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); }
+.ai-setup input[type="text"], .ai-setup input[type="password"], .ai-setup select, .ai-line input, .ai-line select { width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
+.ai-line { display: flex; gap: 6px; align-items: center; }
+.ai-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.ai-grid.three { grid-template-columns: repeat(3, 1fr); }
+.ai-grid .btn { white-space: normal; }
+.ai-progress { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.ai-progress > span:nth-child(2) { flex: 1; }
+.ai-spinner { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: ai-spin 0.8s linear infinite; }
+@keyframes ai-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ai-spinner { animation: none; } }
+.ai-error { color: var(--danger); font-size: 13px; margin: 0; }
+.ai-design-form { display: flex; flex-direction: column; gap: 10px; max-width: 720px; }
+.ai-design-form textarea { width: 100%; resize: vertical; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.ai-design-form select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.ai-status { display: flex; flex-direction: column; gap: 10px; max-width: 720px; margin-top: 10px; }
+.ai-status:empty { display: none; }
+.ai-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.ai-choice { display: flex; flex-direction: column; gap: 6px; border: 0; padding: 0; background: none; cursor: pointer; text-align: left; }
+.ai-choice-img { display: block; width: 100%; border-radius: 6px; overflow: hidden; box-shadow: var(--shadow); background: #fff; }
+.ai-choice-img svg { display: block; width: 100%; height: 100%; }
+.ai-choice small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
