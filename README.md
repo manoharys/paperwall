@@ -103,8 +103,9 @@ end-to-end tests use Playwright.
 ## Compared with Canva
 
 Paperwall covers making a design on your own, start to finish, including
-animated ones (GIF, MP4, WebM). It has no stock library, AI, collaboration
-or cloud, and no timeline video editor. The honest,
+animated ones (GIF, MP4, WebM), documents, whiteboards and presenting with
+notes. It has no stock library, AI, collaboration or cloud, and no timeline
+video editor. The honest,
 area-by-area comparison is in [docs/PARITY.md](docs/PARITY.md).
 
 ## Contributing

@@ -17,7 +17,7 @@ import { gridLines, marginSize } from '../model/view.js';
 import { maskPath } from '../model/shapes.js';
 
 import { measure, ensureFont } from './fonts.js';
-import { mediaKind, checkSize, videoInfo, audioInfo } from './media.js';
+import { mediaKind, checkSize, videoInfo, audioInfo, VideoFrames } from './media.js';
 import { removePlainBackground } from '../model/bgremove.js';
 import { readFileAsDataUrl, loadImage, toast, debounce } from './ui.js';
 import * as store from './store.js';
@@ -448,6 +448,31 @@ export class Editor {
   }
 
   /** A video from Uploads, at its own shape, as big as fits nicely (or dropped `at` a point). */
+  /**
+   * Take a video's still picture (what shows on the page, in thumbnails and
+   * in still downloads) from where it starts, full size (up to 1920 px).
+   * Not an undo step of its own: it follows the video's start point.
+   */
+  async refreshStill(id) {
+    const found = locate(this.doc, id, this.pageData.id);
+    if (found?.el.type !== 'video') return;
+    const start = found.el.trim?.start || 0;
+    const frames = new VideoFrames(this.doc);
+    try {
+      const url = await frames.seek(found.el, 0, 1920 / Math.max(found.el.w, found.el.h));
+      if (!url || this.closed) return;
+      const img = await loadImage(url);
+      const now = locate(this.doc, id, this.pageData.id)?.el;
+      if (!now || (now.trim?.start || 0) !== start) return; // moved on meanwhile: that one takes its own
+      now.still = addAsset(this.doc, { dataUrl: url, mime: url.slice(5, url.indexOf(';')), width: img.naturalWidth, height: img.naturalHeight });
+      this.afterChange(false, { edit: false });
+    } catch {
+      /* the poster stays */
+    } finally {
+      frames.dispose();
+    }
+  }
+
   addVideo(upload, { at } = {}) {
     const assetId = addAsset(this.doc, { ...upload, kind: 'video' });
     // (A size it doesn't know: the usual 16:9.)
@@ -457,9 +482,10 @@ export class Editor {
     if (at) {
       el.x = at.x - el.w / 2;
       el.y = at.y - el.h / 2;
-      return this.insert(el, { center: false });
     }
-    return this.insert(el);
+    this.insert(el, { center: !at });
+    this.refreshStill(el.id); // (its full-size still picture, once taken)
+    return el;
   }
 
   /** Use a sound from Uploads as the design's soundtrack (null takes it away). */
@@ -827,6 +853,7 @@ export class Editor {
     const visit = (list) => {
       for (const el of list) {
         if ((el.type === 'image' || el.type === 'video') && this.doc.assets[el.assetId]) out[el.assetId] = this.doc.assets[el.assetId];
+        if (el.type === 'video' && this.doc.assets[el.still]) out[el.still] = this.doc.assets[el.still];
         if (el.type === 'group') visit(el.children);
       }
     };

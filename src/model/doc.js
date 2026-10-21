@@ -429,6 +429,7 @@ export function usedAssetIds(doc) {
   const visit = (els) => {
     for (const el of els) {
       if (el.type === 'image' || el.type === 'video') used.add(el.assetId);
+      if (el.type === 'video' && el.still) used.add(el.still);
       if (el.type === 'group') visit(el.children);
     }
   };
@@ -551,6 +552,8 @@ export function validateDesign(doc) {
     for (const el of els) {
       // (A picture then is an empty frame to fill; a video, a video whose file is missing.)
       if ((el.type === 'image' || el.type === 'video') && el.assetId && kindOf(el.assetId) && kindOf(el.assetId) !== el.type) el.assetId = el.type === 'image' ? null : 'missing';
+      // A video's still is a picture it has, or it goes (the poster shows).
+      if (el.still !== undefined && !(el.type === 'video' && kindOf(el.still) === 'image')) delete el.still;
       if (el.type === 'group') check(el.children);
     }
   };

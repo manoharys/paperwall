@@ -157,7 +157,10 @@ function renderImage(ctx, el) {
  */
 function renderVideo(ctx, el) {
   const asset = ctx.doc.assets[el.assetId];
-  const href = ctx.videoFrame?.(el) || (asset ? ctx.href(el.assetId, 'poster') : '');
+  // Playing: the moment's picture; else its still (where it starts, full
+  // size), else the small poster taken when it was added.
+  const still = el.still && ctx.doc.assets[el.still] ? ctx.href(el.still) : '';
+  const href = ctx.videoFrame?.(el) || still || (asset ? ctx.href(el.assetId, 'poster') : '');
   // Presenting a page whose videos play live: a place for the playing video
   // itself (put in after drawing), framed and clipped like a picture.
   const pic = renderPicture(ctx, el, href, ctx.videoSlots && asset ? 'slot' : 'image'); // no picture at all: the grey box of a missing image

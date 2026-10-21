@@ -2,9 +2,9 @@
 
 Canva is a huge product: a design editor, a content library, AI tools, video,
 whiteboards, documents, websites, team collaboration and printing. Paperwall is
-one part of that: **a design editor for one person making static designs**
-(posters, posts, invitations, menus, thumbnails, slides), running entirely on
-your device.
+one part of that: **a design editor for one person** (posters, posts,
+invitations, menus, thumbnails, slides, animated posts, documents and
+whiteboards), running entirely on your device.
 
 So the honest answer to "do we have parity with Canva?" is:
 
@@ -68,7 +68,9 @@ smaller way.
 | Templates | 🟡 | 397 original templates in 44 categories, including multi-page decks, calendars, menus and planners. Canva's library is still far larger. |
 | Fonts | 🟡 | 92 open-license families with a searchable picker, plus your own font files |
 | Icons and graphics | 🟡 | 1,956 icons (our own plus Lucide) and 198 stickers; no photo library yet |
-| Presentations | 🟡 | present full screen; no speaker notes, transitions or recording |
+| Presentations | 🟡 | present full screen with transitions and animations; speaker notes and a presenter view (next page, notes, timer, slides in their own window); no recording |
+| Documents | 🟡 | headings, paragraphs, lists and pictures that flow down the page and print on sheets; no tables of contents or page numbers yet |
+| Whiteboards | 🟡 | a canvas that grows, sticky notes in six colors, lines between things; no voting, timers or templates for workshops yet |
 
 ## Not in Paperwall (yet)
 
@@ -80,5 +82,5 @@ smaller way.
 | Video, animation, GIF/MP4 export | Done in v0.4: element and page animations, transitions, page timing, videos and a soundtrack, and GIF, MP4 and WebM downloads. Not yet: a timeline editor, cutting clips, video sound. |
 | Real-time collaboration, comments, share links | Not planned: there's no server. You can send the design file. |
 | Cloud sync across devices | Left out on purpose. Save to a file to move a design. |
-| Whiteboards, documents, websites, social scheduling, print ordering | Out of scope. |
+| Websites, social scheduling, print ordering | Out of scope. |
 

@@ -36,9 +36,12 @@ export function frameSize(doc, kind, wanted = null) {
  * timeSeconds, same)` in order (`same`: the picture hasn't changed since the
  * frame before). `pages` are the page indexes to play.
  */
-async function eachFrame(doc, pages, { fps, width, height, onProgress, signal, readBack = false }, each) {
-  const tl = timeline(doc, pages);
+async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, readBack = false }, each) {
+  const tl = timeline(doc0, pages);
   if (!tl.parts.length) throw new Error('Pick at least one page.');
+  // Big photos made only as big as the frames can show, once, rather than
+  // decoded at full size for every frame.
+  const doc = await fittedPictures(doc0, width, height);
   const count = Math.max(1, Math.round(tl.total * fps));
   // Fonts of just the pages being played (each frame carries them).
   const fontCss = await fontCssFor({ ...doc, pages: pages.map((i) => doc.pages[i]) });
@@ -104,6 +107,35 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal, r
     videos?.dispose();
   }
   return { count, total: tl.total, stuck: !!videos?.stuck };
+}
+
+/**
+ * The design with each picture no bigger than frames `width` × `height`
+ * could use (twice their longest side, so a zoomed-in crop stays sharp).
+ * A copy: the design itself keeps its pictures.
+ */
+async function fittedPictures(doc, width, height) {
+  const cap = Math.max(width, height) * 2;
+  const assets = { ...doc.assets };
+  for (const [id, a] of Object.entries(doc.assets)) {
+    if (!a || (a.type && a.type !== 'image') || typeof a.dataUrl !== 'string') continue;
+    if (!(Math.max(a.width || 0, a.height || 0) > cap) || a.dataUrl.startsWith('data:image/svg')) continue;
+    try {
+      const img = await loadImage(a.dataUrl);
+      const s = cap / Math.max(img.naturalWidth, img.naturalHeight);
+      if (!(s < 1)) continue;
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.naturalWidth * s));
+      c.height = Math.max(1, Math.round(img.naturalHeight * s));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      // (Pictures that may be see-through stay PNG.)
+      const clear = /^data:image\/(png|webp|gif)/.test(a.dataUrl);
+      assets[id] = { ...a, dataUrl: c.toDataURL(clear ? 'image/png' : 'image/jpeg', 0.92), width: c.width, height: c.height };
+    } catch {
+      /* kept as it is */
+    }
+  }
+  return { ...doc, assets };
 }
 
 /** One frame (the page(s) at their moment, as SVG) into the canvas. */

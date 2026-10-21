@@ -467,7 +467,10 @@ export class Inspector {
     const length = asset?.duration || 0;
     return [section('Video',
       h('p', { class: 'hint' }, `${length ? `${Math.round(length * 10) / 10} seconds. ` : ''}Plays when the page plays, presents or downloads as a video. Videos play without their sound: add a soundtrack from Uploads.`),
-      length > 0.5 ? slider({ label: 'Start at', value: el.trim?.start || 0, min: 0, max: Math.floor((length - 0.5) * 10) / 10, step: 0.1, unit: 's', testid: 'video-start', onChange: (v, l) => this.up({ trim: { start: v } }, l ? 'trim' : null) }) : null,
+      length > 0.5 ? slider({ label: 'Start at', value: el.trim?.start || 0, min: 0, max: Math.floor((length - 0.5) * 10) / 10, step: 0.1, unit: 's', testid: 'video-start', onChange: (v, l) => {
+        this.up({ trim: { start: v } }, l ? 'trim' : null);
+        if (!l) this.ed.refreshStill(el.id); // the still picture: where it now starts
+      } }) : null,
       toggle({ label: 'Play again from the start when it ends', checked: el.loop !== false, testid: 'video-loop', onChange: (on) => this.up({ loop: on }) }),
       selectField({ label: 'Frame shape', value: el.mask || 'none', testid: 'video-mask', options: FRAME_MASKS.map((m) => ({ value: m, label: MASK_LABELS[m] })), onChange: (mask) => this.up({ mask }) }),
       !el.mask || el.mask === 'none' ? slider({ label: 'Corner rounding', value: el.radius || 0, min: 0, max: Math.round(Math.min(el.w, el.h) / 2), onChange: this.live('radius') }) : null)];
