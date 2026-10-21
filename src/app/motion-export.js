@@ -17,6 +17,8 @@ function bytesOf(d) {
   return ArrayBuffer.isView(d) ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength).slice() : new Uint8Array(d.slice(0));
 }
 
+const NO_AVC_DESCRIPTION = "This browser's MP4 encoder left out what players need. Try WebM instead.";
+
 /** Frames per second for each kind of download. */
 export const FPS = { gif: 15, video: 30 };
 
@@ -180,7 +182,7 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
       await drain(encoder, 4);
       // H.264 for MP4 needs the encoder's description, which comes with its
       // first output: without it, say so now rather than after every frame.
-      if (pick.codec === 'avc' && chunks.length && !description) throw new Error("This browser's MP4 encoder left out what players need. Try WebM instead.");
+      if (pick.codec === 'avc' && chunks.length && !description) throw new Error(NO_AVC_DESCRIPTION);
     }));
     await encoder.flush();
   } finally {
@@ -188,7 +190,7 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
     if (encoder.state !== 'closed') encoder.close();
   }
   if (failure) throw failure;
-  if (pick.codec === 'avc' && !description) throw new Error("This browser's MP4 encoder left out what players need. Try WebM instead.");
+  if (pick.codec === 'avc' && !description) throw new Error(NO_AVC_DESCRIPTION);
   let sound = null;
   if (audio) {
     // The pictures are done: a sound that won't encode leaves a silent video, not nothing.

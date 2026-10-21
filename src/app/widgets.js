@@ -265,7 +265,7 @@ export const GRADIENT_PRESETS = [
 ].map(([name, ...colors]) => ({ name, stops: colors.map((color, i) => ({ offset: i / (colors.length - 1), color })) }));
 
 function cssGradient(g, angle = 90) {
-  const stops = sortedStops(g).map((s) => `${s.color} ${Math.round((s.offset ?? 0) * 100)}%`).join(', ');
+  const stops = sortedStops(g).map((s) => `${s.color} ${Math.round(s.offset * 100)}%`).join(', ');
   return `linear-gradient(${angle}deg, ${stops})`;
 }
 
@@ -288,12 +288,12 @@ export function gradientEditor({ label, value, onChange, getContext, testid, cur
   // Stops are kept in order, so the page draws the same gradient as the bar above.
   const setStop = (i, patch, live) => {
     const tagged = nowStops().map((s, k) => ({ s: k === order[i] ? { ...s, ...patch } : s, k }));
-    tagged.sort((a, b) => (a.s.offset ?? 0) - (b.s.offset ?? 0)); // a stop without an offset counts as 0, as when drawn
+    tagged.sort((a, b) => a.s.offset - b.s.offset);
     order = order.map((k) => tagged.findIndex((t) => t.k === k));
     emit({ stops: tagged.map((t) => t.s) }, live);
   };
   const addStop = () => {
-    const stops = nowStops().map((s) => ({ ...s, offset: s.offset ?? 0 }));
+    const stops = nowStops();
     // Put the new color in the middle of the widest gap.
     let at = 0;
     for (let i = 1; i < stops.length - 1; i++) if (stops[i + 1].offset - stops[i].offset > stops[at + 1].offset - stops[at].offset) at = i;
@@ -304,7 +304,7 @@ export function gradientEditor({ label, value, onChange, getContext, testid, cur
     h('div', { class: 'grad-bar', style: { background: cssGradient(g) } }),
     stops.map((s, i) => h('div', { class: 'grad-stop', 'data-testid': 'grad-stop' },
       colorButton({ label: `${label} color ${i + 1}`, value: s.color, getContext, testid: `grad-color-${i}`, onChange: (c, l) => setStop(i, { color: c }, l) }),
-      h('input', { type: 'range', min: 0, max: 100, value: Math.round((s.offset ?? 0) * 100), 'aria-label': `${label} color ${i + 1} position`, 'data-testid': `grad-pos-${i}`, onInput: (e) => setStop(i, { offset: +e.target.value / 100 }, true), onChange: (e) => setStop(i, { offset: +e.target.value / 100 }) }),
+      h('input', { type: 'range', min: 0, max: 100, value: Math.round(s.offset * 100), 'aria-label': `${label} color ${i + 1} position`, 'data-testid': `grad-pos-${i}`, onInput: (e) => setStop(i, { offset: +e.target.value / 100 }, true), onChange: (e) => setStop(i, { offset: +e.target.value / 100 }) }),
       stops.length > 2 ? iconButton('close', `Remove color ${i + 1}`, () => emit({ stops: nowStops().filter((_, k) => k !== order[i]) }), { 'data-testid': `grad-remove-${i}` }) : h('span', { class: 'grad-spacer' }))),
     stops.length < 8 ? h('button', { type: 'button', class: 'link-btn', 'data-testid': 'grad-add', onClick: addStop }, '+ Add a color') : null,
     segmented({ label: 'Gradient style', value: g.type, onChange: (type) => emit({ type }), options: [{ value: 'linear', label: 'Linear', text: 'Linear' }, { value: 'radial', label: 'Radial', text: 'Radial' }] }),
