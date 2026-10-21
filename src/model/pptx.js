@@ -128,21 +128,33 @@ function color(hex, alpha = 1) {
   return a < 100000 ? `<a:srgbClr val="${h}"><a:alpha val="${a}"/></a:srgbClr>` : `<a:srgbClr val="${h}"/>`;
 }
 
-/** A fill: a color, a gradient, or none. */
-function fill(paint, alpha = 1) {
+/** A fill for a w × h box: a color, a gradient, or none. */
+function fill(paint, alpha = 1, w = 1, h = 1) {
   if (!paint) return '<a:noFill/>';
   if (typeof paint === 'string') {
     if (!normalizeHex(paint)) return '<a:noFill/>';
     return `<a:solidFill>${color(paint, alpha)}</a:solidFill>`;
   }
-  const stops = sortedStops(paint);
-  if (!stops.length) return '<a:noFill/>';
-  const gs = (stops.length === 1 ? [stops[0], { ...stops[0], offset: 1 }] : stops)
-    .map((s) => `<a:gs pos="${Math.round(Math.max(0, Math.min(1, s.offset)) * 100000)}">${color(s.color, alpha * (s.opacity ?? 1))}</a:gs>`).join('');
-  if (paint.type === 'radial') return `<a:gradFill rotWithShape="1"><a:gsLst>${gs}</a:gsLst><a:path path="circle"><a:fillToRect l="50000" t="50000" r="50000" b="50000"/></a:path></a:gradFill>`;
-  // Our angle points the way the colors go (0 up, 90 right); PowerPoint's turns clockwise from "right".
-  const ang = ((((paint.angle ?? 180) - 90) % 360) + 360) % 360;
-  return `<a:gradFill rotWithShape="1"><a:gsLst>${gs}</a:gsLst><a:lin ang="${Math.round(ang * 60000)}" scaled="0"/></a:gradFill>`;
+  const sorted = sortedStops(paint);
+  if (!sorted.length) return '<a:noFill/>';
+  let stops = (sorted.length === 1 ? [sorted[0], { ...sorted[0], offset: 1 }] : sorted).map((s) => ({ ...s, offset: Math.max(0, Math.min(1, s.offset)) }));
+  const gs = () => stops.map((s) => `<a:gs pos="${Math.round(s.offset * 100000)}">${color(s.color, alpha * (s.opacity ?? 1))}</a:gs>`).join('');
+  if (paint.type === 'radial') return `<a:gradFill rotWithShape="1"><a:gsLst>${gs()}</a:gsLst><a:path path="circle"><a:fillToRect l="50000" t="50000" r="50000" b="50000"/></a:path></a:gradFill>`;
+  // The page draws it in the box's own units (objectBoundingBox): from one
+  // side of the middle to the other along our angle (0 up, 90 right) in a
+  // unit square, stretched to w × h. So the colors run, on the slide, along
+  // (sin a / w, -cos a / h); PowerPoint's angle turns clockwise from "right".
+  const a = ((paint.angle ?? 180) * Math.PI) / 180;
+  const ang = ((((Math.atan2(-Math.cos(a) / (h || 1), Math.sin(a) / (w || 1)) * 180) / Math.PI) % 360) + 360) % 360;
+  // PowerPoint's run of colors reaches the box's corners, |sin a| + |cos a|
+  // times the page's: the stops move in toward the middle by as much, with
+  // the end colors on beyond them, as the page pads them.
+  const reach = Math.abs(Math.sin(a)) + Math.abs(Math.cos(a));
+  if (reach > 1.0001) {
+    stops = stops.map((s) => ({ ...s, offset: 0.5 + (s.offset - 0.5) / reach }));
+    stops = [{ ...stops[0], offset: 0 }, ...stops, { ...stops[stops.length - 1], offset: 1 }];
+  }
+  return `<a:gradFill rotWithShape="1"><a:gsLst>${gs()}</a:gsLst><a:lin ang="${Math.round(ang * 60000) % 21600000}" scaled="0"/></a:gradFill>`;
 }
 
 function line(el, emu, alpha) {
@@ -242,7 +254,7 @@ class Slide {
 
   shape(el) {
     const a = el.opacity ?? 1;
-    return `<p:sp>${this.nv('Sp', `Shape ${this.nextId}`)}<p:spPr>${xfrm(el, this.emu)}${geometry(el.shape, el, this.emu, shapePath(el))}${fill(el.fill, a)}${line(el, this.emu, a)}</p:spPr></p:sp>`;
+    return `<p:sp>${this.nv('Sp', `Shape ${this.nextId}`)}<p:spPr>${xfrm(el, this.emu)}${geometry(el.shape, el, this.emu, shapePath(el))}${fill(el.fill, a, el.w, el.h)}${line(el, this.emu, a)}</p:spPr></p:sp>`;
   }
 
   line(el) {
@@ -352,7 +364,7 @@ class Slide {
   background(page) {
     const bg = page.background;
     if (!bg) return '';
-    const f = bg.type === 'color' ? fill(bg.color) : bg.type === 'gradient' ? fill(bg.gradient) : bg.type === 'image' ? fill(bg.color || '#ffffff') : null;
+    const f = bg.type === 'color' ? fill(bg.color) : bg.type === 'gradient' ? fill(bg.gradient, 1, this.doc.width, this.doc.height) : bg.type === 'image' ? fill(bg.color || '#ffffff') : null;
     return f ? `<p:bg><p:bgPr>${f}<a:effectLst/></p:bgPr></p:bg>` : '';
   }
 
