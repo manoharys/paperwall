@@ -297,7 +297,7 @@ function drawEditor(editor, view = null) {
   };
   document.fonts.addEventListener('loadingdone', onFontsLoaded);
   // Handy in the console, and used by the end-to-end tests.
-  window.paperwall = { editor, canvas, inspector, export: exportApi, store, cutout: cutoutApi, VideoFrames };
+  window.paperwall = { editor, canvas, inspector, export: exportApi, store, cutout: cutoutApi, VideoFrames, withSmallPictures };
   const unbind = () => {
     document.fonts.removeEventListener('loadingdone', onFontsLoaded);
     unbindKeys();

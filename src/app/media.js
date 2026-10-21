@@ -405,9 +405,10 @@ export async function shrinkPictures(doc, ids, scaleFor, { under = 0.9, quality 
   };
   // (Two at a time: quicker than one by one, without every big photo
   // decoded at full size at once.)
-  const queue = [...ids];
+  // (No id: an empty frame. Left out, so it doesn't end the queue for the rest.)
+  const queue = [...ids].filter(Boolean);
   const next = async () => {
-    for (let id = queue.shift(); id; id = queue.shift()) await one(id);
+    while (queue.length) await one(queue.shift());
   };
   await Promise.all([next(), next()]);
   return { ...doc, assets };

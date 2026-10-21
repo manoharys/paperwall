@@ -226,6 +226,32 @@ test('[APP-07] a video download draws what is still once, with the video and wha
   await context.close();
 });
 
+test('[APP-07] previews shrink every photo, empty frames before them or not', async () => {
+  const { page, context, errors } = await newDesign('square');
+  const sizes = await page.evaluate(async () => {
+    const photo = (color) => {
+      const c = document.createElement('canvas');
+      c.width = 2400;
+      c.height = 1600;
+      const g = c.getContext('2d');
+      g.fillStyle = color;
+      g.fillRect(0, 0, 2400, 1600);
+      return c.toDataURL('image/jpeg', 0.9);
+    };
+    const filters = { brightness: 100, contrast: 100, saturation: 100, grayscale: 0, sepia: 0, blur: 0, warmth: 0, tint: 0, hue: 0, vignette: 0, duotone: null };
+    const img = (id, assetId, x) => ({ id, type: 'image', x, y: 100, w: 300, h: 200, rotation: 0, opacity: 1, assetId, crop: { x: 0, y: 0, w: 1, h: 1 }, filters, radius: 0, mask: 'none' });
+    const doc = JSON.parse(JSON.stringify(window.paperwall.editor.doc));
+    doc.assets = { a: { type: 'image', mime: 'image/jpeg', dataUrl: photo('#c04020'), width: 2400, height: 1600 }, b: { type: 'image', mime: 'image/jpeg', dataUrl: photo('#2040c0'), width: 2400, height: 1600 } };
+    // Two empty frames (no picture yet) first, then the photos.
+    doc.pages[0].elements = [img('e1', null, 0), img('e2', null, 300), img('p1', 'a', 600), img('p2', 'b', 0)];
+    const small = await window.paperwall.withSmallPictures(doc);
+    return ['a', 'b'].map((id) => small.assets[id].width);
+  });
+  assert.deepEqual(sizes, [720, 720]);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('[APP-07] a video seeks again and again without waiting out a timeout', async () => {
   const { page, context, errors } = await newDesign('square');
   await addClip(page, { x: 0, y: 0, w: 1080, h: 810 });
