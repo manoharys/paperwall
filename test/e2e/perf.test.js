@@ -251,25 +251,27 @@ test('[APP-07] previews shrink every photo to the size it shows (cropped too), e
     const again = await window.paperwall.withSmallPictures(doc);
     return [small, bigger, again].map((d) => ['a', 'b'].map((id) => d.assets[id].width));
   });
-  // A 720 px preview of the 1080 px page shows them 200 and 800 px wide; 1200 px, 333 and 1333.
-  const want = [[200, 800], [333, 1333], [200, 800]];
-  assert.ok(sizes.every((pair, i) => pair.every((w, k) => Math.abs(w - want[i][k]) <= 3)), JSON.stringify(sizes));
+  // A 720 px preview of the 1080 px page shows them 200 and 800 px wide (made
+  // up to the next twentieth of 2400: 240 and 840); 1200 px, 333 and 1333 (360 and 1440).
+  assert.deepEqual(sizes, [[240, 840], [360, 1440], [240, 840]]);
   assert.deepEqual(errors, []);
   await context.close();
 });
 
-test('[APP-07] a video that never shows its picture where it is sent: a download gives up on it once, and says so', async () => {
-  const { page, context, errors } = await newDesign('square');
-  await addClip(page, { x: 0, y: 0, w: 1080, h: 810 });
-  await page.evaluate(() => window.paperwall.editor.setPageMotion(0, { duration: 2 }));
-  const out = await page.evaluate(async () => {
+/**
+ * Download the page's clip (2 s, 60 frames) while its video reports no
+ * picture where it's sent: after every send ('all'), or after the sends
+ * `slowAt` lists (1 is the first). Resolves to { took, notes, sent }.
+ */
+function downloadWithSlowVideo(page, slowAt) {
+  return page.evaluate(async (slowList) => {
     const ed = window.paperwall.editor;
     const proto = HTMLMediaElement.prototype;
     const ready = Object.getOwnPropertyDescriptor(proto, 'readyState');
     const time = Object.getOwnPropertyDescriptor(proto, 'currentTime');
     let sent = 0;
-    // Every video seeks, but never has its picture there; and each time one is sent somewhere is counted.
-    Object.defineProperty(proto, 'readyState', { configurable: true, get() { return Math.min(1, ready.get.call(this)); } });
+    const slow = () => (slowList === 'all' ? sent > 0 : slowList.includes(sent));
+    Object.defineProperty(proto, 'readyState', { configurable: true, get() { const r = ready.get.call(this); return slow() ? Math.min(1, r) : r; } });
     Object.defineProperty(proto, 'currentTime', { configurable: true, get() { return time.get.call(this); }, set(v) { sent++; time.set.call(this, v); } });
     const notes = [];
     const t0 = performance.now();
@@ -280,11 +282,51 @@ test('[APP-07] a video that never shows its picture where it is sent: a download
       Object.defineProperty(proto, 'currentTime', time);
     }
     return { took: performance.now() - t0, notes, sent };
-  });
-  // 60 frames: one wait of 1.5 s, not one each.
+  }, slowAt);
+}
+
+test('[APP-07] a video that never shows its picture where it is sent: a download gives up on it after three tries, and says so', async () => {
+  const { page, context, errors } = await newDesign('square');
+  await addClip(page, { x: 0, y: 0, w: 1080, h: 810 });
+  await page.evaluate(() => window.paperwall.editor.setPageMotion(0, { duration: 2 }));
+  const out = await downloadWithSlowVideo(page, 'all');
+  // 60 frames: three waits of 1.5 s, not one each.
   assert.ok(out.took < 20000, `made in ${Math.round(out.took)} ms`);
-  assert.ok(out.sent <= 3, `sent to a time ${out.sent} times, then left alone`);
+  assert.ok(out.sent <= 4, `sent to a time ${out.sent} times, then left alone`);
   assert.equal(out.notes.length, 1, 'the download says a video couldn\'t be followed');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('[APP-07] one slow video frame is just that frame: the video is followed on after it', async () => {
+  const { page, context, errors } = await newDesign('square');
+  await addClip(page, { x: 0, y: 0, w: 1080, h: 810 });
+  await page.evaluate(() => window.paperwall.editor.setPageMotion(0, { duration: 2 }));
+  // Slow once, then twice running: never three times, so never given up on.
+  const out = await downloadWithSlowVideo(page, [5, 20, 21]);
+  assert.ok(out.took < 20000, `made in ${Math.round(out.took)} ms`);
+  assert.ok(out.sent > 30, `still sent along with the frames: ${out.sent} times`);
+  assert.deepEqual(out.notes, [], 'nothing to say: it was followed');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('[APP-07] a preview shows the design as it was asked for, not a change made while it\'s drawn', async () => {
+  const { page, context, errors } = await newDesign('square');
+  const same = await page.evaluate(async () => {
+    const ed = window.paperwall.editor;
+    ed.change(() => ed.pageData.elements.push({ id: 'box', type: 'shape', shape: 'rect', x: 100, y: 100, w: 600, h: 600, rotation: 0, opacity: 1, fill: '#d02020' }));
+    const box = ed.pageData.elements.find((el) => el.id === 'box');
+    // Changed straight after asking (as a drag starting would): not in this preview.
+    const asked = ed.makeThumb(ed.doc);
+    box.fill = '#2040d0';
+    const during = await asked;
+    const blue = await ed.makeThumb(ed.doc);
+    box.fill = '#d02020';
+    const red = await ed.makeThumb(ed.doc);
+    return { asRed: during === red, notBlue: during !== blue };
+  });
+  assert.deepEqual(same, { asRed: true, notBlue: true });
   assert.deepEqual(errors, []);
   await context.close();
 });

@@ -40,8 +40,10 @@ function once(target, ok, bad = 'error', ms = 15000) {
   });
 }
 
-// How long a video may take to show its picture where it was sent (ms).
+// How long a video may take to show its picture where it was sent (ms),
+// and how many times running before it's given up on.
 const PICTURE_WAIT = 1500;
+const SLOW_TIMES = 3;
 
 /**
  * Wait until a video has its picture where it is now (readyState 2 or more),
@@ -230,12 +232,17 @@ export class VideoFrames {
       if (!(await seeked)) return this.giveUp(p);
     }
     // (Its picture there, ready to draw: a busy device can lag behind the seek.)
-    if (!(await pictureHere(v))) return this.giveUp(p);
+    if (!(await pictureHere(v))) {
+      // Too slow this once: its poster for this frame. Three times running, and it's given up on.
+      p.slow = (p.slow || 0) + 1;
+      return p.slow >= SLOW_TIMES ? this.giveUp(p) : null;
+    }
+    p.slow = 0;
     return v.videoWidth ? v : null;
   }
 
   /**
-   * A video that won't seek here, or doesn't show its picture there in
+   * A video that won't seek here, or keeps not showing its picture there in
    * time: its poster shows from now on (no more waits on it for later
    * frames), and a download says it couldn't be followed.
    */
@@ -411,8 +418,8 @@ export function pictureShares(doc, pages, scale) {
   return share;
 }
 
-// A picture → its smaller copies, by how much smaller (in thousandths) →
-// { dataUrl, width, height }.
+// A picture → its latest smaller copy: { key (how much smaller, in
+// twentieths), job (→ { dataUrl, width, height }) }.
 const smaller = new WeakMap();
 
 /**
@@ -432,7 +439,8 @@ export function withSmallPictures(doc, side = 720) {
  * it needs to be, as a share of its own size); one that needn't be under
  * `under` of it stays as it is. A copy of the design's assets (the design
  * keeps its pictures); everything else is shared. `cache` (a WeakMap) keeps
- * each picture's smaller copies for next time.
+ * each picture's latest smaller copy for next time: sizes are rounded up to
+ * twentieths of the picture's own, so nearby sizes share one.
  */
 export async function shrinkPictures(doc, scales, { under = 0.9, quality = 0.92, cache = null } = {}) {
   const assets = { ...doc.assets };
@@ -440,15 +448,14 @@ export async function shrinkPictures(doc, scales, { under = 0.9, quality = 0.92,
     const a = doc.assets[id];
     // (Pictures only, and not SVGs: they're drawn at any size anyway.)
     if (!(k < under) || typeof a?.dataUrl !== 'string' || !a.dataUrl.startsWith('data:image/') || a.dataUrl.startsWith('data:image/svg')) return;
-    const key = Math.max(1, Math.round(k * 1000));
-    let copies = cache?.get(a);
-    if (cache && !copies) cache.set(a, (copies = new Map()));
-    let job = copies?.get(key);
-    if (!job) {
-      job = redrawSmaller(a.dataUrl, key / 1000, quality).catch(() => null);
-      copies?.set(key, job);
+    const key = Math.max(1, Math.ceil(k * 20)); // (rounded up: never less sharp than asked)
+    if (key >= 20) return;
+    let kept = cache?.get(a);
+    if (kept?.key !== key) {
+      kept = { key, job: redrawSmaller(a.dataUrl, key / 20, quality).catch(() => null) };
+      cache?.set(a, kept);
     }
-    const made = await job;
+    const made = await kept.job;
     if (made) assets[id] = { ...a, ...made };
   };
   // (Two at a time: quicker than one by one, without every big photo

@@ -12,7 +12,7 @@ import { exportDialog, saveProjectFile, thumbnail, api as exportApi } from './ex
 import { renderHome } from './home.js';
 import { loadFonts, registerDesignFonts, ensureDesignFonts, clearMeasureCache } from './fonts.js';
 import * as store from './store.js';
-import { validateDesign, versionSnapshot } from '../model/doc.js';
+import { validateDesign, versionSnapshot, clone } from '../model/doc.js';
 import { fontsUsed } from '../model/fonts.js';
 import { menuButton, toggle, segmented, closePopover, languagePicker } from './widgets.js';
 import { findDialog } from './find.js';
@@ -172,7 +172,9 @@ async function openEditor(id) {
   const editor = new Editor(doc, {
     onOpenDesign: (newId) => (location.hash = `#/d/${newId}`),
     // (From smaller copies of its photos: quicker, and just as sharp that small.)
-    makeThumb: async (d) => thumbnail(await withSmallPictures(d)),
+    // (Its pages copied first: a drag starting while its pictures are made
+    // smaller doesn't land half-done in the preview.)
+    makeThumb: async (d) => thumbnail(await withSmallPictures({ ...d, pages: clone(d.pages) })),
   });
   if (pendingFit) {
     editor.refitAllText();
