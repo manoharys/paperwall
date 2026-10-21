@@ -1,14 +1,14 @@
 {
   "summary": {
     "date": "2026-10-21",
-    "total": 178,
-    "verified": 178,
+    "total": 179,
+    "verified": 179,
     "failing": 0,
     "todo": 0,
-    "e2eTests": 166,
-    "e2ePassing": 166,
-    "unitTests": 193,
-    "unitPassing": 193
+    "e2eTests": 170,
+    "e2ePassing": 170,
+    "unitTests": 195,
+    "unitPassing": 195
   },
   "areas": [
     {
@@ -999,6 +999,11 @@
         {
           "id": "APP-06",
           "title": "Works offline after the first visit",
+          "status": "verified"
+        },
+        {
+          "id": "APP-07",
+          "title": "Stays quick with 50+ pages, long documents and large photos",
           "status": "verified"
         }
       ]

@@ -49,7 +49,7 @@ end-to-end test in a real browser** or listed as **not done yet**. This table
 is generated from the test run, never written by hand.
 
 <!-- scoreboard:start -->
-**178 of 178 features verified** by browser tests · 0 not done yet · [full scoreboard](SCOREBOARD.md)
+**179 of 179 features verified** by browser tests · 0 not done yet · [full scoreboard](SCOREBOARD.md)
 
 | Area | Verified |
 | --- | --- |
@@ -69,7 +69,7 @@ is generated from the test run, never written by hand.
 | Motion | 8 / 8 |
 | Export | 15 / 15 |
 | Online extras (opt-in) | 5 / 5 |
-| The app | 6 / 6 |
+| The app | 7 / 7 |
 
 Not done yet: nothing.
 <!-- scoreboard:end -->
