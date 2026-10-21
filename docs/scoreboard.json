@@ -1,14 +1,14 @@
 {
   "summary": {
     "date": "2026-10-21",
-    "total": 175,
-    "verified": 175,
+    "total": 178,
+    "verified": 178,
     "failing": 0,
     "todo": 0,
-    "e2eTests": 159,
-    "e2ePassing": 159,
-    "unitTests": 179,
-    "unitPassing": 179
+    "e2eTests": 166,
+    "e2ePassing": 166,
+    "unitTests": 193,
+    "unitPassing": 193
   },
   "areas": [
     {
@@ -917,6 +917,21 @@
         {
           "id": "EXP-12",
           "title": "PDF with real, selectable and searchable text",
+          "status": "verified"
+        },
+        {
+          "id": "EXP-13",
+          "title": "Vector PDF with embedded fonts: shapes, gradients and pictures stay sharp, text stays real",
+          "status": "verified"
+        },
+        {
+          "id": "EXP-14",
+          "title": "Print PDF with bleed and crop marks",
+          "status": "verified"
+        },
+        {
+          "id": "EXP-15",
+          "title": "Download as PowerPoint (.pptx) with editable text, shapes and pictures",
           "status": "verified"
         }
       ]
