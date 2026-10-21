@@ -379,8 +379,9 @@ export class Editor {
       el.x = Math.round(at.x - el.w / 2);
       el.y = Math.round(at.y - el.h / 2);
     }
-    // In a document, something new goes at the end (where it flows to).
-    if (this.doc.document) {
+    // In a document, something new goes at the end (where it flows to),
+    // unless it was put somewhere (dropped between two blocks, say).
+    if (this.doc.document && center) {
       center = false;
       el.y = this.pageData.elements.reduce((end, e) => Math.max(end, e.y + e.h), 0) + 1;
     }
@@ -392,7 +393,16 @@ export class Editor {
   /** Scale a new element so it suits the page size. */
   /** How big the page is for sizing new things: its shorter side (a whiteboard's as it began, however it has grown). */
   get sizeRef() {
-    return this.doc.board ? Math.min(2400, this.doc.width, this.doc.height) : Math.min(this.doc.width, this.doc.height);
+    return Math.min(this.fitW, this.fitH);
+  }
+
+  /** The page's width and height for sizing new things (a whiteboard's as it began, however it has grown). */
+  get fitW() {
+    return this.doc.board ? Math.min(3600, this.doc.width) : this.doc.width;
+  }
+
+  get fitH() {
+    return this.doc.board ? Math.min(2400, this.doc.height) : this.doc.height;
   }
 
   scaled(el, share = 0.4) {
@@ -405,8 +415,7 @@ export class Editor {
     const base = TEXT_STYLES[style] || TEXT_STYLES.body;
     const k = Math.max(0.3, this.sizeRef / 1080);
     // (On a whiteboard, as wide as on its first canvas.)
-    const wide = this.doc.board ? Math.min(this.doc.width, 3600) : this.doc.width;
-    const el = createText({ ...base, size: Math.round(base.size * k), w: Math.round(wide * 0.7), ...props });
+    const el = createText({ ...base, size: Math.round(base.size * k), w: Math.round(this.fitW * 0.7), ...props });
     return this.insert(el);
   }
 
@@ -416,7 +425,7 @@ export class Editor {
 
   addLine(props = {}) {
     const el = createLine(props);
-    const s = (this.doc.width * 0.4) / el.w;
+    const s = (this.fitW * 0.4) / el.w;
     el.w *= s;
     el.strokeWidth = Math.max(2, Math.round(el.strokeWidth * Math.max(1, s * 0.8)));
     el.h = Math.max(24, el.strokeWidth * 8);
@@ -441,7 +450,7 @@ export class Editor {
 
   addTable(props = {}) {
     const el = createTable(props);
-    const s = (this.doc.width * 0.7) / el.w;
+    const s = (this.fitW * 0.7) / el.w;
     cmd.scaleElement(el, s, s);
     return this.insert(el);
   }
@@ -454,8 +463,8 @@ export class Editor {
     const frame = this.single;
     if (!at && isEmptyFrame(this.doc, frame) && !frame.locked) return this.fillFrame(frame.id, upload);
     const assetId = addAsset(this.doc, upload);
-    const maxW = this.doc.width * 0.6;
-    const maxH = this.doc.height * 0.6;
+    const maxW = this.fitW * 0.6;
+    const maxH = this.fitH * 0.6;
     const s = Math.min(1, maxW / upload.width, maxH / upload.height);
     const el = createImage(assetId, { w: Math.round(upload.width * s), h: Math.round(upload.height * s) });
     if (at) {
@@ -495,17 +504,20 @@ export class Editor {
 
   /** Videos whose still isn't from where they start now (moved, undone, pasted) get a new one. */
   retakeStills() {
+    // (One at a time, and none once the editor has closed: each loads its whole video.)
+    if (this.closed || this.stills?.size) return;
     this.stillFailed ||= new Map(); // video id → a start no still could be taken from (not tried again and again)
     const walk = (els) => {
       for (const el of els) {
-        if (el.type === 'group') walk(el.children);
+        if (el.type === 'group' && walk(el.children)) return true;
         if (el.type !== 'video' || !this.doc.assets[el.assetId]) continue;
         const start = el.trim?.start || 0;
-        if (stillIsCurrent(this.doc, el) || this.stillFailed.get(el.id) === start || this.stills?.has(el.id)) continue;
+        if (stillIsCurrent(this.doc, el) || this.stillFailed.get(el.id) === start) continue;
         this.refreshStill(el.id);
+        return true;
       }
     };
-    for (const page of this.doc.pages) walk(page.elements);
+    for (const page of this.doc.pages) if (walk(page.elements)) return;
   }
 
   async takeStill(id) {
@@ -518,6 +530,7 @@ export class Editor {
       if (!url) this.stillFailed?.set(id, start);
       if (!url || this.closed) return;
       const img = await loadImage(url);
+      if (this.closed) return;
       const now = locate(this.doc, id, this.pageData.id)?.el;
       if (!now) return;
       if ((now.trim?.start || 0) !== start) return; // moved on meanwhile: retaken from where it starts now, once this is done
@@ -538,7 +551,7 @@ export class Editor {
     const assetId = addAsset(this.doc, { ...upload, kind: 'video' });
     // (A size it doesn't know: the usual 16:9.)
     const [vw, vh] = upload.width > 0 && upload.height > 0 ? [upload.width, upload.height] : [640, 360];
-    const s = Math.min(1, (this.doc.width * 0.7) / vw, (this.doc.height * 0.7) / vh);
+    const s = Math.min(1, (this.fitW * 0.7) / vw, (this.fitH * 0.7) / vh);
     const el = createVideo(assetId, { w: Math.round(vw * s), h: Math.round(vh * s) });
     if (at) {
       el.x = at.x - el.w / 2;
@@ -715,7 +728,7 @@ export class Editor {
   connect(ids = this.selection, route = 'elbow') {
     const [a, b] = ids.map((id) => cmd.findElement(this.pageData, id)).filter((e) => e && e.type !== 'connector');
     if (!a || !b) return null;
-    const s = Math.min(this.doc.width, this.doc.height);
+    const s = this.sizeRef;
     const el = createConnector({ from: [a.x + a.w / 2, a.y + a.h / 2], to: [b.x + b.w / 2, b.y + b.h / 2], start: a.id, end: b.id, route, strokeWidth: Math.max(2, Math.round(s * 0.004)) });
     this.change(() => {
       // Just under the upper of the two: above the lower one (which may be a

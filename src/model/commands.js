@@ -402,14 +402,11 @@ export function setBackground(doc, pageIndex, background) {
 // ---------- whole design ----------
 
 /**
- * Make a copy of the design at a new size. Everything keeps its place
- * relative to the page and is scaled by the smaller of the two ratios, so
- * nothing gets stretched.
- */
-/**
- * A resized copy of a design, everything in proportion. `asDocument`: a
- * document stays one (its sheets become the new size and its blocks run on
- * down the page); otherwise all of it is fitted into the new size.
+ * A copy of the design at a new size. Everything keeps its place relative to
+ * the page and is scaled by the smaller of the two ratios, so nothing gets
+ * stretched. `asDocument`: a document stays one (its sheets become the new
+ * size and its blocks run on down the page); otherwise all of it is fitted
+ * into the new size.
  */
 export function resizeDesign(doc, width, height, { asDocument = !!doc.document } = {}) {
   const out = clone(doc);
@@ -418,7 +415,8 @@ export function resizeDesign(doc, width, height, { asDocument = !!doc.document }
   const sx = width / doc.width;
   // (A document staying one is measured by its sheet, not the long page it has grown to.)
   const sy = height / (flows ? doc.document.pageHeight : doc.height);
-  if (flows) out.document = { ...out.document, pageHeight: height, margin: Math.round(out.document.margin * sx), gap: Math.round(out.document.gap * sx), dpi: Math.round((out.document.dpi || 150) * sx) };
+  // (Margins and gaps by the smaller ratio, like everything else.)
+  if (flows) out.document = { ...out.document, pageHeight: height, margin: Math.round(out.document.margin * Math.min(sx, sy)), gap: Math.round(out.document.gap * Math.min(sx, sy)), dpi: Math.round((out.document.dpi || 150) * sx) };
   else delete out.document;
   const s = Math.min(sx, sy);
   for (const page of out.pages) {

@@ -5,10 +5,8 @@
 // are added near its edges.
 
 import { fitHeight, layoutText, approxMeasure, notePad } from './text-layout.js';
-import { clone } from './doc.js';
+import { clone, DOCUMENT } from './doc.js';
 import { scaleElement } from './commands.js';
-
-import { DOCUMENT } from './doc.js';
 
 export { DOCUMENT };
 export const BOARD = { grow: 1200, edge: 400, max: 20000 }; // (20000: as big as any design may be)
@@ -73,6 +71,8 @@ export function flowDocument(doc, measure) {
  */
 export function paginate(doc, measure = approxMeasure) {
   const opts = { ...DOCUMENT, ...doc.document };
+  // (Margins never more than a quarter of a sheet each: there's always room for blocks.)
+  opts.margin = Math.min(opts.margin, opts.pageHeight / 4);
   const room = opts.pageHeight - opts.margin * 2; // a sheet's height for blocks
   // (Shallow: the files aren't copied, just shared.)
   const out = { ...doc, height: opts.pageHeight, document: undefined, dpi: opts.dpi, pages: [] };
