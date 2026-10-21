@@ -111,7 +111,15 @@ export function measure(text, el) {
   return (w * el.size) / 100;
 }
 
+let measured = 0; // counts up each time the widths are measured afresh
+
+/** Which widths text is measured with: changes when a font arrives (so pictures of text are drawn again). */
+export function measureVersion() {
+  return measured;
+}
+
 export function clearMeasureCache() {
+  measured++;
   widthCache.clear();
   forgetLayouts(); // (worked out from the old widths)
 }

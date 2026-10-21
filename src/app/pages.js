@@ -4,7 +4,7 @@ import { h, icon, iconButton, clear, debounce, dialog, toast, lazily, forget, pr
 import { renderPage, renderFrame } from '../model/render.js';
 import { animationsEnd, keepsMoving, hasLoop, soundFade, pageDuration, pageFrame, transitionOf, timeline } from '../model/motion.js';
 import { VideoFrames, videosOn, blobUrlFor } from './media.js';
-import { measure, fontCssFor } from './fonts.js';
+import { measure, measureVersion, fontCssFor } from './fonts.js';
 import { visiblePages, pageName, pageLabel, soundtrackOf } from '../model/doc.js';
 
 export class PageStrip {
@@ -22,6 +22,8 @@ export class PageStrip {
         this.zoomLabel,
         iconButton('plus', 'Zoom in', () => canvas.zoomBy(1.25), { 'data-testid': 'zoom-in' }),
         iconButton('fit', 'Zoom to fit', () => canvas.zoomToFit(), { 'data-testid': 'zoom-fit' })));
+    this.images = new Map(); // page id → { looks, img }: each page's picture as last drawn
+    this.drawnCount = 0;
     this.redraw = debounce(() => this.render(), 250);
     editor.on((what) => {
       if (what === 'view') this.zoomLabel.textContent = `${Math.round(editor.zoom * 100)}%`;
@@ -49,14 +51,48 @@ export class PageStrip {
     });
   }
 
+  /**
+   * A page's picture for the strip: the one already drawn if the page looks
+   * the same, else a new one, drawn once it scrolls into view. (A change to
+   * one page of a long design draws just that page again.)
+   */
+  pageImage(p, i, keep) {
+    const ed = this.ed;
+    const looks = `${ed.doc.width}x${ed.doc.height}|${measureVersion()}|${JSON.stringify(p)}`;
+    const kept = keep ? this.images.get(p.id) : null;
+    if (kept?.looks === looks) return kept.img;
+    if (kept) forget(kept.img);
+    const img = h('span', { class: 'page-img', style: { aspectRatio: `${ed.doc.width} / ${ed.doc.height}` } });
+    // (Ids in each picture are its own, wherever the page moves to.)
+    const prefix = `ps${++this.drawnCount}`;
+    lazily(img, () => {
+      // The page as it is now, wherever it is (undo brings back copies of pages).
+      const pages = this.ed.doc.pages;
+      const at = pages[i]?.id === p.id ? i : pages.findIndex((q) => q.id === p.id);
+      if (at >= 0) img.innerHTML = renderPage(this.ed.doc, at, { measure, noSize: true, placeholders: true, idPrefix: prefix, assetHref: this.canvas.assetHref });
+    });
+    if (keep) this.images.set(p.id, { looks, img });
+    return img;
+  }
+
   render() {
     const ed = this.ed;
     clear(this.list);
+    // Pictures of pages no longer in the design go.
+    const ids = new Set(ed.doc.pages.map((p) => p.id));
+    for (const [id, kept] of this.images) {
+      if (ids.has(id)) continue;
+      forget(kept.img);
+      this.images.delete(id);
+    }
+    const seen = new Set(); // (two pages with one id, from an odd file: the second's picture isn't kept)
     ed.doc.pages.forEach((p, i) => {
       const label = pageLabel(p, i);
+      const keep = !seen.has(p.id);
+      seen.add(p.id);
       const item = h('li', { class: `${i === ed.page ? 'on' : ''}${p.hidden ? ' hidden-page' : ''}`, draggable: 'true', 'data-testid': 'page-thumb' },
         pressable({ class: 'page-thumb', title: label, 'aria-label': label, 'aria-current': String(i === ed.page) }, () => ed.setPage(i),
-          h('span', { class: 'page-img', style: { aspectRatio: `${ed.doc.width} / ${ed.doc.height}` }, html: renderPage(ed.doc, i, { measure, noSize: true, placeholders: true, idPrefix: `ps${i}`, assetHref: this.canvas.assetHref }) }),
+          this.pageImage(p, i, keep),
           h('span', { class: 'page-no' }, String(i + 1)),
           p.hidden ? h('span', { class: 'page-hidden-mark', 'aria-hidden': 'true' }, icon('eyeOff', 14)) : null),
         p.title ? h('span', { class: 'page-title', 'data-testid': 'page-title-label' }, p.title) : null);
