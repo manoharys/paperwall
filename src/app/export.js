@@ -7,20 +7,15 @@ import { buildPdf } from '../model/pdf.js';
 import { buildZip } from '../model/zip.js';
 import { validateDesign, clone, visiblePages, printDpi, pageLabel, versionSnapshot, soundtrackOf, keptAssets } from '../model/doc.js';
 import { measure, fontCssFor, registerDesignFonts, ensureDesignFonts } from './fonts.js';
-import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage } from './ui.js';
+import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage, canvasScale, toBlob, blobBytes } from './ui.js';
 import { section, segmented, slider, toggle } from './widgets.js';
 import { exportGif, exportVideo, canMakeVideo } from './motion-export.js';
 import { exportVectorPdf, exportPptx } from './pro-export.js';
 import { designMoves, startsTooLate, timeline } from '../model/motion.js';
 import { onPaper as sheetsOf } from '../model/flow.js';
 
-const MAX_SIDE = 16000;
-const MAX_PIXELS = 120e6;
-
 export function maxScale(doc, wanted) {
-  const side = MAX_SIDE / Math.max(doc.width, doc.height);
-  const area = Math.sqrt(MAX_PIXELS / (doc.width * doc.height));
-  return Math.max(0.05, Math.min(wanted, side, area));
+  return canvasScale(doc.width, doc.height, wanted);
 }
 
 /** The page as a standalone SVG with its fonts and images inside. */
@@ -45,14 +40,6 @@ export async function rasterize(doc, pageIndex, { scale = 1, transparent = false
   }
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   return canvas;
-}
-
-function toBlob(canvas, type, quality) {
-  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Export failed: the image is too large for this browser'))), type, quality));
-}
-
-async function blobBytes(blob) {
-  return new Uint8Array(await blob.arrayBuffer());
 }
 
 export async function exportImage(doc, pageIndex, { format = 'png', scale = 1, transparent = false, quality = 0.92 } = {}) {

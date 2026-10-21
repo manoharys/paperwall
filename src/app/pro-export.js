@@ -12,11 +12,8 @@ import { jpegInfo } from '../model/jpeg.js';
 import { deflate } from '../model/deflate.js';
 import { bleedSize } from '../model/view.js';
 import { measure, fontCssFor, designFontFiles, ensureDesignFonts } from './fonts.js';
-import { dataUrlToBytes, loadImage } from './ui.js';
+import { dataUrlToBytes, loadImage, canvasScale, toBlob, blobBytes } from './ui.js';
 
-// Pictures are kept to a size every browser's canvas can hold.
-const MAX_SIDE = 12000;
-const MAX_PIXELS = 60e6;
 const MAX_PHOTO_SIDE = 4096;
 
 /** Deflate (zlib) for PDF streams: the browser's own where it has one. */
@@ -51,8 +48,8 @@ async function canvasPixels(canvas) {
   return { width, height, data: await flate(rgb), alpha: clear ? await flate(alpha) : null };
 }
 
-function canvasPng(canvas) {
-  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? b.arrayBuffer().then((a) => resolve(new Uint8Array(a)), reject) : reject(new Error('Export failed: the image is too large for this browser'))), 'image/png'));
+async function canvasPng(canvas) {
+  return blobBytes(await toBlob(canvas, 'image/png'));
 }
 
 /** Draw a picture (a data: URL) into a canvas, no bigger than `max` on a side. */
@@ -95,50 +92,42 @@ function pictureTokens(doc, pages) {
   return out;
 }
 
-/** Pictures for the PDF: JPEGs as they are, anything else decoded and deflated. */
-async function pdfPictures(doc, pages, check) {
+/**
+ * The pages' pictures, each made ready for a writer by encode({ bytes, mime,
+ * url, jpeg }) (jpeg: the file's details when it's a JPEG that can go in as
+ * it is). One that can't be read is left out: the element then comes as a
+ * picture of itself.
+ */
+async function readPictures(doc, pages, check, encode) {
   const out = new Map();
   for (const [token, url] of pictureTokens(doc, pages)) {
     check();
     try {
       const { bytes, mime } = dataUrlToBytes(url);
       const info = mime === 'image/jpeg' ? jpegInfo(bytes) : null;
-      if (info && info.orientation === 1) {
-        out.set(token, { kind: 'jpeg', bytes, width: info.width, height: info.height, components: info.components, inverted: info.inverted });
-        continue;
-      }
-      out.set(token, { kind: 'flate', ...(await canvasPixels(await decode(url))) });
+      out.set(token, await encode({ bytes, mime, url, jpeg: info && info.orientation === 1 ? info : null }));
     } catch {
-      /* unreadable: the element comes as a picture of itself, or not at all */
+      /* unreadable: left out */
     }
   }
   return out;
 }
 
-/** Pictures for PowerPoint: JPEG and PNG files as they are, others as PNG. */
-async function pptxPictures(doc, pages, check) {
-  const out = new Map();
-  for (const [token, url] of pictureTokens(doc, pages)) {
-    check();
-    try {
-      const { bytes, mime } = dataUrlToBytes(url);
-      const info = mime === 'image/jpeg' ? jpegInfo(bytes) : null;
-      if (info && info.orientation === 1) {
-        out.set(token, { bytes, ext: 'jpeg', width: info.width, height: info.height });
-        continue;
-      }
-      if (mime === 'image/png' && bytes.length > 24) {
-        const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-        out.set(token, { bytes, ext: 'png', width: dv.getUint32(16), height: dv.getUint32(20) });
-        continue;
-      }
-      const canvas = await decode(url);
-      out.set(token, { bytes: await canvasPng(canvas), ext: 'png', width: canvas.width, height: canvas.height });
-    } catch {
-      /* unreadable: the element comes as a picture of itself */
-    }
+/** For the PDF: JPEGs as they are, anything else decoded and deflated. */
+async function pdfPicture({ bytes, url, jpeg }) {
+  if (jpeg) return { kind: 'jpeg', bytes, width: jpeg.width, height: jpeg.height, components: jpeg.components, inverted: jpeg.inverted };
+  return { kind: 'flate', ...(await canvasPixels(await decode(url))) };
+}
+
+/** For PowerPoint: JPEG and PNG files as they are, others as PNG. */
+async function pptxPicture({ bytes, mime, url, jpeg }) {
+  if (jpeg) return { bytes, ext: 'jpeg', width: jpeg.width, height: jpeg.height };
+  if (mime === 'image/png' && bytes.length > 24) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    return { bytes, ext: 'png', width: dv.getUint32(16), height: dv.getUint32(20) };
   }
-  return out;
+  const canvas = await decode(url);
+  return { bytes: await canvasPng(canvas), ext: 'png', width: canvas.width, height: canvas.height };
 }
 
 /** Ids to leave out so only `key` (an element, or '@bg' for the background) is drawn. */
@@ -163,7 +152,7 @@ function allBut(page, key) {
  */
 async function drawPart(doc, want, scale, fontCss, bleed = 0) {
   const { box } = want;
-  const s = Math.max(0.05, Math.min(scale, MAX_SIDE / Math.max(box.w, box.h), Math.sqrt(MAX_PIXELS / (box.w * box.h))));
+  const s = canvasScale(box.w, box.h, scale);
   const svg = renderPage(doc, want.page, {
     measure,
     fontCss,
@@ -201,7 +190,7 @@ export async function exportVectorPdf(doc0, pages0, { print = false, signal, onP
   const [doc, pages] = onPaper(doc0, pages0, measure);
   const fonts = await designFontFiles(doc);
   check();
-  const images = await pdfPictures(doc, pages, check);
+  const images = await readPictures(doc, pages, check, pdfPicture);
   const env = { fonts, images, measure, print, title: doc.name };
   const wants = planVectorPdf(doc, pages, env);
   const rasters = new Map();
@@ -226,7 +215,7 @@ export async function exportPptx(doc0, pages0, { signal, onProgress } = {}) {
   const check = stopper(signal);
   await ensureDesignFonts(doc0);
   const [doc, pages] = onPaper(doc0, pages0, measure);
-  const media = await pptxPictures(doc, pages, check);
+  const media = await readPictures(doc, pages, check, pptxPicture);
   // (A photo whose picture couldn't be read comes as a picture of itself.)
   const wants = planPptx(doc, pages, media);
   const pictures = new Map();

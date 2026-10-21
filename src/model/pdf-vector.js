@@ -656,11 +656,10 @@ function readStops(node, current) {
 // ---------- drawing a page ----------
 
 class Painter {
-  constructor(res, env, ctm) {
+  constructor(res, env) {
     this.res = res;
     this.env = env;
     this.ops = [];
-    this.ctm = ctm;
     this.defs = new Map();
     this.glyphs = []; // [fontRecord key, gid, text] used, committed with the element
     this.images = [];
@@ -712,12 +711,8 @@ class Painter {
     const clip = a['clip-path'];
     const plain = isId(m) && opacity >= 0.999 && !clip;
     if (plain) return draw();
-    const outer = this.ctm;
     this.ops.push('q');
-    if (!isId(m)) {
-      this.ops.push(cm(m));
-      this.ctm = mul(m, this.ctm);
-    }
+    if (!isId(m)) this.ops.push(cm(m));
     if (clip) this.clip(clip);
     if (opacity < 0.999) {
       // See-through as one: a transparency group, painted at that opacity.
@@ -730,7 +725,6 @@ class Painter {
       this.ops.push(`/${this.res.gs(opacity)} gs /${form} Do`);
     } else draw();
     this.ops.push('Q');
-    this.ctm = outer;
   }
 
   group(node, style) {
@@ -1065,14 +1059,14 @@ function drawPage(doc, index, env, res, geo, wants) {
     const inv = invert(m);
     ops.push(`q ${isId(inv) ? '' : `${cm(inv)} `}${cm([box.w, 0, 0, -box.h, box.x, box.y + box.h])} /${name} Do Q`);
   };
-  const vector = (markup, m) => {
-    const p = new Painter(res, env, mul(m, base));
+  const vector = (markup) => {
+    const p = new Painter(res, env);
     p.draw(parseSvg(markup.markup), parseSvg(markup.defs));
     return p;
   };
   // The background, run into the bleed for print.
   try {
-    const p = vector(backgroundMarkup(doc, page, area.w, area.h, opts), [1, 0, 0, 1, area.x, area.y]);
+    const p = vector(backgroundMarkup(doc, page, area.w, area.h, opts));
     p.commit();
     ops.push(`q 1 0 0 1 ${num(area.x)} ${num(area.y)} cm`, ...p.ops, 'Q');
   } catch (e) {
@@ -1091,7 +1085,7 @@ function drawPage(doc, index, env, res, geo, wants) {
       return;
     }
     try {
-      const p = vector(elementMarkup(doc, el, opts), m);
+      const p = vector(elementMarkup(doc, el, opts));
       p.commit();
       ops.push(...p.ops);
     } catch (e) {
