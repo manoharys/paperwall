@@ -97,9 +97,7 @@ export function paginate(doc, measure = approxMeasure) {
       // anything else is made to fit one. What follows goes just below the
       // last of it.
       if (sheet.elements.length) start(el.y);
-      const pieces = el.type === 'text' && !el.curve
-        ? textPieces(el, room, measure)
-        : [{ ...el, w: el.w * (room / el.h), h: room, x: el.x + (el.w - el.w * (room / el.h)) / 2 }];
+      const pieces = el.type === 'text' && !el.curve ? textPieces(el, room, measure) : [fitted(el, room / el.h)];
       pieces.forEach((piece, k) => {
         if (k > 0) start(0);
         sheet.elements.push({ ...clone(piece), y: opts.margin });
@@ -116,6 +114,14 @@ export function paginate(doc, measure = approxMeasure) {
     }
   }
   return out;
+}
+
+/** A copy of a block made smaller as a whole (a group's insides, a table's text too), kept centred. */
+function fitted(el, s) {
+  const copy = clone(el);
+  scaleElement(copy, s, s);
+  copy.x = el.x + (el.w - copy.w) / 2;
+  return copy;
 }
 
 /** A text block cut into pieces at most `room` tall, in whole lines (a paragraph cut goes on in the next). */

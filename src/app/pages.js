@@ -280,13 +280,10 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
   };
   const last = shown.length - 1;
   const onKey = (e) => {
-    let to = at;
-    if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(e.key)) to = Math.min(last, at + 1);
-    else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(e.key)) to = Math.max(0, at - 1);
-    else if (e.key === 'Home') to = 0;
-    else if (e.key === 'End') to = last;
-    else if (e.key === 'Escape') return close();
-    else return;
+    const k = presentingKey(e.key);
+    if (k === 'stop') return close();
+    if (!k) return;
+    const to = k === 'first' ? 0 : k === 'last' ? last : Math.max(0, Math.min(last, at + k));
     e.preventDefault();
     e.stopPropagation();
     if (to !== at) go(to, to === at + 1); // at either end, nothing happens (the page doesn't start over)
@@ -336,6 +333,13 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
       return at;
     },
   };
+}
+
+/** What a key does when presenting: 1 or -1 (a page on or back), 'first', 'last', 'stop', or null. */
+function presentingKey(key) {
+  if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(key)) return 1;
+  if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(key)) return -1;
+  return { Home: 'first', End: 'last', Escape: 'stop' }[key] || null;
 }
 
 /**
@@ -402,12 +406,12 @@ export function presenterView(editor, canvas) {
   }, 250);
   // The same keys as presenting.
   const onKey = (e) => {
-    if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(e.key)) move(1);
-    else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(e.key)) move(-1);
-    else if (e.key === 'Home') ctl?.go(0);
-    else if (e.key === 'End') ctl?.go(Infinity);
-    else if (e.key === 'Escape') ctl?.close();
-    else return;
+    const k = presentingKey(e.key);
+    if (!k) return;
+    if (k === 'stop') ctl?.close();
+    else if (k === 'first') ctl?.go(0);
+    else if (k === 'last') ctl?.go(Infinity);
+    else move(k);
     e.preventDefault();
     e.stopPropagation();
   };

@@ -425,7 +425,8 @@ export function resizeDesign(doc, width, height) {
       // Keep things on the page when the shape of the page changes a lot.
       const b = boundsOf(el);
       if (b.w <= width) el.x += Math.max(0, -b.x) - Math.max(0, b.x + b.w - width);
-      if (b.h <= height) el.y += Math.max(0, -b.y) - Math.max(0, b.y + b.h - height);
+      // (Not a document's height: its blocks run on down past the first sheet, in order.)
+      if (b.h <= height && !out.document) el.y += Math.max(0, -b.y) - Math.max(0, b.y + b.h - height);
     }
     // Guides keep their place relative to the page (a centre guide stays centred).
     if (page.guides) page.guides = page.guides.map((g) => ({ ...g, pos: Math.round(g.pos * (g.axis === 'x' ? sx : sy)) }));

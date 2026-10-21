@@ -242,10 +242,12 @@ test('[MOT-07] add a video: it shows its poster, plays when presenting and moves
     const ed = window.paperwall.editor;
     const v = ed.pageData.elements.find((e) => e.type === 'video');
     const first = v.still;
+    const firstPicture = ed.doc.assets[first].dataUrl;
     ed.update({ trim: { start: 0.6 } }, null, [v.id]);
     await ed.refreshStill(v.id);
     const now = ed.pageData.elements.find((e) => e.type === 'video');
-    return [first, now.still, ed.doc.assets[first].dataUrl !== ed.doc.assets[now.still].dataUrl];
+    // (The old still is let go of: nothing shows it now.)
+    return [first, now.still, firstPicture !== ed.doc.assets[now.still].dataUrl && !ed.doc.assets[first]];
   });
   assert.notEqual(stills[0], stills[1], 'a new still for the new start');
   assert.ok(stills[2], 'a different picture');

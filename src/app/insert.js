@@ -200,18 +200,9 @@ export class InsertPanel {
     const add = (style) => h('button', { type: 'button', class: `text-add ${style}`, 'data-testid': `add-${style}`, onClick: () => ed.addText(style) }, TEXT_STYLES[style].text);
     // A document's blocks go at its end, in its own sizes.
     const block = (style, label) => h('button', { type: 'button', class: `text-add doc-${style}`, 'data-testid': `doc-add-${style}`, onClick: () => ed.insert(createText({ ...DOC_STYLES[style] })) }, label);
-    // Sticky notes: in the middle of what's in view.
-    const addNote = (c) => {
-      const note = createSticky(c);
-      const at = ed.viewCenter?.();
-      if (!at) return ed.insert(note);
-      note.x = Math.round(at.x - note.w / 2);
-      note.y = Math.round(at.y - note.h / 2);
-      return ed.insert(note, { center: false });
-    };
     const notes = section('Sticky notes', h('div', { class: 'note-grid', 'data-testid': 'note-colors' }, NOTE_COLORS.map((c, i) => h('button', {
       type: 'button', class: 'note-swatch', style: { background: c }, 'aria-label': `Add a sticky note (${i + 1})`, 'data-testid': `note-add-${i}`,
-      onClick: () => addNote(c),
+      onClick: () => ed.insert(createSticky(c)),
     }))), h('p', { class: 'hint' }, 'Double-click a note to write on it. Connect notes with lines from Elements.'));
     return [
       ed.doc.document

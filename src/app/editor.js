@@ -5,7 +5,7 @@ import { History } from '../model/history.js';
 import * as cmd from '../model/commands.js';
 import {
   createText, createShape, createLine, createImage, createVideo, createFrame, createDrawing, thinPoints, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
-  TEXT_STYLES, versionSnapshot, isEmptyFrame,
+  TEXT_STYLES, versionSnapshot, isEmptyFrame, usedAssetIds,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
 import { flowDocument, growBoard } from '../model/flow.js';
@@ -367,6 +367,13 @@ export class Editor {
 
   insert(el, { center = true } = {}) {
     if (el.type === 'text') this.fitText(el);
+    // On a whiteboard, something new goes in the middle of what's in view.
+    if (this.doc.board && center && this.viewCenter) {
+      const at = this.viewCenter();
+      center = false;
+      el.x = Math.round(at.x - el.w / 2);
+      el.y = Math.round(at.y - el.h / 2);
+    }
     // In a document, something new goes at the end (where it flows to).
     if (this.doc.document) {
       center = false;
@@ -481,7 +488,10 @@ export class Editor {
       const img = await loadImage(url);
       const now = locate(this.doc, id, this.pageData.id)?.el;
       if (!now || (now.trim?.start || 0) !== start) return; // moved on meanwhile: that one takes its own
+      // The still it replaces goes, unless something else shows it.
+      const old = now.still;
       now.still = addAsset(this.doc, { dataUrl: url, mime: url.slice(5, url.indexOf(';')), width: img.naturalWidth, height: img.naturalHeight });
+      if (old && old !== now.still && !usedAssetIds(this.doc).has(old)) delete this.doc.assets[old];
       now.stillAt = start; // (shown only while it still starts there: an undo can part them)
       this.afterChange(false, { edit: false });
     } catch {

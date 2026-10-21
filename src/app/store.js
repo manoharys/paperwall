@@ -161,8 +161,7 @@ export function saveDesign(doc, thumb) {
 }
 
 async function writeDesign(doc, thumb) {
-  deleted.delete(doc.id);
-  deletedAt.delete(doc.id); // (saved again on purpose: a design once more) // (saved again: a design once more, say opened from a file)
+  deletedAt.delete(doc.id); // (saved again on purpose: a design once more, opened from a file say)
   if (thumb !== undefined) await put('settings', thumbKey(doc.id), thumb);
   else {
     thumb = await get('settings', thumbKey(doc.id));
@@ -213,6 +212,8 @@ export async function hasDesign(id) {
 
 /** Rename a stored design (without reading its files). */
 export async function renameDesign(id, name) {
+  // After a save of it under way (which would put the old name back).
+  await saving.get(id)?.catch(() => null);
   const row = await get('designs', id);
   if (!row) return;
   const updatedAt = Date.now();
@@ -220,8 +221,7 @@ export async function renameDesign(id, name) {
 }
 
 function mediaKeys(designId) {
-  const [lo, hi] = range(`${designId}|`);
-  return run('media', 'readonly', (s) => s.getAllKeys(IDBKeyRange.bound(lo, hi)), () => [...memory.media.keys()].filter((k) => k >= lo && k <= hi));
+  return keysIn(`${designId}|`, 'media');
 }
 
 /** A saved design, whole: its files read back in from the media store. */
@@ -249,19 +249,16 @@ export async function listDesigns() {
   return rows.map(({ doc, ...meta }, i) => ({ ...meta, thumb: kept[i] ?? meta.thumb })).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-// Designs deleted in this tab: a preview still being made for one isn't kept.
-const deleted = new Set();
 
 /** Keep a design's new preview (without saving the design again). */
 export async function saveThumb(id, thumb) {
-  if (deleted.has(id)) return;
+  if (deletedAt.has(id)) return; // (deleted here: a preview still being made for it isn't kept)
   await put('settings', thumbKey(id), thumb);
 }
 
 const deletedAt = new Map(); // design id → when it was deleted in this tab
 
 export async function deleteDesign(id) {
-  deleted.add(id);
   deletedAt.set(id, performance.now());
   // After any save of it already under way (or it would write its files back).
   await saving.get(id)?.catch(() => null);
@@ -289,15 +286,16 @@ const dKey = (designId, at) => `${designId}|d|${stamp(at)}~${TAB}`;
 const aKey = (designId, assetId) => `${designId}|a|${assetId}`;
 const range = (prefix) => [prefix, `${prefix}\uffff`];
 
-/** Without IndexedDB: the in-memory versions under a prefix, as [key, value] in key order. */
-const inMemory = (prefix) => {
+/** Without IndexedDB: the in-memory rows under a prefix (of version history, by default), as [key, value] in key order. */
+const inMemory = (prefix, store = 'versions') => {
   const [lo, hi] = range(prefix);
-  return [...memory.versions.entries()].filter(([k]) => k >= lo && k <= hi).sort(([a], [b]) => (a < b ? -1 : 1));
+  return [...memory[store].entries()].filter(([k]) => k >= lo && k <= hi).sort(([a], [b]) => (a < b ? -1 : 1));
 };
 
-function keysIn(prefix) {
+/** The keys under a prefix in a store (version history's, by default), in key order. */
+function keysIn(prefix, store = 'versions') {
   const [lo, hi] = range(prefix);
-  return run('versions', 'readonly', (s) => s.getAllKeys(IDBKeyRange.bound(lo, hi)), () => inMemory(prefix).map(([k]) => k));
+  return run(store, 'readonly', (s) => s.getAllKeys(IDBKeyRange.bound(lo, hi)), () => inMemory(prefix, store).map(([k]) => k));
 }
 
 function valuesIn(prefix) {
