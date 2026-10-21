@@ -1,5 +1,6 @@
-// Downloads: PNG, JPG, SVG, PDF, a zip of pages, printing, copying to the
-// clipboard, and Paperwall project files. All of it happens on your device.
+// Downloads: PNG, JPG, SVG, PDF (vector, flattened or for print), PowerPoint,
+// a zip of pages, printing, copying to the clipboard, and Paperwall project
+// files. All of it happens on your device.
 
 import { renderPage, textRuns } from '../model/render.js';
 import { buildPdf } from '../model/pdf.js';
@@ -9,6 +10,7 @@ import { measure, fontCssFor, registerDesignFonts } from './fonts.js';
 import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage } from './ui.js';
 import { section, segmented, slider, toggle } from './widgets.js';
 import { exportGif, exportVideo, canMakeVideo } from './motion-export.js';
+import { exportVectorPdf, exportPptx } from './pro-export.js';
 import { designMoves, startsTooLate, timeline } from '../model/motion.js';
 
 const MAX_SIDE = 16000;
@@ -174,7 +176,7 @@ export function exportDialog(editor) {
   // Hidden pages start unticked; tick one to download it anyway. If every
   // page is hidden (or there's just one), start with all of them.
   const visible = visiblePages(doc);
-  const state = { format: 'png', scale: 1, transparent: false, quality: 92, pages: new Set(visible.length && doc.pages.length > 1 ? visible : doc.pages.map((_, i) => i)) };
+  const state = { format: 'png', pdfKind: 'vector', scale: 1, transparent: false, quality: 92, pages: new Set(visible.length && doc.pages.length > 1 ? visible : doc.pages.map((_, i) => i)) };
   // The ticked pages, in page order.
   const picked = () => [...state.pages].sort((a, b) => a - b);
   const body = h('div', { class: 'export' });
@@ -189,6 +191,7 @@ export function exportDialog(editor) {
         { value: 'jpg', label: 'JPG: smaller files', text: 'JPG' },
         { value: 'pdf', label: 'PDF: for printing', text: 'PDF' },
         { value: 'svg', label: 'SVG: vector, any size', text: 'SVG' },
+        { value: 'pptx', label: 'PowerPoint: slides you can edit', text: 'PPTX' },
         { value: 'gif', label: 'GIF: a short animation', text: 'GIF' },
         { value: 'mp4', label: 'MP4: video', text: 'MP4' },
         { value: 'webm', label: 'WebM: video', text: 'WebM' },
@@ -196,7 +199,12 @@ export function exportDialog(editor) {
       h('p', { class: 'hint' }, {
         png: 'Sharp images for social media and the web.',
         jpg: 'Smaller files, no transparency.',
-        pdf: 'One file with every page you pick. Great for printing.',
+        pdf: {
+          vector: 'Sharp at any size, with real text in your fonts that can be selected and searched.',
+          flat: 'Each page as one picture, with text you can still select. Looks the same everywhere.',
+          print: 'For a print shop: 3 mm bleed past the edge, crop marks, and pictures at 300 DPI.',
+        }[state.pdfKind],
+        pptx: 'Slides for PowerPoint, Keynote or Google Slides. Text stays editable; effects, charts and icons come as pictures.',
         svg: 'Vector file that stays sharp at any size. Fonts are included.',
         gif: 'Plays your animations and pages on a loop. Kept small to share.',
         mp4: 'A video of your animations and pages, with your soundtrack. Plays everywhere.',
@@ -204,6 +212,14 @@ export function exportDialog(editor) {
       }[state.format]),
       MOVING.has(state.format) ? h('p', { class: 'hint', 'data-testid': 'export-length' }, motionNote(doc, picked())) : null,
       (state.format === 'mp4' || state.format === 'webm') && !canMakeVideo() ? h('p', { class: 'hint warn' }, "This browser can't make videos. Try a recent Chrome, Edge, Safari or Firefox, or download a GIF.") : null),
+      state.format === 'pdf' ? section('PDF type', segmented({ label: 'PDF type', value: state.pdfKind, testid: 'export-pdf-kind', onChange: (v) => {
+        state.pdfKind = v;
+        draw();
+      }, options: [
+        { value: 'vector', label: 'PDF (vector)', text: 'Vector' },
+        { value: 'flat', label: 'PDF (flattened)', text: 'Flattened' },
+        { value: 'print', label: 'Print PDF', text: 'Print' },
+      ] })) : null,
       state.format === 'png' || state.format === 'jpg' ? section('Size', segmented({ label: 'Size', value: state.scale, testid: 'export-scale', onChange: (v) => {
         state.scale = v;
         draw();
@@ -279,10 +295,15 @@ export function exportDialog(editor) {
         if (signal.aborted) return;
         download(blob, `${name}.${state.format}`);
         if (notes.length) toast(notes.join(' '));
-      } else if (state.format === 'pdf') {
-        const pdf = await exportPdf(doc, pages);
-        if (stopper.signal.aborted) return; // closed while making it
-        download(pdf, `${name}.pdf`);
+      } else if (state.format === 'pdf' || state.format === 'pptx') {
+        // Pictures of effects take a moment: say how far along it is.
+        const onProgress = (p) => (btn.lastChild.textContent = `Preparing… ${Math.round(p * 100)}%`);
+        const signal = stopper.signal;
+        const file = state.format === 'pptx' ? await exportPptx(doc, pages, { signal, onProgress })
+          : state.pdfKind === 'flat' ? await exportPdf(doc, pages)
+            : await exportVectorPdf(doc, pages, { print: state.pdfKind === 'print', signal, onProgress });
+        if (signal.aborted) return; // closed while making it
+        download(file, `${name}${state.pdfKind === 'print' && state.format === 'pdf' ? '-print' : ''}.${state.format}`);
       } else {
         const ext = state.format;
         const make = (i) => (ext === 'svg' ? exportSvg(doc, i, { transparent: state.transparent }) : exportImage(doc, i, { format: ext, scale: state.scale, transparent: state.transparent, quality: state.quality / 100 }));
@@ -327,4 +348,4 @@ export function exportDialog(editor) {
 }
 
 /** For tests and power users: everything above, without the dialog. */
-export const api = { exportImage, exportSvg, exportPdf, exportGif, exportVideo, soundtrackBuffer, thumbnail, projectBlob, rasterize, dataUrlToBytes, clone };
+export const api = { exportImage, exportSvg, exportPdf, exportVectorPdf, exportPptx, exportGif, exportVideo, soundtrackBuffer, thumbnail, projectBlob, rasterize, dataUrlToBytes, clone };

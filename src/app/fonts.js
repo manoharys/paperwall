@@ -2,7 +2,7 @@
 // in exports. In the one-file build the font files are inlined as data URLs.
 
 import { FONTS, fontFiles, fontsUsed, nearestWeight } from '../model/fonts.js';
-import { bytesToBase64 } from './ui.js';
+import { bytesToBase64, dataUrlToBytes } from './ui.js';
 
 const inlined = () => globalThis.PAPERWALL_ASSETS?.fonts || null;
 const dataCache = new Map();
@@ -123,6 +123,26 @@ async function fileAsDataUrl(file) {
   const url = `data:font/woff2;base64,${bytesToBase64(bytes)}`;
   dataCache.set(file, url);
   return url;
+}
+
+/**
+ * The font files a design's text uses, as bytes, for writers that embed
+ * them (the vector PDF): "Family|weight" for bundled fonts (their main,
+ * Latin file), "Family|*" for fonts stored in the design.
+ */
+export async function designFontFiles(doc) {
+  const out = new Map();
+  for (const { font, weight } of fontsUsed(doc)) {
+    try {
+      out.set(`${font.name}|${weight}`, dataUrlToBytes(await fileAsDataUrl(fontFiles(font, weight)[0].file)).bytes);
+    } catch {
+      /* a font that can't be read: its text comes as a picture */
+    }
+  }
+  for (const a of Object.values(doc.assets || {})) {
+    if (a.type === 'font') out.set(`${a.family}|*`, dataUrlToBytes(a.dataUrl).bytes);
+  }
+  return out;
 }
 
 /** Every distinct character of text in a design, as code points. */
