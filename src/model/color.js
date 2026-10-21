@@ -39,5 +39,6 @@ export function contrast(a, b) {
 
 /** A gradient's stops in order along it (stops without an offset count as 0). */
 export function sortedStops(g) {
-  return [...(g?.stops || [])].sort((a, b) => (a.offset ?? 0) - (b.offset ?? 0));
+  // A stop with no position (or a broken one) is at 0.
+  return (g?.stops || []).map((s) => (Number.isFinite(s.offset) ? s : { ...s, offset: 0 })).sort((a, b) => a.offset - b.offset);
 }

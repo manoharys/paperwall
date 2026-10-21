@@ -472,3 +472,11 @@ test('[MOT-07] what\'s saved keeps only the files the design uses (and its fonts
   assert.deepEqual(Object.keys(saved.assets).sort(), ['f', 'v']);
   assert.ok(doc.assets.gone, 'the open design keeps it (undo can bring it back)');
 });
+
+test('[CLR-05] a gradient stop with no position is drawn at 0, never NaN', async () => {
+  const doc = createDesign({ width: 100, height: 100 });
+  doc.pages[0].elements.push(createShape('rect', { fill: { type: 'linear', angle: 90, stops: [{ color: '#ff0000' }, { color: '#0000ff', offset: 1 }] } }));
+  const svg = renderPage(doc, 0);
+  assert.doesNotMatch(svg, /NaN/);
+  assert.match(svg, /<stop offset="0" stop-color="#ff0000"/);
+});

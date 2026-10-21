@@ -466,11 +466,13 @@ export class Editor {
     if (kind === 'image') return this.importImageFile(file);
     if (!kind) throw new Error(`${file.name} isn't a picture, video or sound`);
     checkSize(file, kind);
-    const [dataUrl, info] = await Promise.all([readFileAsDataUrl(file), kind === 'video' ? videoInfo(file) : audioInfo(file)]);
+    // Checked first: a file that can't be used isn't read in whole for nothing.
+    const info = await (kind === 'video' ? videoInfo(file) : audioInfo(file));
     // A "video" with no picture this browser can show: either a video it
     // can't play (an iPhone's HEVC, say) or music in a video file. There's no
     // telling which, so neither is guessed (a guess could replace the soundtrack).
     if (info.noPicture) throw new Error(`This browser can't show a picture in ${file.name}. A video plays here as MP4 (H.264) or WebM; a sound as MP3, M4A, OGG or WAV.`);
+    const dataUrl = await readFileAsDataUrl(file);
     const upload = { id: uid('u'), name: file.name, mime: file.type, dataUrl, kind, ...info, addedAt: Date.now() };
     // It's used either way; Uploads just can't keep a copy when storage is full.
     await store.saveUpload(upload).catch(() => toast(`${file.name} couldn't be kept in Uploads: this browser's storage is full.`, 'error'));
