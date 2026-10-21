@@ -466,7 +466,8 @@ class GlRunner {
     if (op === 'Shape') return [tensor([x.dims.length], Float64Array.from(x.dims), DTYPE.INT64)];
     if (!x || !isFloat(x.dtype) || !this.layout(x.dims)) return null;
     if (op === 'Conv') {
-      if ((a.group || 1) !== 1 || args[1].dims.length !== 4) return null;
+      // (Grouped convolutions, and weights made while running, on the processor.)
+      if ((a.group || 1) !== 1 || args[1].dims.length !== 4 || args[1].gpu || args[2]?.gpu) return null;
       const X = gpu(x);
       return X && [this.conv(X, args[1], args[2], a, fuseRelu, rows)];
     }
