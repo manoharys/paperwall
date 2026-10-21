@@ -58,6 +58,8 @@ export function buildMp4Parts({ video, audio = null, duration }) {
   const moov = moovFor(ftyp.length + size + 8);
   const samples = order.map(({ ti, ci }) => tracks[ti].chunks[ci].data);
   const mediaSize = samples.reduce((s, d) => s + d.length, 0);
+  // This writer's offsets are 32-bit: past 4 GB, say so rather than write a broken file.
+  if (ftyp.length + moov.length + mediaSize + 8 > 0xffffffff) throw new Error('This video is too long for one MP4 (over 4 GB). Try WebM, or fewer pages.');
   return [ftyp, moov, u32(mediaSize + 8), fourcc('mdat'), ...samples];
 }
 

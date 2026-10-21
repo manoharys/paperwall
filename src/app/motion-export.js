@@ -184,7 +184,11 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
       // first output: without it, say so now rather than after every frame.
       if (pick.codec === 'avc' && chunks.length && !description) throw new Error(NO_AVC_DESCRIPTION);
     }));
-    await encoder.flush();
+    // (An encoder that failed at the very end has closed: its own error says why.)
+    if (failure) throw failure;
+    await encoder.flush().catch((e) => {
+      throw failure || e;
+    });
   } finally {
     // Encoders are a limited resource: always given back, even when a download fails.
     if (encoder.state !== 'closed') encoder.close();

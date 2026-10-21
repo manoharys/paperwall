@@ -252,9 +252,17 @@ export class VideoFrames {
     return !!p && !p.fresh && !p.video.paused && !p.video.seeking && p.video.readyState >= 2;
   }
 
-  /** How long `el`'s video is: the player's word, else what was found when it was added. */
+  /**
+   * How long `el`'s video is: the player's word, else what was found when it
+   * was added, else (unknown) as far as the player has got through it, so a
+   * looping one still loops once its end has been seen.
+   */
   lengthOf(el, v) {
-    return Number.isFinite(v.duration) ? v.duration : this.doc.assets[el.assetId]?.duration || 0;
+    if (Number.isFinite(v.duration)) return v.duration;
+    const known = this.doc.assets[el.assetId]?.duration || 0;
+    if (known) return known;
+    const seen = v.seekable?.length ? v.seekable.end(v.seekable.length - 1) : 0;
+    return Number.isFinite(seen) ? seen : 0;
   }
 
   /** The `<video>` playing `el`, once one has been made for it (to show it live). */
