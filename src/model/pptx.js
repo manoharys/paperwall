@@ -11,6 +11,7 @@ import { sortedStops, normalizeHex } from './color.js';
 import { printDpi, DEFAULT_FILTERS, stillIsCurrent } from './doc.js';
 import { notePad } from './text-layout.js';
 import { parsePath } from './pdf-vector.js';
+import { effectPad } from './render.js';
 
 const enc = new TextEncoder();
 
@@ -91,9 +92,7 @@ export function pptxKind(doc, el, media = null) {
 
 /** The page-px box of an element turned by its rotation, padded for shadows and glows. */
 function pictureBox(doc, el) {
-  let pad = 2 + (el.strokeWidth || 0) + (el.outline?.width || 0) * 2;
-  if (el.type === 'text') pad += (el.size || 16) * 0.8;
-  if (el.shadow) pad += Math.abs(el.shadow.x ?? 0) + Math.abs(el.shadow.y ?? 8) + (el.shadow.blur ?? 16) * 1.5;
+  const pad = effectPad(el);
   const r = ((el.rotation || 0) * Math.PI) / 180;
   const cw = Math.abs(el.w * Math.cos(r)) + Math.abs(el.h * Math.sin(r));
   const ch = Math.abs(el.w * Math.sin(r)) + Math.abs(el.h * Math.cos(r));

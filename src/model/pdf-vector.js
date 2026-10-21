@@ -10,7 +10,7 @@
 // A "print" PDF is the same, with the page grown by the bleed so pictures
 // and backgrounds run past the edge, a TrimBox and BleedBox, and crop marks.
 
-import { elementMarkup, backgroundMarkup, transformOf } from './render.js';
+import { elementMarkup, backgroundMarkup, transformOf, effectPad } from './render.js';
 import { parseSvg, byId } from './svg-read.js';
 import { parseFont, subsetFont, glyphFor } from './sfnt.js';
 import { deflate } from './deflate.js';
@@ -1021,9 +1021,7 @@ export function rasterScale(doc, { print = false } = {}) {
 
 /** The page-px box a picture of `el` needs (under the matrix m of the groups around it). */
 function rasterBox(el, m, area) {
-  let pad = 2 + (el.strokeWidth || 0) + (el.outline?.width || 0) * 2;
-  if (el.type === 'text') pad += (el.size || 16) * 0.8;
-  if (el.shadow) pad += Math.abs(el.shadow.x ?? 0) + Math.abs(el.shadow.y ?? 8) + (el.shadow.blur ?? 16) * 1.5;
+  const pad = effectPad(el);
   const t = mul(parseTransform(transformOf(el)), m);
   const pts = [[-pad, -pad], [el.w + pad, -pad], [el.w + pad, el.h + pad], [-pad, el.h + pad]].map(([x, y]) => apply(t, x, y));
   const x0 = Math.max(area.x, Math.min(...pts.map((p) => p[0])));

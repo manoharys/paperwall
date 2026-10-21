@@ -148,6 +148,17 @@ function renderLine(ctx, el) {
   return out;
 }
 
+/**
+ * How far past its box an element can draw (page px): strokes, outlines,
+ * the room around letters, shadows. For pictures of single elements.
+ */
+export function effectPad(el) {
+  let pad = 2 + (el.strokeWidth || 0) + (el.outline?.width || 0) * 2;
+  if (el.type === 'text') pad += (el.size || 16) * 0.8;
+  if (el.shadow) pad += Math.abs(el.shadow.x ?? 0) + Math.abs(el.shadow.y ?? 8) + (el.shadow.blur ?? 16) * 1.5;
+  return pad;
+}
+
 function renderImage(ctx, el) {
   return renderPicture(ctx, el, el.assetId ? ctx.href(el.assetId) : '');
 }
