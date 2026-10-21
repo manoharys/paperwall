@@ -4,7 +4,7 @@
 // split into sheets between blocks. A whiteboard's canvas grows as things
 // are added near its edges.
 
-import { fitHeight, layoutText, approxMeasure } from './text-layout.js';
+import { fitHeight, layoutText, approxMeasure, notePad } from './text-layout.js';
 import { clone } from './doc.js';
 import { scaleElement } from './commands.js';
 
@@ -106,11 +106,13 @@ export function paginate(doc, measure = approxMeasure) {
       const lastH = pieces[pieces.length - 1].h;
       top = el.y + el.h - (opts.margin + lastH);
     }
-    // Lines between blocks: on the sheet of what they start from.
+    // Lines between blocks on the same sheet go on it (one between sheets can't be drawn).
     for (const el of page.elements) {
       if (el.hidden || el.type !== 'connector') continue;
-      const at = where.get(el.start?.id) || where.get(el.end?.id);
-      if (at) at.sheet.elements.push({ ...clone(el), y: el.y - at.top });
+      const a = where.get(el.start?.id);
+      const b = where.get(el.end?.id);
+      const at = a || b;
+      if (at && (!a || !b || a.sheet === b.sheet)) at.sheet.elements.push({ ...clone(el), y: el.y - at.top });
     }
   }
   return out;
@@ -127,7 +129,9 @@ function fitted(el, s) {
 /** A text block cut into pieces at most `room` tall, in whole lines (a paragraph cut goes on in the next). */
 function textPieces(el, room, measure) {
   const { lines, lineHeight } = layoutText(el, measure);
-  const per = Math.max(1, Math.floor(room / lineHeight));
+  // (Inside a highlight's padding, or a sticky note's edges.)
+  const pad = (el.highlight ? el.highlight.padding ?? 0 : 0) + notePad(el);
+  const per = Math.max(1, Math.floor((room - pad * 2) / lineHeight));
   const pieces = [];
   let items = 0; // list items so far (a numbered list carries on counting)
   for (let i = 0; i < lines.length; i += per) {
@@ -138,7 +142,7 @@ function textPieces(el, room, measure) {
     const piece = { ...el, id: `${el.id}-${pieces.length + 1}`, text, listStart: items + 1, continues: !chunk[0].start };
     // (An item it goes on with was counted with the piece before.)
     items += chunk.filter((l, k) => l.start && l.text.trim() && !(k === 0 && piece.continues)).length;
-    piece.h = fitHeight(piece, measure);
+    piece.h = Math.min(room, Math.ceil(Math.min(per, chunk.length) * lineHeight + pad * 2));
     pieces.push(piece);
   }
   return pieces;

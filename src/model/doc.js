@@ -501,7 +501,7 @@ export function validateDesign(doc) {
     // ({ type: 'none' } is kept: it keeps an element still while its page animates.)
     if (el.anim !== undefined) el.anim = el.anim?.type === 'none' ? { type: 'none' } : cleanMotion(el.anim, ANIMATIONS, { duration: LIMITS.duration, delay: LIMITS.delay });
     // A sticky note's color (text only): a hex color, else a plain text box.
-    if (el.note !== undefined) el.note = el.type === 'text' && typeof el.note === 'string' && /^#[0-9a-f]{3,8}$/i.test(el.note) ? el.note : undefined;
+    if (el.note !== undefined) el.note = el.type === 'text' && typeof el.note === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(el.note) ? el.note : undefined;
     if (el.type === 'video') {
       el.trim = { start: Math.max(0, Number.isFinite(+el.trim?.start) ? +el.trim.start : 0) };
       el.loop = el.loop !== false;

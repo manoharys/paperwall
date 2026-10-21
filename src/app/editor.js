@@ -5,7 +5,7 @@ import { History } from '../model/history.js';
 import * as cmd from '../model/commands.js';
 import {
   createText, createShape, createLine, createImage, createVideo, createFrame, createDrawing, thinPoints, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
-  TEXT_STYLES, versionSnapshot, isEmptyFrame, usedAssetIds,
+  TEXT_STYLES, versionSnapshot, isEmptyFrame,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
 import { flowDocument, growBoard } from '../model/flow.js';
@@ -174,6 +174,7 @@ export class Editor {
     // drag, which it mustn't cut short.
     if (this.isDragging?.() && !this.changing) return void this.whenIdle(() => this.afterChange(quiet, { edit }));
     this.arrange();
+    this.retakeStills();
     // Connectors on every page follow what they're attached to (pages
     // without connectors return at once).
     this.syncAllConnectors();
@@ -477,6 +478,23 @@ export class Editor {
     });
   }
 
+  /** Videos whose still isn't from where they start now (moved, undone, pasted) get a new one. */
+  retakeStills() {
+    this.stillTried ||= new Map(); // video id → the start last tried (a video that can't be read isn't tried again and again)
+    const walk = (els) => {
+      for (const el of els) {
+        if (el.type === 'group') walk(el.children);
+        if (el.type !== 'video' || !this.doc.assets[el.assetId]) continue;
+        const start = el.trim?.start || 0;
+        const fine = el.still && this.doc.assets[el.still] && (el.stillAt ?? 0) === start;
+        if (fine || this.stillTried.get(el.id) === start) continue;
+        this.stillTried.set(el.id, start);
+        this.refreshStill(el.id);
+      }
+    };
+    for (const page of this.doc.pages) walk(page.elements);
+  }
+
   async takeStill(id) {
     const found = locate(this.doc, id, this.pageData.id);
     if (found?.el.type !== 'video') return;
@@ -488,10 +506,9 @@ export class Editor {
       const img = await loadImage(url);
       const now = locate(this.doc, id, this.pageData.id)?.el;
       if (!now || (now.trim?.start || 0) !== start) return; // moved on meanwhile: that one takes its own
-      // The still it replaces goes, unless something else shows it.
-      const old = now.still;
+      // (The still it replaces stays while the design is open: undo can bring
+      // it back. Saving leaves it out.)
       now.still = addAsset(this.doc, { dataUrl: url, mime: url.slice(5, url.indexOf(';')), width: img.naturalWidth, height: img.naturalHeight });
-      if (old && old !== now.still && !usedAssetIds(this.doc).has(old)) delete this.doc.assets[old];
       now.stillAt = start; // (shown only while it still starts there: an undo can part them)
       this.afterChange(false, { edit: false });
     } catch {
@@ -512,8 +529,7 @@ export class Editor {
       el.x = at.x - el.w / 2;
       el.y = at.y - el.h / 2;
     }
-    this.insert(el, { center: !at });
-    this.refreshStill(el.id); // (its full-size still picture, once taken)
+    this.insert(el, { center: !at }); // (its full-size still is taken once it's in: see retakeStills)
     return el;
   }
 
@@ -1086,8 +1102,13 @@ export class Editor {
   }
 
   /** Make a resized copy and open it; the original stays as it was. */
-  async resizeTo(width, height, name) {
+  async resizeTo(width, height, name, preset = null) {
     const copy = cmd.resizeDesign(this.doc, width, height);
+    // To a Document or Whiteboard size: one of those, as made from the home screen.
+    if (preset?.id === 'doc' && !copy.document) copy.document = { pageHeight: height, margin: 120, gap: 28, dpi: 150 };
+    if (preset?.id === 'whiteboard') copy.board = true;
+    // A document's sheets print at the paper's size: print sizes at 300 dpi, the Document size at 150.
+    if (copy.document && preset) copy.document.dpi = preset.unit ? 300 : preset.id === 'doc' ? 150 : copy.document.dpi;
     copy.name = name || `${this.doc.name} (${width} × ${height})`;
     copy.createdAt = Date.now();
     await this.flush();

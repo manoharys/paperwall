@@ -415,8 +415,12 @@ export function presenterView(editor, canvas) {
     e.preventDefault();
     e.stopPropagation();
   };
+  // Leaving or reloading this page closes the slides' window too (it'd be left stuck).
+  const onLeave = () => ctl?.close();
+  window.addEventListener('pagehide', onLeave);
   const end = () => {
     clearInterval(tick);
+    window.removeEventListener('pagehide', onLeave);
     document.removeEventListener('keydown', onKey, true);
     view.remove();
     if (!audience.closed) audience.close();
