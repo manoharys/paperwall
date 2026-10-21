@@ -199,6 +199,7 @@ export class VideoFrames {
     const turn = (this.turn = (this.turn || 0) + 1);
     for (const el of els) {
       const p = this.player(el);
+      p.fresh = true; // starting over: whatever it showed before doesn't count
       p.ready.then((ok) => {
         // Not if the page was left (or playing stopped) while it loaded.
         if (!ok || turn !== this.turn) return;
@@ -212,6 +213,7 @@ export class VideoFrames {
         };
         v.currentTime = videoTime(el, Math.max(0, (performance.now() - since) / 1000), length);
         v.play().catch(() => null);
+        p.fresh = false;
       });
     }
   }
@@ -220,8 +222,14 @@ export class VideoFrames {
   allEnded(els) {
     return els.length > 0 && els.every((el) => {
       const p = this.players.get(el.id);
-      return p?.failed || (el.loop === false && p?.video.ended);
+      return p?.failed || (el.loop === false && !p?.fresh && p?.video.ended);
     });
+  }
+
+  /** Whether `el`'s video is playing from its latest start, with a picture. */
+  isPlaying(el) {
+    const p = this.players.get(el.id);
+    return !!p && !p.fresh && !p.video.paused && !p.video.seeking && p.video.readyState >= 2;
   }
 
   /** How long `el`'s video is: the player's word, else what was found when it was added. */

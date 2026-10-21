@@ -12,8 +12,6 @@ import { measure, addCustomFont, customFontNames, ensureFont, fontSettled } from
 import { iconById, stickerById } from '../model/graphics.js';
 import { getSetting } from './store.js';
 
-
-
 const DUOTONES = [
   ['Ink', '#1a1a2e', '#f7f4ef'], ['Ocean', '#0b2a45', '#7fd1c7'], ['Sunset', '#5b1a6e', '#ffb36b'], ['Berry', '#3b1426', '#ff8fa3'],
   ['Forest', '#1f3a2e', '#e9c46a'], ['Pop', '#2a1bd6', '#ff6b9a'], ['Citrus', '#14532d', '#fde047'], ['Sepia', '#3a2418', '#f4d6a0'],

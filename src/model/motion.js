@@ -269,13 +269,15 @@ export function frameAt(doc, tl, t) {
 
 /**
  * What to show `local` seconds into page `index`, having come from page
- * `from` (or from nowhere: null). The one rule for transitions, used by
- * downloads (frameAt) and presenting alike.
+ * `from` (or from nowhere: null), left `fromLocal` seconds in (by default at
+ * its end). The one rule for transitions, used by downloads (frameAt) and
+ * presenting alike.
  */
-export function pageFrame(doc, index, local, from) {
+export function pageFrame(doc, index, local, from, fromLocal = null) {
   const tr = transitionOf(doc.pages[index]);
   if (from !== null && from !== undefined && tr.type !== 'none' && local < tr.duration) {
-    return { index, local, from: { index: from, local: pageDuration(doc.pages[from]) }, transition: { type: tr.type, progress: easeOut(clamp01(local / tr.duration)) } };
+    const left = Math.min(fromLocal ?? Infinity, pageDuration(doc.pages[from]));
+    return { index, local, from: { index: from, local: left }, transition: { type: tr.type, progress: easeOut(clamp01(local / tr.duration)) } };
   }
   return { index, local, from: null, transition: null };
 }

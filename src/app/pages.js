@@ -160,6 +160,7 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
   let info = null; // the shown page's motion, worked out once when it comes up
   let started = 0;
   let from = null; // the page before, when moving forward (its transition plays)
+  let fromAt = null; // how far into it it was left (it stays as it was then)
   let drawn = 0; // when the slide was last drawn
   let wait = 0; // a still page's timer, when playing
   let fading = 0; // when playing the last page: the soundtrack's fade-out, as downloads end
@@ -187,9 +188,10 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
         // a see-through video).
         const under = box.parentNode.querySelector(`image[data-under="${CSS.escape(box.dataset.video)}"]`);
         if (under) {
-          // (A video still seeking shows once it has: 'seeked' or 'playing'.)
-          if (v.readyState >= 2 && !v.seeking) under.remove();
-          else for (const type of ['loadeddata', 'seeked', 'playing']) v.addEventListener(type, () => under.remove(), { once: true });
+          // Once it's playing from this visit's start (not still showing a
+          // picture from an earlier one): 'playing' says so.
+          if (videos.isPlaying({ id: box.dataset.video })) under.remove();
+          else v.addEventListener('playing', () => under.remove(), { once: true });
         }
       }
     } else if (live) {
@@ -200,7 +202,7 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     } else {
       drawn = now;
       // The same rule for transitions as downloads use.
-      slide.innerHTML = renderFrame(doc, pageFrame(doc, i, local, from), { ...opts, idPrefix: `pr${i}` });
+      slide.innerHTML = renderFrame(doc, pageFrame(doc, i, local, from, fromAt), { ...opts, idPrefix: `pr${i}` });
     }
     root.dataset.time = local.toFixed(2);
     if (autoplay && local >= pageDuration(page)) {
@@ -227,8 +229,10 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
   const go = (to, forward, { auto = false } = {}) => {
     cancelAnimationFrame(frame);
     clearTimeout(wait);
-    clearTimeout(fading);
+    // Moving on by itself keeps to the show's clock: a fade under way goes on.
+    if (!auto) clearTimeout(fading);
     from = forward && to !== at ? shown[at] : null;
+    fromAt = from !== null ? (performance.now() - started) / 1000 : null;
     // Moving on by itself, the next page starts when the last one's time was
     // up (not a frame later), so pages keep time with the soundtrack.
     started = auto ? started + pageDuration(doc.pages[shown[at]]) * 1000 : performance.now();
@@ -244,7 +248,7 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     // (as if Play had started there), so later pages meet it where they did.
     if (tl.parts[at].start < soundFrom) soundFrom = tl.parts[at].start;
     if (!auto) sound?.seek(tl.parts[at].start - soundFrom);
-    if (sound) {
+    if (sound && !auto) {
       // The sound fades over the end of the show (as in a download of these
       // pages), which may begin a page or more before the last.
       const fade = soundFade(tl.total - soundFrom);
