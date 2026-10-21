@@ -345,7 +345,7 @@ class Slide {
     const paras = String(el.text ?? '').split('\n').map((t, i) => {
       let bullet = '<a:buNone/>';
       let margin = '';
-      if (el.list && t.trim() && i === 0 && el.continues) {
+      if ((el.list === 'bullet' || el.list === 'number') && t.trim() && i === 0 && el.continues) {
         margin = ` marL="${indent}" indent="0"`;
       } else if (el.list === 'bullet' && t.trim()) {
         bullet = '<a:buFont typeface="Arial"/><a:buChar char="•"/>';
