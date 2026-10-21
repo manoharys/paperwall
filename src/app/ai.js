@@ -6,6 +6,7 @@
 import { h, clear } from './ui.js';
 import { getSetting, setSetting } from './store.js';
 import { PROVIDERS, FEATURES, providersFor, isOn, setOn, providerFor, setProviderFor, keyFor, setKey, ollamaUrl, providerFetch } from './online.js';
+import { openOnlineSettings } from './online-settings.js';
 import { buildRequest, parseResponse, ollamaModelNames, DEFAULT_MODELS, MODEL_CHOICES } from '../model/ai.js';
 
 /** The model picked for a provider (its default until another is). */
@@ -140,7 +141,9 @@ export function aiSetup(feature, { onDone, onCancel } = {}) {
           await setModelFor(id, modelInput.value);
           onDone?.();
         } }, 'Save and continue'),
-        onCancel ? h('button', { type: 'button', class: 'btn small', 'data-testid': 'ai-setup-cancel', onClick: onCancel }, 'Cancel') : null));
+        onCancel ? h('button', { type: 'button', class: 'btn small', 'data-testid': 'ai-setup-cancel', onClick: onCancel }, 'Cancel') : null,
+        // (Turning it off, forgetting keys, Ollama's address: all the online settings.)
+        h('button', { type: 'button', class: 'link-btn', 'data-testid': 'ai-setup-all', onClick: () => openOnlineSettings(feature) }, 'All online settings…')));
   })();
   return box;
 }

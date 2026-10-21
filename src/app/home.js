@@ -7,6 +7,7 @@ import { readyTemplate } from './templates.js';
 import * as store from './store.js';
 import { readProjectFile } from './export.js';
 import { aiDesignBlock } from './ai-design.js';
+import { openOnlineSettings } from './online-settings.js';
 
 export function renderHome(root, { openDesign, newDesign, toggleTheme, installPrompt }) {
   forget(root);
@@ -77,11 +78,12 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, installPr
           }
         } }, icon('open'), 'Open a file'),
         install,
+        h('button', { type: 'button', class: 'btn', 'data-testid': 'home-online', onClick: () => openOnlineSettings() }, 'Online extras'),
         iconButton('moon', 'Dark mode', toggleTheme, { 'data-testid': 'theme-toggle' }))),
     h('main', { class: 'home' },
       h('section', { class: 'hero' },
         h('h1', null, 'Design without', h('br'), h('em', null, 'the paywall.')),
-        h('p', { class: 'lead' }, 'Posters, posts, invitations and slides. Free, offline and yours: no account, no watermark, and your work never leaves this device.')),
+        h('p', { class: 'lead' }, 'Posters, posts, invitations and slides. Free, offline and yours: no account, no watermark, and your work stays on this device.')),
       h('section', { class: 'block' },
         h('h2', null, 'Create a design'),
         h('div', { class: 'preset-grid', 'data-testid': 'presets' }, PRESETS.map((p) => h('button', { type: 'button', class: 'preset', 'data-testid': `preset-${p.id}`, onClick: () => newDesign(createDesignFromPreset(p.id)) },
@@ -96,7 +98,7 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, installPr
         h('p', { class: 'fine' }, 'Every template was made for Paperwall and is free for any use, including commercial (CC0).')),
       h('section', { class: 'block' }, h('h2', null, 'Your designs'), designsGrid)),
     h('footer', { class: 'home-foot' },
-      h('p', null, icon('lock', 16), ' Everything stays in this browser on this device. Paperwall makes no network requests.'),
+      h('p', null, icon('lock', 16), ' Everything stays in this browser on this device. Paperwall makes no network requests unless you turn on an online extra.'),
       h('p', null, 'Open source (MIT) · ', h('a', { href: 'https://github.com/manoharys/paperwall', rel: 'noopener', target: '_blank' }, 'Code and feature scoreboard'), ' · Not affiliated with Canva.')));
 
   fillDesigns();

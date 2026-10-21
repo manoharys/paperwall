@@ -38,7 +38,9 @@ export async function keyFor(id) {
 }
 
 export async function setKey(id, key) {
-  await setSetting(`online|key|${id}`, String(key || '').trim());
+  const k = String(key || '').trim();
+  // (An empty key isn't kept at all.)
+  await (k ? setSetting(`online|key|${id}`, k) : del('settings', `online|key|${id}`));
 }
 
 /** Forget every key on this device. */
@@ -49,6 +51,10 @@ export async function forgetKeys() {
 /** Ollama's address (it runs on the person's own computer). */
 export async function ollamaUrl() {
   return (await getSetting('online|ollama', 'http://localhost:11434')) || 'http://localhost:11434';
+}
+
+export async function setOllamaUrl(url) {
+  await setSetting('online|ollama', String(url || '').trim().replace(/\/+$/, ''));
 }
 
 /**

@@ -13,6 +13,7 @@ import { measure, ensureFont } from './fonts.js';
 import { TEXT_COMBOS, comboGroup, comboFonts } from '../model/text-combos.js';
 import { readyTemplate } from './templates.js';
 import * as store from './store.js';
+import { photosView } from './photos.js';
 
 const TABS = [
   { id: 'templates', label: 'Templates', icon: 'templates' },
@@ -342,6 +343,15 @@ export class InsertPanel {
 
   uploads() {
     const ed = this.ed;
+    // Your own files, or stock photos (an online extra, off until turned on).
+    const views = h('div', { class: 'chips small', role: 'group', 'aria-label': 'Show' }, [['mine', 'Your files'], ['photos', 'Photos']].map(([id, label]) => h('button', {
+      type: 'button', class: `chip${(this.uploadsView || 'mine') === id ? ' on' : ''}`, 'aria-pressed': String((this.uploadsView || 'mine') === id), 'data-testid': `uploads-view-${id}`,
+      onClick: () => {
+        this.uploadsView = id;
+        this.render();
+      },
+    }, label)));
+    if (this.uploadsView === 'photos') return [views, photosView(ed, (this.photos ||= {}))];
     const grid = h('div', { class: 'upload-grid', 'data-testid': 'upload-grid' });
     const load = async () => {
       const ups = await store.listUploads();
@@ -388,6 +398,7 @@ export class InsertPanel {
       load();
     } }, icon('uploads'), 'Upload pictures, videos and sounds');
     return [
+      views,
       upload,
       h('p', { class: 'hint' }, `Or drag files onto the page, or paste pictures with ${mod}+V. A sound becomes the soundtrack. Everything stays on this device: nothing is uploaded anywhere.`),
       grid,
