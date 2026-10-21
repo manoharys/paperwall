@@ -55,7 +55,10 @@ smaller way.
 | QR codes | ✅ | made on your device |
 | Remove a plain background | ✅ | logos, product shots on white |
 | Download PNG (1–3x, transparent), JPG, SVG, PDF, print, clipboard | ✅ | free, no watermark |
-| PDF with selectable text | ✅ | picture plus a searchable text layer |
+| Vector PDF with embedded fonts | ✅ | shapes, gradients and photos as vectors and images; text in font subsets, selectable and searchable; effects come as pictures of just that element |
+| Print PDF with bleed and crop marks | ✅ | 3 mm bleed, trim and bleed boxes, pictures at 300 DPI |
+| PDF with selectable text (flattened) | ✅ | each page a picture plus a searchable text layer |
+| PowerPoint download | ✅ | editable text boxes, shapes and pictures, speaker notes; effects, charts and icons as pictures; fonts aren't embedded |
 | Works offline, no account | ✅ | Canva is an online service |
 | Your files never leave your device | ✅ | enforced by the browser's security policy |
 | Phone and tablet | ✅ | installable web app, touch editing |
