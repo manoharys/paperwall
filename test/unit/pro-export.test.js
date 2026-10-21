@@ -650,3 +650,21 @@ test('[EXP-15] PowerPoint: a background photo that can\'t be read comes as a pic
   assert.equal(planPptx(doc, [0], ok).some((w) => w.key === '@bg'), false);
   assert.match(unzip(buildPptx(doc, [0], { media: ok })).get('ppt/slides/slide1.xml').toString(), /name="Background"/);
 });
+
+test('[EXP-15] PowerPoint: a connector\'s picture has room for its arrowheads', () => {
+  const doc = createDesign({ width: 1920, height: 1080 });
+  // A default connector: 6 wide, an arrow at its end. Level, so its box is a line's height.
+  const c = createConnector({ from: [100, 300], to: [700, 300] });
+  const elbow = createConnector({ from: [100, 500], to: [700, 800], route: 'elbow', startCap: 'arrow' });
+  doc.pages[0].elements.push(c, elbow);
+  assert.equal(c.endCap, 'arrow');
+  const half = c.strokeWidth * 3.2 * 0.6; // the head's reach either side of its line
+  const boxes = Object.fromEntries(planPptx(doc, [0]).map((w) => [w.key, w.box]));
+  const b = boxes[c.id];
+  assert.ok(b.y <= 300 - half && b.y + b.h >= 300 + half, `${JSON.stringify(b)} holds the head (±${half})`);
+  assert.ok(b.x + b.w >= 700, 'and its tip');
+  const e = boxes[elbow.id];
+  assert.ok(e.x <= 100 - half && e.x + e.w >= 700 + half && e.y <= 500 - half && e.y + e.h >= 800 + half, JSON.stringify(e));
+  assert.ok(effectPad({ ...c, endCap: 'none' }) < effectPad(c), 'no arrow, no room for one');
+  assert.equal(effectPad({ type: 'line', w: 100, h: 24, startCap: 'none', endCap: 'none' }), 6, 'a line without a width draws 4 wide');
+});

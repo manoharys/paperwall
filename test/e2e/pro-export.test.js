@@ -439,3 +439,54 @@ test('[EXP-15] PowerPoint: a background photo that can\'t be read comes as a pic
   assert.equal(media.length, 1);
   await context.close();
 });
+
+test('[EXP-14] print PDF: a background photo is as sharp as 300 DPI needs over the bleed too', async () => {
+  const { page, context } = await newDesign('a4');
+  await uploadImages(page, [await makePng(page, { w: 3000, h: 4000 })]);
+  const toBackground = (d) => {
+    const p = d.pages[0];
+    const photo = p.elements.find((el) => el.type === 'image');
+    p.background = { type: 'image', assetId: photo.assetId, color: '#ffffff' };
+    p.elements = [];
+  };
+  const doc = await state(page);
+  const bleed = (3 / 25.4) * 300; // 3 mm at 300 per inch, in page px
+  // Covering the page and its bleed, 2480 + 2 × bleed by 3508 + 2 × bleed, at the photo's 3:4.
+  const s = Math.max((doc.width + bleed * 2) / 3000, (doc.height + bleed * 2) / 4000);
+  const [img] = find(readPdf(await exportCopy(page, 'exportVectorPdf', toBackground, { print: true })), /\/Subtype \/Image/);
+  assert.match(img.dict, new RegExp(`/Width ${Math.round(3000 * s)} /Height ${Math.round(4000 * s)} `), img.dict);
+  await context.close();
+});
+
+test('[EXP-13] [EXP-15] the PDF and PowerPoint are of the design as it was when Download was pressed', async () => {
+  const { page, context } = await newDesign('slides');
+  await addText(page);
+  await page.evaluate(() => window.paperwall.editor.update({ text: 'Before' }));
+  // A glowing word: a picture to draw, so the file takes a moment.
+  await addText(page, 'body');
+  await page.evaluate(() => window.paperwall.editor.update({ text: 'Glow', effect: { type: 'glow', color: '#ffcc00' } }));
+  const id = (await state(page)).pages[0].elements[0].id;
+  for (const fmt of ['pptx', 'pdf']) {
+    await page.click('[data-testid="download"]');
+    await page.waitForSelector('[data-testid="export-dialog"]');
+    await page.click(`[data-testid="export-format"] [data-value="${fmt}"]`);
+    const dl = page.waitForEvent('download');
+    await page.click('[data-testid="export-download"]');
+    // An edit while it's being made.
+    await page.evaluate((el) => window.paperwall.editor.update({ text: 'After' }, null, [el]), id);
+    const bytes = readFileSync(await (await dl).path());
+    if (fmt === 'pptx') {
+      const slide = unzip(bytes).get('ppt/slides/slide1.xml').toString();
+      assert.match(slide, /<a:t>Before<\/a:t>/);
+      assert.doesNotMatch(slide, /After/);
+    } else if (has('pdftotext', ['-v'])) {
+      const dir = mkdtempSync(join(tmpdir(), 'paperwall-vpdf-'));
+      writeFileSync(join(dir, 'a.pdf'), bytes);
+      const text = execFileSync('pdftotext', [join(dir, 'a.pdf'), '-']).toString();
+      assert.match(text, /Before/);
+      assert.doesNotMatch(text, /After/);
+    }
+    await page.evaluate((el) => window.paperwall.editor.update({ text: 'Before' }, null, [el]), id);
+  }
+  await context.close();
+});

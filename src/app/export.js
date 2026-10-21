@@ -292,9 +292,12 @@ export function exportDialog(editor) {
         // Pictures of effects take a moment: say how far along it is.
         const onProgress = (p) => (btn.lastChild.textContent = t('export.preparingPercent', { percent: formatNumber(p, { style: 'percent', maximumFractionDigits: 0 }) }));
         const signal = stopper.signal;
-        const file = state.format === 'pptx' ? await exportPptx(doc, pages, { signal, onProgress })
-          : state.pdfKind === 'flat' ? await exportPdf(doc, pages)
-            : await exportVectorPdf(doc, pages, { print: state.pdfKind === 'print', signal, onProgress });
+        // Made from the design as it was when Download was pressed: edits
+        // while it's being made (fonts and pictures load in between) don't leak in.
+        const still = versionSnapshot(doc);
+        const file = state.format === 'pptx' ? await exportPptx(still, pages, { signal, onProgress })
+          : state.pdfKind === 'flat' ? await exportPdf(still, pages)
+            : await exportVectorPdf(still, pages, { print: state.pdfKind === 'print', signal, onProgress });
         if (signal.aborted) return; // closed while making it
         download(file, `${name}${state.pdfKind === 'print' && state.format === 'pdf' ? '-print' : ''}.${state.format}`);
       } else {

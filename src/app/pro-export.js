@@ -109,9 +109,10 @@ function redraw({ url, bytes, mime, shown }, { print = false } = {}) {
  * Every picture the pages show, by the name writers know it by:
  * "asset:<id>:file" (a video's still is a picture of its own), or
  * "asset:<id>:poster" for a video's small poster; with its data: URL and the
- * largest size it's shown at (page px, w and h each).
+ * largest size it's shown at (page px, w and h each). A background photo
+ * covers the page and `bleed` px past each edge.
  */
-function pictureTokens(doc, pages) {
+function pictureTokens(doc, pages, bleed = 0) {
   const out = new Map(); // token -> { url, w, h }
   const add = (token, url, w, h) => {
     const was = out.get(token);
@@ -133,7 +134,7 @@ function pictureTokens(doc, pages) {
     const p = doc.pages[i];
     visit(p.elements);
     const bg = doc.assets[p.background?.type === 'image' ? p.background.assetId : null];
-    if (bg?.dataUrl) add(`asset:${p.background.assetId}:file`, bg.dataUrl, doc.width, doc.height);
+    if (bg?.dataUrl) add(`asset:${p.background.assetId}:file`, bg.dataUrl, doc.width + bleed * 2, doc.height + bleed * 2);
   }
   return out;
 }
@@ -142,12 +143,13 @@ function pictureTokens(doc, pages) {
  * The pages' pictures, each made ready for a writer by encode({ bytes, mime,
  * url, jpeg, shown }) (jpeg: the file's details when it's a JPEG that can go
  * in as it is; shown: the largest size it's shown at, in output px, at
- * `scale` per page px). One that can't be read is left out: the element then
- * comes as a picture of itself.
+ * `scale` per page px; a background's with `bleed` page px past each edge).
+ * One that can't be read is left out: the element then comes as a picture of
+ * itself.
  */
-async function readPictures(doc, pages, check, scale, encode) {
+async function readPictures(doc, pages, check, { scale, bleed = 0 }, encode) {
   const out = new Map();
-  for (const [token, { url, w, h }] of pictureTokens(doc, pages)) {
+  for (const [token, { url, w, h }] of pictureTokens(doc, pages, bleed)) {
     check();
     try {
       const { bytes, mime } = dataUrlToBytes(url);
@@ -239,15 +241,15 @@ export async function exportVectorPdf(doc0, pages0, { print = false, signal, onP
   const [doc, pages] = await onPaper(doc0, pages0);
   const fonts = await designFontFiles(doc);
   check();
-  const images = await readPictures(doc, pages, check, rasterScale(doc, { print }), (p) => pdfPicture(p, { print }));
+  // (For print, the background runs into the bleed: its photo and its picture cover that too.)
+  const bleed = print ? bleedSize(doc) : 0;
+  const images = await readPictures(doc, pages, check, { scale: rasterScale(doc, { print }), bleed }, (p) => pdfPicture(p, { print }));
   const env = { fonts, images, measure, print, title: doc.name };
   const wants = planVectorPdf(doc, pages, env);
   const rasters = new Map();
   if (wants.length) {
     const fontCss = await fontCssFor(doc);
     const scale = rasterScale(doc, { print });
-    // (For print, the background's picture covers the bleed too.)
-    const bleed = print ? bleedSize(doc) : 0;
     for (const [n, w] of wants.entries()) {
       check();
       onProgress?.(n / (wants.length + 1));
@@ -264,7 +266,7 @@ export async function exportPptx(doc0, pages0, { signal, onProgress } = {}) {
   const check = stopper(signal);
   await ensureDesignFonts(doc0);
   const [doc, pages] = await onPaper(doc0, pages0);
-  const media = await readPictures(doc, pages, check, rasterScale(doc), pptxPicture);
+  const media = await readPictures(doc, pages, check, { scale: rasterScale(doc) }, pptxPicture);
   // (A photo whose picture couldn't be read comes as a picture of itself.)
   const wants = planPptx(doc, pages, media);
   const pictures = new Map();
