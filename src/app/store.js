@@ -133,19 +133,20 @@ export function all(store) {
 // ---------- designs ----------
 
 /** Save a design with a small preview image. */
-// Each design's latest preview, so saving without a new one doesn't read the
-// whole stored design (videos and all) back just to keep it.
-const thumbs = new Map();
+// Each design's latest preview is also kept on its own, small, so saving
+// without a new one reads just that (not the whole stored design, videos and
+// all), and every tab sees the newest.
+const thumbKey = (id) => `thumb|${id}`;
 
 export async function saveDesign(doc, thumb) {
-  if (thumb !== undefined) thumbs.set(doc.id, thumb);
-  else if (!thumbs.has(doc.id)) {
-    const stored = (await get('designs', doc.id))?.thumb ?? null;
-    // (A newer preview may have come while that was read: it wins.)
-    if (!thumbs.has(doc.id)) thumbs.set(doc.id, stored);
+  if (thumb !== undefined) await put('settings', thumbKey(doc.id), thumb);
+  else {
+    thumb = await get('settings', thumbKey(doc.id));
+    // Saved before previews were kept apart: read once from the design.
+    if (thumb === undefined) thumb = (await get('designs', doc.id))?.thumb ?? null;
   }
   // Without files nothing uses any more (a deleted video, a replaced soundtrack).
-  await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: doc.height, pages: doc.pages.length, thumb: thumbs.get(doc.id) ?? null, doc: keptAssets(doc) });
+  await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: doc.height, pages: doc.pages.length, thumb: thumb ?? null, doc: keptAssets(doc) });
 }
 
 export async function loadDesign(id) {
@@ -158,7 +159,7 @@ export async function listDesigns() {
 }
 
 export async function deleteDesign(id) {
-  thumbs.delete(id);
+  await del('settings', thumbKey(id)).catch(() => null);
   await del('designs', id);
   // The design is gone either way; its history is cleaned up as well as it can be.
   await deleteVersions(id).catch(() => null);

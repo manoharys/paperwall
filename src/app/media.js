@@ -215,6 +215,7 @@ export class VideoFrames {
         v.loop = false;
         const length = this.lengthOf(el, v);
         v.onended = el.loop === false ? null : () => {
+          if (turn !== this.turn) return; // its page was left: it stays put
           v.currentTime = videoTime(el, 0, length);
           v.play().catch(() => null);
         };

@@ -221,7 +221,7 @@
         { "id": "MOT-05", "title": "Download as an animated GIF" },
         { "id": "MOT-06", "title": "Download as a video (MP4 or WebM)" },
         { "id": "MOT-07", "title": "Add videos to a design" },
-        { "id": "MOT-08", "title": "Add a soundtrack that plays in videos and when presenting" }
+        { "id": "MOT-08", "title": "Add a soundtrack that plays in downloaded videos and with Play" }
       ]
     },
     {

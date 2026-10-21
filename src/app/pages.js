@@ -236,6 +236,14 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     // Moving on by itself, the next page starts when the last one's time was
     // up (not a frame later), so pages keep time with the soundtrack.
     started = auto ? started + pageDuration(doc.pages[shown[at]]) * 1000 : performance.now();
+    // Back from a tab in the background, long overdue: the show picks up from
+    // here (the next page from its start, the sound with it), rather than
+    // racing through the pages it missed.
+    if (auto && performance.now() - started > 1000) {
+      auto = false;
+      started = performance.now();
+      clearTimeout(fading); // timed afresh below
+    }
     at = to;
     drawn = 0;
     live = false;

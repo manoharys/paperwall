@@ -215,7 +215,7 @@ A feature counts as verified only when a browser test named with its id passes a
 | MOT-05 | Download as an animated GIF | ✅ verified |
 | MOT-06 | Download as a video (MP4 or WebM) | ✅ verified |
 | MOT-07 | Add videos to a design | ✅ verified |
-| MOT-08 | Add a soundtrack that plays in videos and when presenting | ✅ verified |
+| MOT-08 | Add a soundtrack that plays in downloaded videos and with Play | ✅ verified |
 
 ## Export
 
