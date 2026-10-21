@@ -92,11 +92,27 @@ export function animationOf(page, el, order = readingOrder(page), { nested = fal
   const anim = own || pageAnim;
   if (!anim) return null;
   const duration = clampNum(anim.duration, ...LIMITS.duration, DEFAULT_ANIM_DURATION);
-  const at = rankIn(order, el.id);
-  // A page's elements all come in within its time: with many of them, closer together.
-  const fit = order.length > 1 ? Math.max(0, pageDuration(page) - duration) / (order.length - 1) : Infinity;
+  // One after another among those that come in with the page (one kept
+  // still, or with its own animation, leaves no gap), all within its time:
+  // with many of them, closer together.
+  const followers = own ? null : followersOf(page, order);
+  const at = own ? 0 : rankIn(followers, el.id);
+  const fit = followers && followers.length > 1 ? Math.max(0, pageDuration(page) - duration) / (followers.length - 1) : Infinity;
   const delay = own ? clampNum(own.delay, ...LIMITS.delay, 0) : at * Math.min(fit, clampNum(pageAnim.stagger, ...LIMITS.stagger, DEFAULT_STAGGER));
   return { type: anim.type, duration, delay };
+}
+
+// The ids (in reading order) of a page's elements that come in with the page
+// animation: no animation of their own. Worked out once per order.
+const followerLists = new WeakMap();
+function followersOf(page, order) {
+  let list = followerLists.get(order);
+  if (!list) {
+    const byId = new Map(page.elements.map((e) => [e.id, e]));
+    const follows = (e) => e && !(e.anim && Object.hasOwn(ANIMATIONS, e.anim.type));
+    followerLists.set(order, (list = order.filter((id) => follows(byId.get(id)))));
+  }
+  return list;
 }
 
 // Each reading order's positions, looked up by id (worked out once per order).

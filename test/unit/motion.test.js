@@ -536,3 +536,14 @@ test('[MOT-02] an element set to None stays still while its page comes in animat
   validateDesign(doc);
   assert.deepEqual(doc.pages[0].elements[1].anim, { type: 'none' }, 'kept when a file is opened');
 });
+
+test('[MOT-02] elements kept still or with their own animation leave no gap in the page\'s stagger', () => {
+  const page = createPage();
+  const els = [0, 1, 2, 3].map((i) => createShape('rect', { x: 0, y: i * 100 }));
+  page.elements.push(...els);
+  page.anim = { type: 'fade', stagger: 0.15 };
+  els[0].anim = { type: 'none' };
+  els[1].anim = { type: 'pop', delay: 1 };
+  assert.equal(animationOf(page, els[2]).delay, 0, 'the first to follow the page starts at once');
+  assert.ok(Math.abs(animationOf(page, els[3]).delay - 0.15) < 1e-9);
+});

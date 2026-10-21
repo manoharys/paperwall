@@ -173,12 +173,17 @@ export async function listDesigns() {
   return rows.map(({ doc, ...meta }, i) => ({ ...meta, thumb: kept[i] ?? meta.thumb })).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+// Designs deleted in this tab: a preview still being made for one isn't kept.
+const deleted = new Set();
+
 /** Keep a design's new preview (without saving the design again). */
 export async function saveThumb(id, thumb) {
+  if (deleted.has(id)) return;
   await put('settings', thumbKey(id), thumb);
 }
 
 export async function deleteDesign(id) {
+  deleted.add(id);
   await del('settings', thumbKey(id)).catch(() => null);
   await del('designs', id);
   // The design is gone either way; its history is cleaned up as well as it can be.
