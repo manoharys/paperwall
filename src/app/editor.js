@@ -437,8 +437,10 @@ export class Editor {
   /** A video from Uploads, at its own shape, as big as fits nicely (or dropped `at` a point). */
   addVideo(upload, { at } = {}) {
     const assetId = addAsset(this.doc, { ...upload, kind: 'video' });
-    const s = Math.min(1, (this.doc.width * 0.7) / upload.width, (this.doc.height * 0.7) / upload.height);
-    const el = createVideo(assetId, { w: Math.round(upload.width * s), h: Math.round(upload.height * s) });
+    // (A size it doesn't know: the usual 16:9.)
+    const [vw, vh] = upload.width > 0 && upload.height > 0 ? [upload.width, upload.height] : [640, 360];
+    const s = Math.min(1, (this.doc.width * 0.7) / vw, (this.doc.height * 0.7) / vh);
+    const el = createVideo(assetId, { w: Math.round(vw * s), h: Math.round(vh * s) });
     if (at) {
       el.x = at.x - el.w / 2;
       el.y = at.y - el.h / 2;

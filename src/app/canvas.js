@@ -562,7 +562,8 @@ export class Canvas {
       } else {
         resizeElement(el, box, { scaleContent: o.type === 'group' || o.type === 'qr' });
         const asset = (o.type === 'image' || o.type === 'video') && !keepRatio ? ed.doc.assets[o.assetId] : null;
-        if (asset) coverCrop(el, asset.width, asset.height);
+        // (Only with the file's own size to fill from.)
+        if (asset?.width > 0 && asset?.height > 0) coverCrop(el, asset.width, asset.height);
       }
     } else if (d.mode === 'resize-many') {
       d.moved = true;

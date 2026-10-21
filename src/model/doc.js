@@ -430,7 +430,12 @@ export function validateDesign(doc) {
   if (!doc.assets || typeof doc.assets !== 'object') doc.assets = {};
   // Files can come from anyone: keep only well-formed elements with numeric geometry.
   const NUMERIC = ['x', 'y', 'w', 'h', 'rotation', 'opacity', 'size', 'weight', 'lineHeight', 'letterSpacing', 'curve', 'strokeWidth', 'radius', 'sides', 'innerRatio'];
+  // Every element its own id, across all pages (videos, connectors and
+  // downloads tell elements apart by it): a repeat gets a new one.
+  const seenIds = new Set();
   const clean = (els) => els.filter((el) => el && typeof el === 'object' && typeof el.type === 'string' && typeof el.id === 'string').map((el) => {
+    if (seenIds.has(el.id)) el.id = uid('e');
+    seenIds.add(el.id);
     for (const k of NUMERIC) if (k in el && el[k] !== null) el[k] = Number.isFinite(+el[k]) ? +el[k] : 0;
     if (el.type === 'group') el.children = Array.isArray(el.children) ? clean(el.children) : [];
     if (el.type === 'draw' || el.type === 'connector') el.points = (Array.isArray(el.points) ? el.points : []).filter((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite));
