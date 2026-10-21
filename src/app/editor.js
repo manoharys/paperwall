@@ -168,7 +168,7 @@ export class Editor {
     }
   }
 
-  /** After any change: save, refresh, keep connectors attached. `edit: false` for corrections (re-measuring), which don't call for a new version. */
+  /** After any change: save, refresh, keep connectors attached. `edit: false` for corrections (re-measuring, a video's still), which don't call for a new version or count as an edit. */
   afterChange(quiet = false, { edit = true } = {}) {
     // Mid-drag, outside change() (text refitted as a font loads): after the
     // drag, which it mustn't cut short.
@@ -178,8 +178,10 @@ export class Editor {
     // Connectors on every page follow what they're attached to (pages
     // without connectors return at once).
     this.syncAllConnectors();
-    this.doc.updatedAt = Date.now();
-    if (edit) this.changedSinceVersion = true;
+    if (edit) {
+      this.doc.updatedAt = Date.now();
+      this.changedSinceVersion = true;
+    } else this.lastThumb = null; // (its look changed all the same)
     this.selection = this.selection.filter((id) => cmd.findElement(this.pageData, id));
     if (!quiet) this.emit('doc');
     this.save();
@@ -808,7 +810,8 @@ export class Editor {
       if (this.doc.document) return cmd.groupElements(this.doc, this.page, frames.map((el) => el.id));
     });
     this.select(group ? [group] : frames.map((el) => el.id));
-    return frames;
+    // (In a document, the group's own: the frames made were copied into it.)
+    return group ? cmd.findElement(this.pageData, group).children : frames;
   }
 
   /** Make a plain background see-through. Returns how much of the picture was cleared (0..1). */

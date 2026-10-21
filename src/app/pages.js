@@ -431,7 +431,12 @@ export function presenterView(editor, canvas) {
   };
   document.body.append(view);
   document.addEventListener('keydown', onKey, true);
-  ctl = present(editor, canvas, { host: audience, onPage: show, onClose: end });
+  try {
+    ctl = present(editor, canvas, { host: audience, onPage: show, onClose: end });
+  } catch (e) {
+    end(); // (nothing left open that can't be closed)
+    throw e;
+  }
   view.focus();
   return ctl;
 }

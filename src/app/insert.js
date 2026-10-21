@@ -5,7 +5,7 @@ import { colorButton, selectField, section, slider } from './widgets.js';
 import { FONTS, FONT_PAIRS } from '../model/fonts.js';
 import { ALL_ICONS, ALL_STICKERS, searchGraphics } from '../model/graphics.js';
 import { renderPage, renderElementOnly } from '../model/render.js';
-import { DRAW_TOOLS, createShape, createFrame, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES, DOC_STYLES, NOTE_COLORS, createSticky, DOCUMENT } from '../model/doc.js';
+import { DRAW_TOOLS, createShape, createFrame, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES, DOC_STYLES, NOTE_COLORS, createSticky, DOCUMENT, presetById } from '../model/doc.js';
 import { GRIDS, gridBoxes } from '../model/grids.js';
 import { collectColors, scaleElement } from '../model/commands.js';
 import { TEMPLATES, TEMPLATE_CATEGORIES, TEMPLATE_FORMATS, searchTemplates, templateFormatLabel } from '../templates/index.js';
@@ -207,7 +207,10 @@ export class InsertPanel {
     const notes = section('Sticky notes', h('div', { class: 'note-grid', 'data-testid': 'note-colors' }, NOTE_COLORS.map((c, i) => h('button', {
       type: 'button', class: 'note-swatch', style: { background: c }, 'aria-label': `Add a sticky note (${i + 1})`, 'data-testid': `note-add-${i}`,
       // (As big as on a whiteboard as it began: a share of the page's shorter side.)
-      onClick: () => ed.insert(ed.scaled(createSticky(c), ed.doc.board ? 320 / 2400 : 0.3)),
+      onClick: () => {
+        const note = createSticky(c);
+        return ed.insert(ed.scaled(note, ed.doc.board ? note.w / presetById('whiteboard').h : 0.3));
+      },
     }))), h('p', { class: 'hint' }, 'Double-click a note to write on it. Connect notes with lines from Elements.'));
     return [
       ed.doc.document
