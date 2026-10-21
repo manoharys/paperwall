@@ -12,6 +12,7 @@ import { gridLines, marginSize, bleedSize } from '../model/view.js';
 import { endsOf, setEnds, isLine, lineHit } from '../model/connectors.js';
 import { measure } from './fonts.js';
 import { mediaKind, blobUrlFor } from './media.js';
+import { notePad } from '../model/text-layout.js';
 import { h, toast, pickFile } from './ui.js';
 import * as store from './store.js';
 
@@ -61,6 +62,11 @@ export class Canvas {
     });
     // Undo and redo wait while a drag is going (it holds parts of the design).
     editor.isDragging = () => !!this.drag;
+    // The middle of what's in view, on the page (where new things can go on a big canvas).
+    editor.viewCenter = () => {
+      const r = this.el.getBoundingClientRect();
+      return this.toPage({ clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 });
+    };
     // A change arrives mid-drag (see Editor.change). Drags that hold no part of
     // the design (marquee, pan, a stroke not yet added) just carry on. One that
     // has moved things is finished first. One that hasn't moved yet hands back
@@ -197,7 +203,9 @@ export class Canvas {
     const bw = Math.max(vw, w + PAD * 2);
     const bh = Math.max(vh, hgt + PAD * 2);
     Object.assign(this.board.style, { width: `${bw}px`, height: `${bh}px` });
-    Object.assign(this.wrap.style, { width: `${w}px`, height: `${hgt}px`, left: `${(bw - w) / 2}px`, top: `${(bh - hgt) / 2}px` });
+    this.wrapWas = this.wrapAt;
+    this.wrapAt = { left: (bw - w) / 2, top: (bh - hgt) / 2 };
+    Object.assign(this.wrap.style, { width: `${w}px`, height: `${hgt}px`, left: `${this.wrapAt.left}px`, top: `${this.wrapAt.top}px` });
   }
 
   render() {
@@ -210,18 +218,33 @@ export class Canvas {
     // The page changed size (a restored version, resizing, undoing either): fit it in view again.
     const size = `${ed.doc.width}x${ed.doc.height}`;
     const resized = this.pageSize && this.pageSize !== size;
+    this.pageSizeWas = this.pageSize;
     this.pageSize = size;
-    if (resized) this.zoomToFit();
+    // (A document or whiteboard growing as you work stays where you are;
+    // made smaller, as by undo or a restored version, it's fitted again.)
+    const [ow, oh] = resized ? this.pageSizeWas.split('x').map(Number) : [0, 0];
+    // (A document's height comes and goes with its words: only a new width refits it.)
+    const grew = ed.doc.document ? ed.doc.width === ow : resized && ed.doc.width >= ow && ed.doc.height >= oh;
+    if (resized && !((ed.doc.document || ed.doc.board) && grew)) this.zoomToFit();
+    else if (ed.boardMoved) {
+      // (Scrolled by as much as things moved over, less however much the page's place in the view moved.)
+      const was = this.wrapWas || this.wrapAt;
+      this.el.scrollLeft += ed.boardMoved.dx * ed.zoom + this.wrapAt.left - was.left;
+      this.el.scrollTop += ed.boardMoved.dy * ed.zoom + this.wrapAt.top - was.top;
+    }
+    ed.boardMoved = null;
   }
 
   zoomToFit() {
     const { doc } = this.ed;
     const vw = Math.max(200, this.el.clientWidth - PAD * 2);
     const vh = Math.max(200, this.el.clientHeight - PAD * 2);
-    this.ed.setZoom(Math.min(vw / doc.width, vh / doc.height));
+    // (A document: a sheet of it, from the top, however long it has grown.)
+    const tall = doc.document ? Math.min(doc.height, doc.document.pageHeight) : doc.height;
+    this.ed.setZoom(Math.min(vw / doc.width, vh / tall));
     requestAnimationFrame(() => {
       this.el.scrollLeft = (this.board.offsetWidth - this.el.clientWidth) / 2;
-      this.el.scrollTop = (this.board.offsetHeight - this.el.clientHeight) / 2;
+      this.el.scrollTop = doc.document ? 0 : (this.board.offsetHeight - this.el.clientHeight) / 2;
     });
   }
 
@@ -752,6 +775,12 @@ export class Canvas {
     ta.addEventListener('input', () => {
       el.text = ta.value;
       ed.fitText(el);
+      // (A document's later blocks move down as this one grows.)
+      if (ed.doc.document) {
+        ed.arrange();
+        ed.syncAllConnectors(); // (lines between blocks go with them)
+        this.layout();
+      }
       this.positionTextarea();
       ed.emit('live');
     });
@@ -776,6 +805,8 @@ export class Canvas {
     if (!el || !this.textarea) return;
     const z = ed.zoom;
     const pad = el.highlight ? (el.highlight.padding ?? 0) : 0;
+    // A sticky note's text sits inside its edges.
+    const inset = notePad(el);
     Object.assign(this.textarea.style, {
       left: `${el.x * z}px`,
       top: `${el.y * z}px`,
@@ -787,7 +818,11 @@ export class Canvas {
       color: el.color,
       textAlign: el.align,
       textTransform: el.caps ? 'uppercase' : 'none',
-      paddingTop: `${pad * z}px`,
+      paddingTop: `${(pad + inset) * z}px`,
+      paddingLeft: `${inset * z}px`,
+      paddingRight: `${inset * z}px`,
+      background: el.note || '',
+      boxSizing: 'border-box',
       transform: `rotate(${el.rotation || 0}deg)${el.flipX ? ' scaleX(-1)' : ''}${el.flipY ? ' scaleY(-1)' : ''}`,
     });
   }

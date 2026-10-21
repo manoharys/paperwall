@@ -4,11 +4,12 @@
 import { shapePath, dashArray, maskPath, drawPath } from './shapes.js';
 import { connectorGeometry, arrowHead } from './connectors.js';
 import { hexToRgb, mixHex, sortedStops } from './color.js';
-import { layoutText, displayText, approxMeasure, measureWith } from './text-layout.js';
+import { layoutText, displayText, approxMeasure, measureWith, notePad, noteInner } from './text-layout.js';
 import { iconById, stickerById } from './graphics.js';
 import { qrMatrix, qrPath } from './qr.js';
 import { animationOf, motionAt, readingOrder, transitionAt } from './motion.js';
 import { boundsOf } from './geometry.js';
+import { stillIsCurrent } from './doc.js';
 
 const f = (n) => Math.round(n * 100) / 100;
 const num = (v, fallback) => (Number.isFinite(+v) ? +v : fallback);
@@ -157,7 +158,10 @@ function renderImage(ctx, el) {
  */
 function renderVideo(ctx, el) {
   const asset = ctx.doc.assets[el.assetId];
-  const href = ctx.videoFrame?.(el) || (asset ? ctx.href(el.assetId, 'poster') : '');
+  // Playing: the moment's picture; else its still (where it starts, full
+  // size), else the small poster taken when it was added.
+  const still = stillIsCurrent(ctx.doc, el) ? ctx.href(el.still) : '';
+  const href = ctx.videoFrame?.(el) || still || (asset ? ctx.href(el.assetId, 'poster') : '');
   // Presenting a page whose videos play live: a place for the playing video
   // itself (put in after drawing), framed and clipped like a picture.
   const pic = renderPicture(ctx, el, href, ctx.videoSlots && asset ? 'slot' : 'image'); // no picture at all: the grey box of a missing image
@@ -333,6 +337,15 @@ function textEffect(ctx, el, draw) {
 }
 
 function renderText(ctx, el) {
+  if (el.note) {
+    // A sticky note: its square of color (lifted a little off the page), and
+    // the text inside its edges.
+    const p = notePad(el);
+    const inner = renderText(ctx, noteInner(el));
+    const r = Math.min(8, el.w * 0.02);
+    return `<rect x="0" y="${f(el.h * 0.012 + 2)}" width="${f(el.w)}" height="${f(el.h)}" rx="${f(r)}" fill="#000" fill-opacity="0.12"/>` +
+      `<rect width="${f(el.w)}" height="${f(el.h)}" rx="${f(r)}" fill="${esc(el.note)}"/><g transform="translate(${f(p)} ${f(p)})">${inner}</g>`;
+  }
   if (el.curve) return renderCurvedText(ctx, el);
   const { lines, lineHeight } = layoutText(el, ctx.measure);
   const pad = el.highlight ? el.highlight.padding ?? 0 : 0;
@@ -706,13 +719,15 @@ export function renderElementOnly(doc, el, opts = {}) {
 export function textRuns(doc, pageIndex, measure = approxMeasure) {
   const runs = [];
   const visit = (els, ox, oy) => {
-    for (const el of els) {
-      if (el.hidden) continue;
-      if (el.type === 'group') {
-        if (!el.rotation) visit(el.children, ox + el.x, oy + el.y);
+    for (const el0 of els) {
+      if (el0.hidden) continue;
+      if (el0.type === 'group') {
+        if (!el0.rotation) visit(el0.children, ox + el0.x, oy + el0.y);
         continue;
       }
-      if (el.type !== 'text') continue;
+      if (el0.type !== 'text') continue;
+      // A sticky note's words sit inside its edges (the same middle, so it turns the same).
+      const el = el0.note ? noteInner(el0) : el0;
       const x0 = ox + el.x;
       const y0 = oy + el.y;
       const cx = x0 + el.w / 2;

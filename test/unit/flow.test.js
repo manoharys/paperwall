@@ -1,0 +1,164 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createDesignFromPreset, createText, createImage, createSticky, validateDesign, DOC_STYLES } from '../../src/model/doc.js';
+import { flowDocument, paginate, growBoard, DOCUMENT } from '../../src/model/flow.js';
+import { approxMeasure, layoutText, fitHeight } from '../../src/model/text-layout.js';
+import { renderPage } from '../../src/model/render.js';
+
+test('[DW-01] a document flows its blocks down the page, as wide as the page, and grows', () => {
+  const doc = createDesignFromPreset('doc');
+  assert.ok(doc.document, 'a document');
+  const page = doc.pages[0];
+  page.elements.push(createText({ ...DOC_STYLES.bullets, y: 99999 }));
+  flowDocument(doc, approxMeasure);
+  const [title, body, list] = page.elements;
+  const inner = doc.width - DOCUMENT.margin * 2;
+  assert.deepEqual([title.x, title.y, title.w], [DOCUMENT.margin, DOCUMENT.margin, inner]);
+  assert.equal(body.y, title.y + title.h + DOCUMENT.gap, 'one after another');
+  assert.equal(list.y, body.y + body.h + DOCUMENT.gap);
+  // Lots of words: the page grows to hold them.
+  body.text = 'Words '.repeat(3000);
+  flowDocument(doc, approxMeasure);
+  assert.ok(doc.height > DOCUMENT.pageHeight, `grew to ${doc.height}`);
+  assert.equal(list.y, body.y + body.h + DOCUMENT.gap, 'later blocks move down');
+  assert.ok(doc.height >= list.y + list.h + DOCUMENT.margin);
+});
+
+test('[DW-02] in a document, pictures are as wide as the page and blocks move by where they are dropped', () => {
+  const doc = createDesignFromPreset('doc');
+  const page = doc.pages[0];
+  doc.assets.a = { type: 'image', dataUrl: 'data:image/png;base64,AA==', width: 400, height: 200 };
+  page.elements.push(createImage('a', { w: 400, h: 200, y: 99999 }));
+  flowDocument(doc, approxMeasure);
+  const pic = page.elements[2];
+  assert.equal(pic.w, doc.width - DOCUMENT.margin * 2);
+  assert.equal(pic.h, Math.round(pic.w / 2), 'keeps its shape');
+  // Dragged above the title: it comes first.
+  pic.y = -50;
+  flowDocument(doc, approxMeasure);
+  assert.equal(pic.y, DOCUMENT.margin);
+  assert.ok(page.elements[0].y > pic.y);
+});
+
+test('[DW-03] on paper, a document is split into sheets between its blocks', () => {
+  const doc = createDesignFromPreset('doc');
+  const page = doc.pages[0];
+  for (let i = 0; i < 12; i++) page.elements.push(createText({ ...DOC_STYLES.body, text: `Paragraph ${i} `.repeat(40), y: 10 + i }));
+  flowDocument(doc, approxMeasure);
+  const paper = paginate(doc);
+  assert.ok(paper.pages.length > 1, `${paper.pages.length} sheets`);
+  assert.equal(paper.height, DOCUMENT.pageHeight);
+  assert.equal(paper.document, undefined);
+  const count = paper.pages.reduce((n, p) => n + p.elements.length, 0);
+  assert.equal(count, page.elements.length, 'every block once');
+  for (const sheet of paper.pages) {
+    for (const el of sheet.elements) {
+      assert.ok(el.y >= DOCUMENT.margin - 0.01, 'below the top margin');
+      if (sheet.elements.length > 1) assert.ok(el.y + el.h <= DOCUMENT.pageHeight - DOCUMENT.margin + 0.01, 'whole blocks only');
+    }
+  }
+  assert.equal(doc.pages.length, 1, 'the document itself is unchanged');
+});
+
+test('[DW-04] a whiteboard grows when something is put near its edges', () => {
+  const doc = createDesignFromPreset('whiteboard');
+  assert.equal(doc.board, true);
+  const w = doc.width;
+  const h = doc.height;
+  assert.equal(growBoard(doc), null, 'nothing near the edges yet');
+  doc.pages[0].elements.push(createSticky(undefined, { x: w - 300, y: h - 100 }));
+  assert.ok(growBoard(doc));
+  assert.ok(doc.width > w && doc.height > h);
+  // Near the left: everything moves over to make room.
+  const note = doc.pages[0].elements[0];
+  const x = note.x;
+  note.x = 50;
+  const moved = growBoard(doc);
+  assert.ok(moved.dx > 0, 'grew on the left');
+  assert.equal(note.x, 50 + moved.dx);
+  assert.ok(doc.pages[0].elements[1].x > x, 'the rest moved over too');
+});
+
+test('[DW-05] a sticky note: text inside a square of color, its color checked when opened', () => {
+  const doc = createDesignFromPreset('whiteboard');
+  const note = doc.pages[0].elements[0];
+  assert.ok(note.note);
+  assert.ok(layoutText(note, approxMeasure).lines.every((l) => l.width <= note.w - 32), 'wraps inside its edges');
+  assert.ok(fitHeight(note, approxMeasure) >= note.w, 'keeps its square');
+  const svg = renderPage(doc, 0);
+  assert.match(svg, new RegExp(`fill="${note.note}"`));
+  note.note = 'url(javascript:x)';
+  validateDesign(doc);
+  assert.equal(doc.pages[0].elements[0].note, undefined, 'not a color: a plain text box');
+});
+
+test('[DW-03] text taller than a sheet goes on over the next sheets, in whole lines; a tall picture fits one', () => {
+  const doc = createDesignFromPreset('doc');
+  const page = doc.pages[0];
+  const words = Array.from({ length: 3000 }, (_, i) => `w${i}`);
+  page.elements[1].text = words.join(' ');
+  doc.assets.a = { type: 'image', dataUrl: 'data:image/png;base64,AA==', width: 100, height: 400 };
+  page.elements.push(createImage('a', { w: 100, h: 400, y: 99999 }), createText({ ...DOC_STYLES.body, text: 'After', y: 999999 }));
+  flowDocument(doc, approxMeasure);
+  const paper = paginate(doc, approxMeasure);
+  assert.ok(paper.pages.length >= 4, `${paper.pages.length} sheets`);
+  const texts = paper.pages.flatMap((p) => p.elements.filter((e) => e.type === 'text').map((e) => e.text));
+  const all = texts.join(' ').split(/\s+/);
+  for (const w of words) assert.ok(all.includes(w), `${w} is on a sheet`);
+  const room = DOCUMENT.pageHeight - DOCUMENT.margin * 2;
+  for (const sheet of paper.pages) for (const el of sheet.elements) assert.ok(el.y + el.h <= DOCUMENT.pageHeight - DOCUMENT.margin + 0.5, `${el.type} fits its sheet`);
+  const pic = paper.pages.flatMap((p) => p.elements).find((e) => e.type === 'image');
+  assert.ok(pic.h <= room + 0.5, 'the tall picture fits a sheet');
+  assert.ok(texts.includes('After'), 'what follows is there');
+});
+
+test('[DW-03] a numbered list over two sheets counts on, and a word broken over lines stays whole', () => {
+  const doc = createDesignFromPreset('doc');
+  const page = doc.pages[0];
+  const items = Array.from({ length: 120 }, (_, i) => `Item ${i + 1}`);
+  page.elements[1].list = 'number';
+  page.elements[1].text = items.join('\n');
+  flowDocument(doc, approxMeasure);
+  const paper = paginate(doc, approxMeasure);
+  const pieces = paper.pages.flatMap((p) => p.elements).filter((e) => e.id.startsWith(page.elements[1].id));
+  assert.ok(pieces.length >= 2, `${pieces.length} pieces`);
+  const second = pieces[1];
+  const { lines } = layoutText(second, approxMeasure);
+  const firstItem = Number(second.text.split('\n')[0].replace('Item ', ''));
+  assert.equal(lines[0].prefix, `${firstItem}.  `, 'numbered on from the sheet before');
+  // A long word broken over lines comes back whole.
+  const long = 'x'.repeat(4000);
+  page.elements[1].list = 'none';
+  page.elements[1].text = long;
+  flowDocument(doc, approxMeasure);
+  const again = paginate(doc, approxMeasure).pages.flatMap((p) => p.elements).filter((e) => e.id.startsWith(page.elements[1].id));
+  assert.equal(again.map((e) => e.text).join(''), long);
+  assert.ok(again.every((e) => !e.text.includes(' ')), 'no spaces put into the word');
+});
+
+test('[DW-03] a long block starts in the room left on a sheet, not always on a new one', () => {
+  const doc = createDesignFromPreset('doc');
+  const page = doc.pages[0];
+  page.elements[1].text = Array.from({ length: 2500 }, (_, i) => `w${i}`).join(' ');
+  flowDocument(doc, approxMeasure);
+  const paper = paginate(doc, approxMeasure);
+  const first = paper.pages[0].elements;
+  assert.equal(first.length, 2, 'the title and the start of the long paragraph share the first sheet');
+  assert.ok(first[1].y > first[0].y + first[0].h, 'below the title');
+  assert.ok(first[1].y + first[1].h <= DOCUMENT.pageHeight - DOCUMENT.margin + 0.5);
+});
+
+test('[DW-01] a sticky note in a document keeps its size', () => {
+  const doc = createDesignFromPreset('doc');
+  doc.pages[0].elements.push(createSticky(undefined, { y: 99999 }));
+  flowDocument(doc, approxMeasure);
+  const note = doc.pages[0].elements[2];
+  assert.deepEqual([note.w, note.h], [320, 320]);
+});
+
+test('[DW-04] a whiteboard grows for a thing turned out past its edge', () => {
+  const doc = createDesignFromPreset('whiteboard');
+  doc.pages[0].elements = [createText({ text: 'Long', w: 2000, h: 100, x: 1000, y: 600, rotation: 90 })];
+  const moved = growBoard(doc);
+  assert.ok(moved?.dy > 0, 'grew on top');
+});

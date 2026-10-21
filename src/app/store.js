@@ -1,11 +1,14 @@
 // Everything is stored in this browser, on this device: designs, the images
 // you've added, and your brand kit. Nothing is ever sent anywhere.
 
-import { keptAssets } from '../model/doc.js';
+import { keptAssets, clone } from '../model/doc.js';
 
 const DB_NAME = 'paperwall';
-const DB_VERSION = 2;
-const STORES = ['designs', 'uploads', 'settings', 'versions'];
+const DB_VERSION = 3;
+// media: each design's pictures, videos, sounds and fonts, one row per file
+// ("<designId>|<assetId>"), apart from the design, so saving an edit doesn't
+// rewrite them and listing designs doesn't read them.
+const STORES = ['designs', 'uploads', 'settings', 'versions', 'media'];
 
 let dbPromise = null;
 const memory = Object.fromEntries(STORES.map((s) => [s, new Map()]));
@@ -143,9 +146,28 @@ export async function getThumb(id) {
   return kept !== undefined ? kept : (await get('designs', id))?.thumb ?? null;
 }
 
+// Saves of one design go one at a time (one's clean-up mustn't remove a
+// file the next has just written).
+const saving = new Map(); // design id → its latest save, rename or delete
+let ticks = 0; // what was asked first (always counts up: two never tie)
+
+/** Run `fn` once whatever was asked of a design before has finished (saves, renames and deletes in turn). */
+function inTurn(id, fn) {
+  const job = (saving.get(id) || Promise.resolve()).catch(() => null).then(fn);
+  saving.set(id, job);
+  job.finally(() => saving.get(id) === job && saving.delete(id)).catch(() => null);
+  return job;
+}
+
 /** Save a design with a small preview image (left as it was when `thumb` is undefined). */
-export async function saveDesign(doc, thumb) {
-  deleted.delete(doc.id); // (saved again: a design once more, say opened from a file)
+export function saveDesign(doc, thumb) {
+  const asked = ++ticks;
+  // (A save asked for before the design was deleted doesn't bring it back.)
+  return inTurn(doc.id, () => ((deletedAt.get(doc.id) || -1) > asked ? null : writeDesign(doc, thumb)));
+}
+
+async function writeDesign(doc, thumb) {
+  deletedAt.delete(doc.id); // (saved again on purpose: a design once more, opened from a file say)
   if (thumb !== undefined) await put('settings', thumbKey(doc.id), thumb);
   else {
     thumb = await get('settings', thumbKey(doc.id));
@@ -159,12 +181,76 @@ export async function saveDesign(doc, thumb) {
       else thumb = newer;
     }
   }
-  // Without files nothing uses any more (a deleted video, a replaced soundtrack).
-  await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: doc.height, pages: doc.pages.length, thumb: thumb ?? null, doc: keptAssets(doc) });
+  // Without files nothing uses any more (a deleted video, a replaced
+  // soundtrack). Each file goes in its own row, written when it isn't there
+  // (a file never changes once added: an asset id is always the same file);
+  // the design keeps only where to find it.
+  // (Its pages as they are now: they can change while its files are written.)
+  const kept = keptAssets(doc);
+  kept.pages = clone(kept.pages);
+  const have = new Set(await mediaKeys(doc.id));
+  const assets = {};
+  const writes = [];
+  for (const [id, a] of Object.entries(kept.assets)) {
+    const key = mediaKey(doc.id, id);
+    const { dataUrl, ...details } = a;
+    if (!have.has(key) && typeof dataUrl === 'string') writes.push([key, dataUrl]);
+    assets[id] = { ...details, stored: key };
+  }
+  if (writes.length) await batch('media', writes);
+  const known = seen.get(doc.id) || new Set();
+  for (const k of Object.values(assets)) known.add(k.stored);
+  seen.set(doc.id, known);
+  // (A document's height: a sheet's, not the long page it has grown to.)
+  // (Its details as they were when the save began, like its pages.)
+  await put('designs', doc.id, { id: doc.id, name: kept.name, updatedAt: kept.updatedAt, width: kept.width, height: kept.document?.pageHeight || kept.height, pages: kept.pages.length, thumb: thumb ?? null, doc: { ...kept, assets } });
+  // Files this design no longer uses go: ones this tab has known it to
+  // use (another tab's new file isn't taken for an old one).
+  const keep = new Set(Object.values(assets).map((a) => a.stored));
+  const stale = [...have].filter((k) => !keep.has(k) && known.has(k));
+  for (const k of stale) known.delete(k);
+  if (stale.length) await batch('media', stale.map((k) => [k, undefined]));
 }
 
+const mediaKey = (designId, assetId) => `${designId}|${assetId}`;
+const seen = new Map(); // design id → the files this tab has saved it with
+
+/** Whether a design is stored (without reading it). */
+export async function hasDesign(id) {
+  return (await run('designs', 'readonly', (s) => s.count(id), () => (memory.designs.has(id) ? 1 : 0))) > 0;
+}
+
+/** Rename a stored design (without reading its files). */
+export function renameDesign(id, name) {
+  // In turn with the design's saves (a save under way would put the old name back).
+  return inTurn(id, async () => {
+    const row = await get('designs', id);
+    if (!row) return;
+    const updatedAt = Date.now();
+    await put('designs', id, { ...row, name, updatedAt, doc: { ...row.doc, name, updatedAt } });
+  });
+}
+
+function mediaKeys(designId) {
+  return keysIn(`${designId}|`, 'media');
+}
+
+/** A saved design, whole: its files read back in from the media store. */
 export async function loadDesign(id) {
-  return (await get('designs', id))?.doc || null;
+  const doc = (await get('designs', id))?.doc || null;
+  if (!doc?.assets) return doc;
+  // (A design saved before files were kept apart has them inline already.)
+  const refs = Object.values(doc.assets).filter((a) => a && typeof a.stored === 'string');
+  // The files it's known to use, so a later save may tidy away ones it stops using.
+  const known = seen.get(id) || new Set();
+  for (const a of refs) known.add(a.stored);
+  seen.set(id, known);
+  const data = await getMany('media', refs.map((a) => a.stored));
+  refs.forEach((a, i) => {
+    if (typeof data[i] === 'string') a.dataUrl = data[i];
+    delete a.stored;
+  });
+  return doc;
 }
 
 export async function listDesigns() {
@@ -174,21 +260,27 @@ export async function listDesigns() {
   return rows.map(({ doc, ...meta }, i) => ({ ...meta, thumb: kept[i] ?? meta.thumb })).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-// Designs deleted in this tab: a preview still being made for one isn't kept.
-const deleted = new Set();
 
 /** Keep a design's new preview (without saving the design again). */
 export async function saveThumb(id, thumb) {
-  if (deleted.has(id)) return;
+  if (deletedAt.has(id)) return; // (deleted here: a preview still being made for it isn't kept)
   await put('settings', thumbKey(id), thumb);
 }
 
-export async function deleteDesign(id) {
-  deleted.add(id);
-  await del('settings', thumbKey(id)).catch(() => null);
-  await del('designs', id);
-  // The design is gone either way; its history is cleaned up as well as it can be.
-  await deleteVersions(id).catch(() => null);
+const deletedAt = new Map(); // design id → when it was deleted in this tab (in `ticks`)
+
+export function deleteDesign(id) {
+  deletedAt.set(id, ++ticks);
+  // In turn with its saves and renames (one under way would write it back,
+  // one asked for meanwhile waits and finds it gone).
+  return inTurn(id, async () => {
+    seen.delete(id);
+    await del('settings', thumbKey(id)).catch(() => null);
+    await del('designs', id);
+    await mediaKeys(id).then((keys) => batch('media', keys.map((k) => [k, undefined]))).catch(() => null);
+    // The design is gone either way; its history is cleaned up as well as it can be.
+    await deleteVersions(id).catch(() => null);
+  });
 }
 
 // ---------- version history (per design, on this device) ----------
@@ -207,15 +299,16 @@ const dKey = (designId, at) => `${designId}|d|${stamp(at)}~${TAB}`;
 const aKey = (designId, assetId) => `${designId}|a|${assetId}`;
 const range = (prefix) => [prefix, `${prefix}\uffff`];
 
-/** Without IndexedDB: the in-memory versions under a prefix, as [key, value] in key order. */
-const inMemory = (prefix) => {
+/** Without IndexedDB: the in-memory rows under a prefix (of version history, by default), as [key, value] in key order. */
+const inMemory = (prefix, store = 'versions') => {
   const [lo, hi] = range(prefix);
-  return [...memory.versions.entries()].filter(([k]) => k >= lo && k <= hi).sort(([a], [b]) => (a < b ? -1 : 1));
+  return [...memory[store].entries()].filter(([k]) => k >= lo && k <= hi).sort(([a], [b]) => (a < b ? -1 : 1));
 };
 
-function keysIn(prefix) {
+/** The keys under a prefix in a store (version history's, by default), in key order. */
+function keysIn(prefix, store = 'versions') {
   const [lo, hi] = range(prefix);
-  return run('versions', 'readonly', (s) => s.getAllKeys(IDBKeyRange.bound(lo, hi)), () => inMemory(prefix).map(([k]) => k));
+  return run(store, 'readonly', (s) => s.getAllKeys(IDBKeyRange.bound(lo, hi)), () => inMemory(prefix, store).map(([k]) => k));
 }
 
 function valuesIn(prefix) {
@@ -356,8 +449,12 @@ export async function listUploads() {
   return rows.sort((a, b) => b.addedAt - a.addedAt);
 }
 
+/** Uploads still on their way (a stock photo fetched while it's dragged): getUpload waits for them. */
+export const comingUploads = new Map();
+
 /** An upload, whole. */
 export async function getUpload(id) {
+  if (comingUploads.has(id)) return comingUploads.get(id);
   const [upload, data] = await getMany('uploads', [id, `${DATA}${id}`]);
   if (!upload) return upload;
   return data ? { ...upload, ...data } : upload;

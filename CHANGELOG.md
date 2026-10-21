@@ -19,7 +19,44 @@
   reader (to embed the bundled fonts), a TrueType subsetter, and the PDF and
   PowerPoint writers.
 
-## 0.4.0 (unreleased): Motion
+## 0.6.0 (unreleased): Online extras, all opt-in
+
+Nothing here goes online until you turn it on, and each one talks only to
+the provider you pick. Keys stay on your device. No ads, no accounts.
+
+- Stock photos: search Openverse (no key), or Unsplash and Pexels with your
+  own key. Each photo keeps its credit (creator, license, source), shown
+  with a "Copy credit" button.
+- AI writing: write, rewrite, shorten, lengthen, fix, change the tone of or
+  translate a text box, with Claude, OpenAI or Gemini (your key) or a model
+  on your own computer through Ollama. One undo step each.
+- AI design: describe a design and get an editable one (or three to pick
+  from), with Paperwall's own fonts and icons.
+- Background removal for any photo, by a small open-license model
+  (U²-Net small, 4.6 MB) downloaded once with your OK and run on your
+  device by Paperwall's own engine.
+- Online extras settings: turn each on or off, pick a provider, test a key,
+  forget all keys.
+- The page's security policy lists exactly these providers' addresses and
+  nothing else.
+
+## 0.5.0 (unreleased): Present, docs and whiteboards
+
+- Speaker notes for each page, and a presenter view: the slides in a
+  window of their own (drag it to the projector) and, for you, the page
+  now, the next one, its notes and a timer.
+- Documents: headings, paragraphs, lists and pictures flow down the page
+  as you write; drag a block above or below another to move it. PDF and
+  print split it into sheets between blocks.
+- Whiteboards: a canvas that grows as you add to it, sticky notes in six
+  colors, and lines between things.
+- Files (pictures, videos, sounds, fonts) are stored apart from each saved
+  design, once, so big videos don't slow saving or the home screen.
+- A video's still picture is taken full size from where it starts.
+- GIF and video downloads of pages with big photos are quicker: each photo
+  is made only as big as the frames can show, once.
+
+## 0.4.0: Motion
 
 - Animations for elements as they come in: fade, rise, drop, pan, pop,
   wipe, typewriter, tumble and breathe, each with its own duration and

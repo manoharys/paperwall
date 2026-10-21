@@ -2,18 +2,19 @@
 
 Canva is a huge product: a design editor, a content library, AI tools, video,
 whiteboards, documents, websites, team collaboration and printing. Paperwall is
-one part of that: **a design editor for one person making static designs**
-(posters, posts, invitations, menus, thumbnails, slides), running entirely on
-your device.
+one part of that: **a design editor for one person** (posters, posts,
+invitations, menus, thumbnails, slides, animated posts, documents and
+whiteboards), running entirely on your device.
 
 So the honest answer to "do we have parity with Canva?" is:
 
 - **For making a static design on your own, start to finish: yes, the core
   is there**, and every piece of it is verified by a browser test
   ([SCOREBOARD.md](../SCOREBOARD.md)).
-- **For everything Canva does: no.** Paperwall has no stock photo library, no
-  AI, no real-time collaboration and no cloud, and its video editing is
-  basic (videos and a soundtrack in animated designs, no timeline editor).
+- **For everything Canva does: no.** Its stock photos and AI are opt-in
+  extras that use free providers or your own key (no hosted library, no
+  image generation), it has no real-time collaboration and no cloud, and
+  its video editing is basic (videos and a soundtrack in animated designs, no timeline editor).
   Some of that is on the roadmap; some of it (the cloud) is left out on
   purpose.
 
@@ -26,9 +27,9 @@ smaller way.
 
 | | Areas |
 | --- | --- |
-| Paperwall does it | 19 |
-| Partly | 5 |
-| Not yet | 8 |
+| Paperwall does it | 20 |
+| Partly | 7 |
+| Not yet | 5 |
 
 ## The core editor
 
@@ -54,6 +55,7 @@ smaller way.
 | Charts and tables | ✅ | bar, line, pie, donut |
 | QR codes | ✅ | made on your device |
 | Remove a plain background | ✅ | logos, product shots on white |
+| Remove the background of any photo | ✅ | a small open-license model, downloaded once with your OK, run on your device |
 | Download PNG (1–3x, transparent), JPG, SVG, PDF, print, clipboard | ✅ | free, no watermark |
 | Vector PDF with embedded fonts | ✅ | shapes, gradients and photos as vectors and images; text in font subsets, selectable and searchable; effects come as pictures of just that element |
 | Print PDF with bleed and crop marks | ✅ | 3 mm bleed, trim and bleed boxes, pictures at 300 DPI |
@@ -70,18 +72,19 @@ smaller way.
 | --- | --- | --- |
 | Templates | 🟡 | 397 original templates in 44 categories, including multi-page decks, calendars, menus and planners. Canva's library is still far larger. |
 | Fonts | 🟡 | 92 open-license families with a searchable picker, plus your own font files |
-| Icons and graphics | 🟡 | 1,956 icons (our own plus Lucide) and 198 stickers; no photo library yet |
-| Presentations | 🟡 | present full screen; no speaker notes, transitions or recording |
+| Icons and graphics | 🟡 | 1,956 icons (our own plus Lucide) and 198 stickers |
+| Presentations | 🟡 | present full screen with transitions and animations; speaker notes and a presenter view (next page, notes, timer, slides in their own window); no recording |
+| Documents | 🟡 | headings, paragraphs, lists and pictures that flow down the page and print on sheets; no tables of contents or page numbers yet |
+| Stock photos | 🟡 | opt-in: Openverse (no key), Unsplash and Pexels (your key), each photo with its credit; no video library |
+| AI tools | 🟡 | opt-in, your own key or a local model: write, rewrite, shorten, translate text, describe a design and get an editable one; no image generation |
+| Whiteboards | 🟡 | a canvas that grows, sticky notes in six colors, lines between things; no voting, timers or templates for workshops yet |
 
 ## Not in Paperwall (yet)
 
 | Area | Plan |
 | --- | --- |
-| Stock photo and video library | Not planned as a hosted service. Possible: let people bring in openly licensed photos they download themselves. |
-| AI tools (generate images or text, smart edits) | Possible later as optional on-device models; nothing that sends your work to a server. |
-| Cutting people out of busy photos | On the scoreboard as "not done yet". Needs an on-device model. |
 | Video, animation, GIF/MP4 export | Done in v0.4: element and page animations, transitions, page timing, videos and a soundtrack, and GIF, MP4 and WebM downloads. Not yet: a timeline editor, cutting clips, video sound. |
 | Real-time collaboration, comments, share links | Not planned: there's no server. You can send the design file. |
 | Cloud sync across devices | Left out on purpose. Save to a file to move a design. |
-| Whiteboards, documents, websites, social scheduling, print ordering | Out of scope. |
+| Websites, social scheduling, print ordering | Out of scope. |
 

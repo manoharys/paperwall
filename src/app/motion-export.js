@@ -36,9 +36,12 @@ export function frameSize(doc, kind, wanted = null) {
  * timeSeconds, same)` in order (`same`: the picture hasn't changed since the
  * frame before). `pages` are the page indexes to play.
  */
-async function eachFrame(doc, pages, { fps, width, height, onProgress, signal, readBack = false }, each) {
-  const tl = timeline(doc, pages);
+async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, readBack = false }, each) {
+  const tl = timeline(doc0, pages);
   if (!tl.parts.length) throw new Error('Pick at least one page.');
+  // Big photos made only as big as the frames can show, once, rather than
+  // decoded at full size for every frame.
+  const doc = await fittedPictures(doc0, pages, width);
   const count = Math.max(1, Math.round(tl.total * fps));
   // Fonts of just the pages being played (each frame carries them).
   const fontCss = await fontCssFor({ ...doc, pages: pages.map((i) => doc.pages[i]) });
@@ -104,6 +107,61 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal, r
     videos?.dispose();
   }
   return { count, total: tl.total, stuck: !!videos?.stuck };
+}
+
+/**
+ * The design with each picture made only as big as it shows in frames
+ * `width` px wide (a little more, for smooth scaling; a zoomed-in crop
+ * counts as the whole picture shown bigger). A copy: the design itself
+ * keeps its pictures.
+ */
+async function fittedPictures(doc, pages, width) {
+  const scale = width / doc.width;
+  // How big each picture shows, as a share of its own size (its biggest use).
+  const share = new Map();
+  const use = (id, w, h) => {
+    const a = doc.assets[id];
+    if (!a?.width || !a?.height) return share.set(id, Infinity);
+    share.set(id, Math.max(share.get(id) || 0, (w * scale) / a.width, (h * scale) / a.height));
+  };
+  const walk = (els) => {
+    for (const el of els) {
+      if (el.type === 'image' && el.assetId) use(el.assetId, el.w / (el.crop?.w || 1), el.h / (el.crop?.h || 1));
+      if (el.type === 'video' && el.still) use(el.still, el.w / (el.crop?.w || 1), el.h / (el.crop?.h || 1));
+      if (el.type === 'group') walk(el.children);
+    }
+  };
+  for (const i of pages) {
+    const page = doc.pages[i];
+    walk(page.elements);
+    if (page.background?.type === 'image') use(page.background.assetId, doc.width, doc.height);
+  }
+  const assets = { ...doc.assets };
+  // (Two at a time: quicker than one by one, without every big photo
+  // decoded at full size at once.)
+  const queue = [...share];
+  const next = async () => {
+    for (let item = queue.shift(); item; item = queue.shift()) await shrink(item);
+  };
+  const shrink = async ([id, part]) => {
+    const a = doc.assets[id];
+    const s = part * 1.25;
+    if (!(s < 0.9) || typeof a?.dataUrl !== 'string' || a.dataUrl.startsWith('data:image/svg')) return;
+    try {
+      const img = await loadImage(a.dataUrl);
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.naturalWidth * s));
+      c.height = Math.max(1, Math.round(img.naturalHeight * s));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      // (Pictures that may be see-through stay PNG.)
+      const clear = !/^data:image\/jpe?g/.test(a.dataUrl); // (only JPEGs are never see-through)
+      assets[id] = { ...a, dataUrl: c.toDataURL(clear ? 'image/png' : 'image/jpeg', 0.92), width: c.width, height: c.height };
+    } catch {
+      /* kept as it is */
+    }
+  };
+  await Promise.all([next(), next()]);
+  return { ...doc, assets };
 }
 
 /** One frame (the page(s) at their moment, as SVG) into the canvas. */

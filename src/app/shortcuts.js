@@ -48,7 +48,8 @@ export function bindShortcuts(editor, canvas, actions) {
   let pasteFallback = null;
 
   const onKey = (e) => {
-    if (typing(e) || document.querySelector('.backdrop, .presenter')) return;
+    // (Presenting, or the presenter view: keys move the slides, never edit.)
+    if (typing(e) || document.querySelector('.backdrop, .presenter, .presenter-view')) return;
     // While a drag is going it holds parts of the design: keys wait (and a
     // cancelled drag then puts back exactly what it changed).
     if (editor.isDragging?.()) {

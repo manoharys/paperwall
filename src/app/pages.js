@@ -4,7 +4,7 @@ import { h, icon, iconButton, clear, debounce, dialog, toast, lazily, forget, pr
 import { renderPage, renderFrame } from '../model/render.js';
 import { animationsEnd, keepsMoving, hasLoop, soundFade, pageDuration, pageFrame, transitionOf, timeline } from '../model/motion.js';
 import { VideoFrames, videosOn, blobUrlFor } from './media.js';
-import { measure } from './fonts.js';
+import { measure, fontCssFor } from './fonts.js';
 import { visiblePages, pageName, pageLabel, soundtrackOf } from '../model/doc.js';
 
 export class PageStrip {
@@ -120,8 +120,16 @@ export function pageGrid(editor, canvas) {
  * transitions between them. Arrow keys move, Escape leaves. Hidden pages are
  * skipped. `autoplay` moves on by itself after each page's time (Play).
  * `only`: just the page in view, once (a preview of its motion, no soundtrack).
+ * `host`: the window to show them in (another one, for the presenter view);
+ * `onPage(index, shownIndexes)` hears each page change, `onClose` the end.
+ * Returns { close, go(position) }.
  */
-export function present(editor, canvas, { autoplay = false, only = false } = {}) {
+export function present(editor, canvas, { autoplay = false, only = false, host = window, onPage = null, onClose = null } = {}) {
+  const hostDoc = host.document;
+  // Timed by this window's clock, whichever window draws (another window's
+  // frame times count from when it opened).
+  const raf = (fn) => host.requestAnimationFrame(() => fn(performance.now()));
+  const unraf = (id) => host.cancelAnimationFrame(id);
   const doc = editor.doc;
   const shown = only ? [editor.page] : visiblePages(doc);
   if (!shown.length) return toast('Every page is hidden. Show a page to present it.');
@@ -143,7 +151,7 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
   let soundFrom = tl.parts[at].start;
   // Videos are taken at the size they show on screen (the slide fits the
   // screen both ways), and at most 30 times a second, however fast the screen.
-  const shownScale = () => Math.min(window.innerWidth / doc.width, window.innerHeight / doc.height) * (window.devicePixelRatio || 1);
+  const shownScale = () => Math.min(host.innerWidth / doc.width, host.innerHeight / doc.height) * (host.devicePixelRatio || 1);
   const taken = new Map(); // element id → { at, picture }
   const capture = (el) => {
     const now = performance.now();
@@ -183,7 +191,9 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
         const v = videos.videoOf({ id: box.dataset.video });
         if (!v) continue;
         v.className = 'slide-video';
+        const playing = !v.paused;
         box.append(v);
+        if (playing && v.paused) v.play().catch(() => null); // (moved to another window, a video can stop)
         // The picture under it goes once the video shows (it'd show through
         // a see-through video).
         const under = box.parentNode.querySelector(`image[data-under="${CSS.escape(box.dataset.video)}"]`);
@@ -199,7 +209,7 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     } else if ((settled && info.keeps) || info.videos.length ? now - drawn < 33 && drawn : false) {
       // (With videos on the page, 30 a second while things come in too: each
       // frame carries their pictures.)
-      frame = requestAnimationFrame(draw);
+      frame = raf(draw);
       return;
     } else {
       drawn = now;
@@ -219,17 +229,17 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     // (A page whose videos have all played once, to the end, is still now.)
     const ended = info.keeps && !info.loops && videos.allEnded(info.videos);
     const moving = !settled || (info.keeps && !live && !ended);
-    if (moving) frame = requestAnimationFrame(draw);
+    if (moving) frame = raf(draw);
     else if (autoplay) {
       wait = setTimeout(() => {
         wait = 0;
-        frame = requestAnimationFrame(draw);
+        frame = raf(draw);
       }, Math.max(0, (pageDuration(page) - local) * 1000));
     }
   };
   // `auto`: moving on by itself, when the sound is already in the right place.
   const go = (to, forward, { auto = false } = {}) => {
-    cancelAnimationFrame(frame);
+    unraf(frame);
     clearTimeout(wait);
     // Moving on by itself keeps to the show's clock: a fade under way goes on.
     if (!auto) clearTimeout(fading);
@@ -267,55 +277,171 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     }
     slide.style.aspectRatio = `${doc.width} / ${doc.height}`;
     counter.textContent = `${at + 1} / ${shown.length}`;
+    onPage?.(shown[at], shown);
     draw(started);
   };
   const last = shown.length - 1;
   const onKey = (e) => {
-    let to = at;
-    if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(e.key)) to = Math.min(last, at + 1);
-    else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(e.key)) to = Math.max(0, at - 1);
-    else if (e.key === 'Home') to = 0;
-    else if (e.key === 'End') to = last;
-    else if (e.key === 'Escape') return close();
-    else return;
+    const k = presentingKey(e.key);
+    if (k === 'stop') return close();
+    if (!k) return;
+    const to = k === 'first' ? 0 : k === 'last' ? last : Math.max(0, Math.min(last, at + k));
     e.preventDefault();
     e.stopPropagation();
     if (to !== at) go(to, to === at + 1); // at either end, nothing happens (the page doesn't start over)
   };
   const close = () => {
-    cancelAnimationFrame(frame);
+    unraf(frame);
     clearTimeout(wait);
     clearTimeout(fading);
     videos.dispose();
     sound?.stop();
-    document.removeEventListener('keydown', onKey, true);
-    document.removeEventListener('fullscreenchange', onFullscreen);
+    hostDoc.removeEventListener('keydown', onKey, true);
+    hostDoc.removeEventListener('fullscreenchange', onFullscreen);
     window.removeEventListener('hashchange', close);
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => null);
+    if (hostDoc.fullscreenElement) hostDoc.exitFullscreen().catch(() => null);
     root.remove();
+    onClose?.();
   };
   // Leaving full screen (Escape, which the browser keeps for itself) ends
   // presenting too: nothing plays on behind it.
   let wentFull = false;
   const onFullscreen = () => {
-    if (document.fullscreenElement) wentFull = true;
+    if (hostDoc.fullscreenElement) wentFull = true;
     else if (wentFull) close();
   };
   root.addEventListener('click', (e) => {
     if (e.target.closest('.presenter-close')) return;
-    const left = e.clientX < window.innerWidth / 3;
+    const left = e.clientX < host.innerWidth / 3;
     const to = left ? Math.max(0, at - 1) : Math.min(last, at + 1);
     if (to !== at) go(to, to === at + 1);
   });
-  document.addEventListener('keydown', onKey, true);
-  document.addEventListener('fullscreenchange', onFullscreen);
+  hostDoc.addEventListener('keydown', onKey, true);
+  hostDoc.addEventListener('fullscreenchange', onFullscreen);
   // Leaving the editor (Back, say) ends presenting too.
   window.addEventListener('hashchange', close);
-  document.body.append(root);
+  hostDoc.body.append(root);
   go(at, false);
   root.focus();
   root.requestFullscreen?.().catch(() => null);
-  return { close };
+  return {
+    close,
+    /** Move to `to` (a position among the shown pages), as the arrow keys do. */
+    go(to) {
+      const k = Math.max(0, Math.min(last, to));
+      if (k !== at) go(k, k === at + 1);
+    },
+    get at() {
+      return at;
+    },
+  };
+}
+
+/** What a key does when presenting: 1 or -1 (a page on or back), 'first', 'last', 'stop', or null. */
+function presentingKey(key) {
+  if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(key)) return 1;
+  if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(key)) return -1;
+  return { Home: 'first', End: 'last', Escape: 'stop' }[key] || null;
+}
+
+// (This tab's own: another tab presenting keeps its slides window.)
+const SLIDES_WINDOW = `paperwall-slides-${Math.random().toString(36).slice(2, 8)}`;
+
+/**
+ * The presenter view: the slides in a window of their own (for the
+ * audience: drag it to the projector), and here the page now, the next one,
+ * its notes and a timer. Either window moves the slides on.
+ */
+export function presenterView(editor, canvas) {
+  const doc = editor.doc;
+  if (!visiblePages(doc).length) return toast('Every page is hidden. Show a page to present it.');
+  // Opened first, while the click still counts (pop-up blockers allow that).
+  const audience = window.open('', SLIDES_WINDOW, 'popup,width=960,height=600');
+  if (!audience) {
+    toast('Allow pop-ups for this page to show the slides in their own window. Presenting here instead.', 'error');
+    return present(editor, canvas);
+  }
+  // The slides' window: this page's look, and the design's fonts.
+  const adoc = audience.document;
+  adoc.title = `${doc.name} (slides)`;
+  adoc.head.replaceChildren(...[...document.querySelectorAll('style, link[rel="stylesheet"]')].map((n) => n.cloneNode(true)));
+  adoc.body.replaceChildren();
+  adoc.body.style.margin = '0';
+  adoc.body.style.background = '#000';
+  fontCssFor(doc).then((css) => {
+    if (css && !audience.closed) adoc.head.append(Object.assign(adoc.createElement('style'), { textContent: css }));
+  }).catch(() => null);
+
+  const current = h('div', { class: 'pv-slide', 'data-testid': 'pv-current' });
+  const upcoming = h('div', { class: 'pv-slide small', 'data-testid': 'pv-next' });
+  const notes = h('div', { class: 'pv-notes', 'data-testid': 'pv-notes' });
+  const clock = h('span', { class: 'pv-timer', 'data-testid': 'pv-timer', role: 'timer' }, '0:00');
+  const count = h('span', { class: 'pv-count', 'data-testid': 'pv-count' });
+  let ctl = null;
+  const move = (by) => ctl && ctl.go(ctl.at + by);
+  const view = h('div', { class: 'presenter-view', 'data-testid': 'presenter-view', tabindex: '-1' },
+    h('header', null,
+      clock,
+      h('button', { type: 'button', class: 'btn small', 'data-testid': 'pv-reset', onClick: () => (begun = performance.now()) }, 'Restart timer'),
+      count,
+      h('button', { type: 'button', class: 'btn small', 'data-testid': 'pv-end', onClick: () => ctl?.close() }, 'End')),
+    h('div', { class: 'pv-main' },
+      current,
+      h('aside', null, h('h3', null, 'Next'), upcoming, h('h3', null, 'Notes'), notes)),
+    h('footer', null,
+      h('button', { type: 'button', class: 'btn', 'data-testid': 'pv-prev', onClick: () => move(-1) }, 'Previous'),
+      h('button', { type: 'button', class: 'btn primary', 'data-testid': 'pv-next-btn', onClick: () => move(1) }, 'Next')));
+  const render = (i) => renderPage(doc, i, { measure, noSize: true, assetHref: canvas.assetHref, idPrefix: `pv${i}` });
+  const show = (i, list) => {
+    const k = list.indexOf(i);
+    current.innerHTML = render(i);
+    if (k + 1 < list.length) upcoming.innerHTML = render(list[k + 1]);
+    else upcoming.replaceChildren(h('p', { class: 'pv-end' }, 'The end'));
+    notes.textContent = doc.pages[i].notes || 'No notes for this page.';
+    notes.classList.toggle('empty', !doc.pages[i].notes);
+    count.textContent = `${k + 1} / ${list.length}`;
+  };
+  // The time since the start (minutes:seconds); and if the slides' window
+  // is closed, presenting ends.
+  let begun = performance.now();
+  const tick = setInterval(() => {
+    if (audience.closed) return ctl?.close();
+    const s = Math.floor((performance.now() - begun) / 1000);
+    clock.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }, 250);
+  // The same keys as presenting.
+  const onKey = (e) => {
+    const k = presentingKey(e.key);
+    if (!k) return;
+    // (Enter or Space on a focused button presses it.)
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.closest?.('button')) return;
+    if (k === 'stop') ctl?.close();
+    else if (k === 'first') ctl?.go(0);
+    else if (k === 'last') ctl?.go(Infinity);
+    else move(k);
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  // Leaving or reloading this page closes the slides' window too (it'd be left stuck).
+  const onLeave = () => ctl?.close();
+  window.addEventListener('pagehide', onLeave);
+  const end = () => {
+    clearInterval(tick);
+    window.removeEventListener('pagehide', onLeave);
+    document.removeEventListener('keydown', onKey, true);
+    view.remove();
+    if (!audience.closed) audience.close();
+  };
+  document.body.append(view);
+  document.addEventListener('keydown', onKey, true);
+  try {
+    ctl = present(editor, canvas, { host: audience, onPage: show, onClose: end });
+  } catch (e) {
+    end(); // (nothing left open that can't be closed)
+    throw e;
+  }
+  view.focus();
+  return ctl;
 }
 
 // Safari draws HTML inside SVG (the live video's place) without the page's

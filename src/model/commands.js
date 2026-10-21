@@ -1,7 +1,7 @@
 // Edits to a design. Every function changes the design in place; the editor
 // records a history snapshot before calling one, which is what makes undo work.
 
-import { uid, createPage, clone, restroke } from './doc.js';
+import { uid, createPage, clone, restroke, documentSettings } from './doc.js';
 import { boundsOf, unionBounds, rotatePoint, boxCenter } from './geometry.js';
 import { updateConnectors } from './connectors.js';
 import { normalizeHex } from './color.js';
@@ -402,15 +402,23 @@ export function setBackground(doc, pageIndex, background) {
 // ---------- whole design ----------
 
 /**
- * Make a copy of the design at a new size. Everything keeps its place
- * relative to the page and is scaled by the smaller of the two ratios, so
- * nothing gets stretched.
+ * A copy of the design at a new size. Everything keeps its place relative to
+ * the page and is scaled by the smaller of the two ratios, so nothing gets
+ * stretched. `asDocument`: a document stays one (its sheets become the new
+ * size and its blocks run on down the page); otherwise all of it is fitted
+ * into the new size.
  */
-export function resizeDesign(doc, width, height) {
+export function resizeDesign(doc, width, height, { asDocument = !!doc.document } = {}) {
   const out = clone(doc);
   out.id = uid('d');
+  const flows = asDocument && !!doc.document;
   const sx = width / doc.width;
-  const sy = height / doc.height;
+  // (A document staying one is measured by its sheet, not the long page it has grown to.)
+  const sy = height / (flows ? doc.document.pageHeight : doc.height);
+  // (Margins and gaps by the smaller ratio, like everything else.)
+  // (In the same ranges as when it's opened again, so it lays out the same then.)
+  if (flows) out.document = documentSettings({ pageHeight: height, margin: Math.round(out.document.margin * Math.min(sx, sy)), gap: Math.round(out.document.gap * Math.min(sx, sy)), dpi: Math.round((out.document.dpi || 150) * sx) });
+  else delete out.document;
   const s = Math.min(sx, sy);
   for (const page of out.pages) {
     for (const el of page.elements) {
@@ -422,7 +430,8 @@ export function resizeDesign(doc, width, height) {
       // Keep things on the page when the shape of the page changes a lot.
       const b = boundsOf(el);
       if (b.w <= width) el.x += Math.max(0, -b.x) - Math.max(0, b.x + b.w - width);
-      if (b.h <= height) el.y += Math.max(0, -b.y) - Math.max(0, b.y + b.h - height);
+      // (Not a document's height: its blocks run on down past the first sheet, in order.)
+      if (b.h <= height && !flows) el.y += Math.max(0, -b.y) - Math.max(0, b.y + b.h - height);
     }
     // Guides keep their place relative to the page (a centre guide stays centred).
     if (page.guides) page.guides = page.guides.map((g) => ({ ...g, pos: Math.round(g.pos * (g.axis === 'x' ? sx : sy)) }));

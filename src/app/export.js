@@ -12,6 +12,7 @@ import { section, segmented, slider, toggle } from './widgets.js';
 import { exportGif, exportVideo, canMakeVideo } from './motion-export.js';
 import { exportVectorPdf, exportPptx } from './pro-export.js';
 import { designMoves, startsTooLate, timeline } from '../model/motion.js';
+import { onPaper as sheetsOf } from '../model/flow.js';
 
 const MAX_SIDE = 16000;
 const MAX_PIXELS = 120e6;
@@ -70,7 +71,11 @@ export function pagePoints(doc) {
   return { ptWidth: (doc.width / dpi) * 72, ptHeight: (doc.height / dpi) * 72, renderScale: dpi === 300 ? 1 : 2 };
 }
 
-export async function exportPdf(doc, pages, { quality = 0.92 } = {}) {
+/** On paper, a document is sheets (split between its blocks); anything else is as it is. */
+const onPaper = (doc, pages) => sheetsOf(doc, pages, measure);
+
+export async function exportPdf(doc0, pages0, { quality = 0.92 } = {}) {
+  const [doc, pages] = onPaper(doc0, pages0);
   const pts = pagePoints(doc);
   const out = [];
   for (const i of pages) {
@@ -84,7 +89,9 @@ export async function exportPdf(doc, pages, { quality = 0.92 } = {}) {
 }
 
 /** A small preview for the home screen. */
-export async function thumbnail(doc) {
+export async function thumbnail(doc0) {
+  // (A document's first sheet, not a strip of its whole length.)
+  const [doc] = onPaper(doc0, [0]);
   const scale = 360 / Math.max(doc.width, doc.height);
   const canvas = await rasterize(doc, 0, { scale, background: '#ffffff' });
   return canvas.toDataURL('image/jpeg', 0.82);
@@ -96,7 +103,8 @@ export async function copyToClipboard(doc, pageIndex) {
   await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
 }
 
-export async function printDesign(doc, pages) {
+export async function printDesign(doc0, pages0) {
+  const [doc, pages] = onPaper(doc0, pages0);
   const imgs = [];
   for (const i of pages) imgs.push((await rasterize(doc, i, { scale: maxScale(doc, 2), background: '#ffffff' })).toDataURL('image/png'));
   const root = h('div', { id: 'print-root' }, imgs.map((src) => h('img', { src, alt: '' })));

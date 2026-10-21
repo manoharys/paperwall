@@ -1,14 +1,14 @@
 {
   "summary": {
     "date": "2026-10-21",
-    "total": 166,
-    "verified": 165,
+    "total": 175,
+    "verified": 175,
     "failing": 0,
-    "todo": 1,
-    "e2eTests": 148,
-    "e2ePassing": 148,
-    "unitTests": 155,
-    "unitPassing": 155
+    "todo": 0,
+    "e2eTests": 159,
+    "e2ePassing": 159,
+    "unitTests": 179,
+    "unitPassing": 179
   },
   "areas": [
     {
@@ -175,6 +175,16 @@
         {
           "id": "VIEW-07",
           "title": "Grid with snapping, safe margins and print bleed",
+          "status": "verified"
+        },
+        {
+          "id": "VIEW-08",
+          "title": "Speaker notes for each page",
+          "status": "verified"
+        },
+        {
+          "id": "VIEW-09",
+          "title": "Presenter view: notes, the next page and a timer, with the slides in their own window",
           "status": "verified"
         }
       ]
@@ -580,7 +590,7 @@
         {
           "id": "IMG-11",
           "title": "Remove an image's background on your device",
-          "status": "todo"
+          "status": "verified"
         },
         {
           "id": "IMG-12",
@@ -769,6 +779,37 @@
       ]
     },
     {
+      "id": "DW",
+      "name": "Documents and whiteboards",
+      "features": [
+        {
+          "id": "DW-01",
+          "title": "Documents: headings, paragraphs and lists that flow down the page as you write",
+          "status": "verified"
+        },
+        {
+          "id": "DW-02",
+          "title": "Pictures in documents, and moving a block by dragging it above or below another",
+          "status": "verified"
+        },
+        {
+          "id": "DW-03",
+          "title": "Documents download as PDF and print on sheets of paper, split between blocks",
+          "status": "verified"
+        },
+        {
+          "id": "DW-04",
+          "title": "Whiteboards: a canvas that grows as you add to it",
+          "status": "verified"
+        },
+        {
+          "id": "DW-05",
+          "title": "Sticky notes in six colors, connected with lines",
+          "status": "verified"
+        }
+      ]
+    },
+    {
       "id": "MOT",
       "name": "Motion",
       "features": [
@@ -877,20 +918,36 @@
           "id": "EXP-12",
           "title": "PDF with real, selectable and searchable text",
           "status": "verified"
-        },
+        }
+      ]
+    },
+    {
+      "id": "ON",
+      "name": "Online extras (opt-in)",
+      "features": [
         {
-          "id": "EXP-13",
-          "title": "Vector PDF with embedded fonts: shapes, gradients and pictures stay sharp, text stays real",
+          "id": "ON-01",
+          "title": "Search free stock photos (Openverse, no key) and add them with their credit",
           "status": "verified"
         },
         {
-          "id": "EXP-14",
-          "title": "Print PDF with bleed and crop marks",
+          "id": "ON-02",
+          "title": "Unsplash and Pexels photo search with your own key, credited as they ask",
           "status": "verified"
         },
         {
-          "id": "EXP-15",
-          "title": "Download as PowerPoint (.pptx) with editable text, shapes and pictures",
+          "id": "ON-03",
+          "title": "AI writing: write, rewrite, shorten and translate text with Claude, OpenAI, Gemini (your key) or Ollama",
+          "status": "verified"
+        },
+        {
+          "id": "ON-04",
+          "title": "AI design: describe a design and get an editable one",
+          "status": "verified"
+        },
+        {
+          "id": "ON-05",
+          "title": "Online settings: off until turned on, a provider per feature, test a key, forget keys",
           "status": "verified"
         }
       ]

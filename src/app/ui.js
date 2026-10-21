@@ -84,6 +84,7 @@ const UI_ICONS = {
   caps: '<path d="M3 18l4.5-12L12 18M4.6 14h5.8M13 18l3.5-9 3.5 9M14.2 15h4.6"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   present: '<rect x="3.5" y="4.5" width="17" height="11" rx="1"/><path d="M12 15.5V20M8.5 20h7M10.5 8l4 2-4 2z"/>',
+  speaker: '<rect x="2.5" y="4.5" width="12" height="9" rx="1"/><path d="M8.5 13.5V18M5.5 18h6M17 7h4.5M17 10.5h4.5M17 14h3"/>',
   keyboard: '<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h1M9.5 10h1M13 10h1M16.5 10h1M7 14h10"/>',
   moon: '<path d="M19.5 14.5A8 8 0 1 1 9.5 4.5a6.3 6.3 0 0 0 10 10z"/>',
   home: '<path d="M4 11l8-6.5 8 6.5M6.5 9.5V19h11V9.5"/>',

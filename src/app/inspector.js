@@ -5,12 +5,15 @@ import { h, icon, iconButton, clear, toast, pickFile, readFileAsDataUrl, dialog,
 import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover, popoverOpen, PALETTES, fontPicker, gradientEditor } from './widgets.js';
 import { FONTS, FONT_KINDS } from '../model/fonts.js';
 import { ANIMATIONS, PAGE_ANIMATIONS, TRANSITIONS, DEFAULT_ANIM_DURATION, DEFAULT_STAGGER, DEFAULT_TRANSITION_DURATION, LIMITS, pageDuration } from '../model/motion.js';
-import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, isEmptyFrame, parseChartData, chartDataText, parseTable, tableText, soundtrackOf, KEEPS_RATIO } from '../model/doc.js';
+import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, isEmptyFrame, parseChartData, chartDataText, parseTable, tableText, soundtrackOf, KEEPS_RATIO, NOTE_COLORS } from '../model/doc.js';
 import { collectColors, cropZoom } from '../model/commands.js';
 import { renderElementOnly, TEXT_EFFECTS } from '../model/render.js';
 import { measure, addCustomFont, customFontNames, ensureFont, fontSettled } from './fonts.js';
 import { iconById, stickerById } from '../model/graphics.js';
 import { getSetting } from './store.js';
+import { aiWritingSection } from './ai-writing.js';
+import { creditSection } from './photos.js';
+import { smartRemoveBackground, cutoutOf, refineCutout } from './cutout.js';
 
 const DUOTONES = [
   ['Ink', '#1a1a2e', '#f7f4ef'], ['Ocean', '#0b2a45', '#7fd1c7'], ['Sunset', '#5b1a6e', '#ffb36b'], ['Berry', '#3b1426', '#ff8fa3'],
@@ -328,6 +331,11 @@ export class Inspector {
     } }, 'Use your own font…');
     const bold = (el.weight || 400) >= 600;
     return [
+      // A sticky note: its color.
+      el.note ? section('Sticky note', h('div', { class: 'note-grid', 'data-testid': 'note-colors-edit' }, NOTE_COLORS.map((c, i) => h('button', {
+        type: 'button', class: `note-swatch${c === el.note ? ' on' : ''}`, style: { background: c }, 'aria-label': `Note color ${i + 1}`, 'aria-pressed': String(c === el.note), 'data-testid': `note-color-${i}`,
+        onClick: () => this.up({ note: c }),
+      })))) : null,
       section('Text',
         fontSelect,
         upload,
@@ -351,6 +359,7 @@ export class Inspector {
         ] }),
         slider({ label: 'Line spacing', value: el.lineHeight, min: 0.6, max: 3, step: 0.05, testid: 'line-height', onChange: this.live('lineHeight') }),
         slider({ label: 'Letter spacing', value: el.letterSpacing, min: -Math.round(el.size * 0.1), max: Math.round(el.size * 0.8), step: 0.5, testid: 'letter-spacing', onChange: this.live('letterSpacing') })),
+      aiWritingSection(ed, el),
       section('Text effects',
         this.textEffects(el),
         toggle({ label: 'Outline', checked: !!el.outline, testid: 'outline-toggle', onChange: (on) => this.up({ outline: on ? { width: Math.max(1, Math.round(el.size * 0.04)), color: '#ffffff' } : null }) }),
@@ -515,7 +524,13 @@ export class Inspector {
             btn.disabled = false;
           }
         } }, icon('crop'), 'Remove plain background'),
+        // Busy photos: a model on this device (asks once to download it).
+        h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'remove-bg-smart', onClick: () => smartRemoveBackground(ed) }, icon('paint'), 'Remove background (smart)'),
+        cutoutOf(el.assetId) ? slider({ label: 'Refine edges', value: Math.round(cutoutOf(el.assetId).refine * 100), min: 0, max: 100, testid: 'cutout-refine', onChange: (v, l) => {
+          if (!l) refineCutout(ed, el, v / 100);
+        } }) : null,
         h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'image-to-bg', onClick: () => ed.setImageAsBackground() }, icon('background'), 'Use as page background')),
+      asset?.credit ? creditSection(asset.credit) : null,
       section('Adjust',
         segmented({ label: 'Filter', value: presetName, testid: 'filter-presets', onChange: (name) => this.up({ filters: { ...FILTER_PRESETS[name] } }), options: [
           { value: 'original', label: 'Original', text: 'Original' },
@@ -616,6 +631,7 @@ export class Inspector {
     const unit = doc.unit || 'px';
     const size = unit === 'px' ? `${doc.width} × ${doc.height} px` : `${fromPx(doc.width, unit)} × ${fromPx(doc.height, unit)} ${unit}`;
     const grad = bg.type === 'gradient' ? bg.gradient : null;
+    const notesAt = ed.page; // (the page this panel was made for)
     return [
       h('div', { class: 'panel-head' }, h('h2', { 'data-testid': 'selection-title' }, `Page ${ed.page + 1} of ${doc.pages.length}`)),
       section('Page',
@@ -639,6 +655,9 @@ export class Inspector {
         grad ? h('div', { class: 'sub' }, gradientEditor({ label: 'Background gradient', value: grad, getContext: this.colorContext, testid: 'bg-gradient', current: () => ed.pageData.background?.gradient, onChange: (g, l) => ed.setBackground({ type: 'gradient', gradient: g }, l ? 'grad' : null) })) : null,
         bg.type === 'image' ? h('button', { type: 'button', class: 'btn small wide', onClick: () => ed.setBackground({ type: 'color', color: '#ffffff' }) }, 'Remove background image') : null),
       this.motionPanel(),
+      section('Notes',
+        h('textarea', { rows: '4', class: 'notes', 'data-testid': 'page-notes', 'aria-label': 'Speaker notes for this page', placeholder: 'What to say on this page. Only you see these, in the presenter view.', maxlength: '10000',
+          onInput: (e) => ed.setPageNotes(notesAt, e.target.value, `notes:${notesAt}`) }, ed.pageData.notes || '')),
       section('Design',
         h('p', { class: 'meta', 'data-testid': 'design-size' }, size),
         h('button', { type: 'button', class: 'btn wide', 'data-testid': 'resize-design', onClick: () => this.onResizeDesign() }, icon('resize'), 'Resize to another format')),
@@ -703,7 +722,8 @@ export function resizeDialog(editor) {
   const doc = editor.doc;
   let unit = 'px';
   const wIn = h('input', { type: 'number', min: '1', value: doc.width, 'aria-label': 'New width', 'data-testid': 'resize-w' });
-  const hIn = h('input', { type: 'number', min: '1', value: doc.height, 'aria-label': 'New height', 'data-testid': 'resize-h' });
+  // (A document's height is its sheet's, not the long page it has grown to.)
+  const hIn = h('input', { type: 'number', min: '1', value: doc.document?.pageHeight || doc.height, 'aria-label': 'New height', 'data-testid': 'resize-h' });
   const unitSel = h('select', { 'aria-label': 'Units' }, ['px', 'mm', 'in'].map((u) => h('option', { value: u }, u)));
   unitSel.addEventListener('change', () => {
     const w = toPx(+wIn.value, unit);
@@ -712,12 +732,12 @@ export function resizeDialog(editor) {
     wIn.value = fromPx(w, unit);
     hIn.value = fromPx(hh, unit);
   });
-  const go = async (w, hh, name) => {
+  const go = async (w, hh, name, preset = null) => {
     d.close();
-    await editor.resizeTo(w, hh, name);
+    await editor.resizeTo(w, hh, name, preset);
     toast('Resized copy made. Your original is untouched.');
   };
-  const presets = h('div', { class: 'preset-grid' }, PRESETS.map((p) => h('button', { type: 'button', class: 'preset', 'data-testid': `resize-preset-${p.id}`, onClick: () => go(p.w, p.h, `${doc.name} (${p.name})`) },
+  const presets = h('div', { class: 'preset-grid' }, PRESETS.map((p) => h('button', { type: 'button', class: 'preset', 'data-testid': `resize-preset-${p.id}`, onClick: () => go(p.w, p.h, `${doc.name} (${p.name})`, p) },
     h('span', { class: 'preset-shape', style: { aspectRatio: `${p.w} / ${p.h}` } }), h('b', null, p.name), h('small', null, `${p.w} × ${p.h}`))));
   const custom = h('form', { class: 'custom-size', onSubmit: (e) => {
     e.preventDefault();

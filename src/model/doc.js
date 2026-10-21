@@ -2,6 +2,7 @@
 
 import { boxAround } from './geometry.js';
 import { ANIMATIONS, PAGE_ANIMATIONS, TRANSITIONS, LIMITS, clampNum, shownPages } from './motion.js';
+import { cleanCredit } from './photos.js';
 
 export const FORMAT_VERSION = 1;
 export const DPI = 300;
@@ -17,6 +18,8 @@ export const PRESETS = [
   { id: 'thumbnail', name: 'Video thumbnail', group: 'Social', w: 1280, h: 720 },
   { id: 'banner', name: 'Web banner', group: 'Social', w: 1500, h: 500 },
   { id: 'slides', name: 'Presentation', group: 'Work', w: 1920, h: 1080 },
+  { id: 'doc', name: 'Document', group: 'Work', w: 1240, h: 1754 },
+  { id: 'whiteboard', name: 'Whiteboard', group: 'Work', w: 3600, h: 2400 },
   { id: 'a4', name: 'A4 document', group: 'Print', w: 2480, h: 3508, unit: 'mm' },
   { id: 'letter', name: 'US Letter', group: 'Print', w: 2550, h: 3300, unit: 'in' },
   { id: 'poster', name: 'Poster (18 × 24 in)', group: 'Print', w: 5400, h: 7200, unit: 'in' },
@@ -52,6 +55,9 @@ export function pxPerUnit(unit, dpi = DPI) {
 
 /** The resolution a design prints and exports at: print units at DPI, px designs as screens see them. */
 export function printDpi(doc) {
+  // A document's sheets (as A4 is to its width), on screen and on paper.
+  if (doc.document?.dpi > 0) return doc.document.dpi;
+  if (doc.dpi > 0) return doc.dpi;
   return doc.unit === 'mm' || doc.unit === 'in' ? DPI : 96;
 }
 
@@ -93,7 +99,65 @@ export function createDesign({ width = 1080, height = 1080, name = 'Untitled des
 export function createDesignFromPreset(presetId) {
   const p = presetById(presetId);
   if (!p) throw new Error(`Unknown size preset: ${presetId}`);
-  return createDesign({ width: p.w, height: p.h, unit: p.unit || 'px' });
+  const doc = createDesign({ width: p.w, height: p.h, unit: p.unit || 'px' });
+  if (p.id === 'doc') makeDocument(doc);
+  if (p.id === 'whiteboard') makeBoard(doc);
+  return doc;
+}
+
+/** A document's settings when made: A4 sheets at 150 dpi (1240 px wide), margins, gaps between blocks. */
+export const DOCUMENT = { width: 1240, pageHeight: 1754, margin: 120, gap: 28, dpi: 150 };
+
+/** Whether a video's still is from where it starts now (else its poster shows, and a new still is due). */
+export function stillIsCurrent(doc, el) {
+  return !!(el.still && doc.assets[el.still] && (el.stillAt ?? 0) === (el.trim?.start || 0));
+}
+
+/** Sizes of a document's text: a heading, a smaller heading, body and lists. */
+export const DOC_STYLES = {
+  title: { text: 'Untitled document', size: 64, weight: 700, lineHeight: 1.15 },
+  heading: { text: 'A heading', size: 40, weight: 700, lineHeight: 1.2 },
+  body: { text: 'Start writing here.', size: 24, weight: 400, lineHeight: 1.5 },
+  bullets: { text: 'A point\nAnother point', size: 24, weight: 400, lineHeight: 1.5, list: 'bullet' },
+  numbers: { text: 'First\nSecond', size: 24, weight: 400, lineHeight: 1.5, list: 'number' },
+};
+
+/** A design that flows as a document (see flow.js), started with a title and a paragraph. */
+export function makeDocument(doc) {
+  const { margin, gap, dpi } = DOCUMENT;
+  doc.document = { pageHeight: doc.height, margin, gap, dpi };
+  doc.name = 'Untitled document';
+  doc.pages[0].elements.push(createText({ ...DOC_STYLES.title, y: 0 }), createText({ ...DOC_STYLES.body, y: 1 }));
+  // (Laid out as text is measured once open; roughly right till then.)
+  const m = doc.document.margin;
+  let y = m;
+  for (const el of doc.pages[0].elements) {
+    Object.assign(el, { x: m, y, w: doc.width - m * 2 });
+    y += el.size * el.lineHeight + doc.document.gap;
+  }
+  return doc;
+}
+
+/** A design that's a whiteboard: a canvas that grows (see flow.js), with a first sticky note. */
+export function makeBoard(doc) {
+  doc.board = true;
+  doc.name = 'Untitled whiteboard';
+  doc.pages[0].background = { type: 'color', color: '#f6f6f2' };
+  doc.pages[0].elements.push(createSticky(NOTE_COLORS[0], { x: 600, y: 600, text: 'Ideas go here' }));
+  return doc;
+}
+
+/** Sticky note colors. */
+export const NOTE_COLORS = ['#ffe58a', '#ffb3c7', '#a8e6cf', '#a7c7ff', '#ffd1a1', '#d7c4ff'];
+
+/** A document's settings, each in range. */
+export function documentSettings(d) {
+  return { pageHeight: clampNum(d.pageHeight, 200, 20000, DOCUMENT.pageHeight), margin: clampNum(d.margin, 0, 1000, DOCUMENT.margin), gap: clampNum(d.gap, 0, 400, DOCUMENT.gap), dpi: clampNum(d.dpi, 36, 1200, DOCUMENT.dpi) };
+}
+
+/** A sticky note: text on a square of color. */
+export function createSticky(color = NOTE_COLORS[0], props = {}) {
+  return createText({ text: 'Note', note: color, w: 320, h: 320, size: 32, weight: 500, lineHeight: 1.3, ...props });
 }
 
 function base(type, props) {
@@ -373,14 +437,16 @@ const ASSET_KINDS = new Set(['image', 'font', 'video', 'audio']);
 export const KEEPS_RATIO = ['image', 'video', 'icon', 'sticker', 'qr'];
 
 /** Add a picture, video or sound to the design (once: the same file is shared). Returns the asset id. */
-export function addAsset(doc, { mime, dataUrl, width, height, name = '', kind = 'image', duration, poster }) {
+export function addAsset(doc, { mime, dataUrl, width, height, name = '', kind = 'image', duration, poster, credit }) {
   // The same file used the same way is stored once (a sound and a video of
   // the same bytes stay apart: each kind is checked as its own when loaded).
   for (const [id, a] of Object.entries(doc.assets)) {
     if (a.dataUrl === dataUrl && (a.type || 'image') === kind) return id;
   }
   const id = uid('a');
-  doc.assets[id] = { type: kind, mime, dataUrl, width, height, name, ...(duration !== undefined ? { duration } : {}), ...(poster ? { poster } : {}) };
+  // (A stock photo keeps its credit: who made it, its license, where it's from.)
+  const cleaned = cleanCredit(credit);
+  doc.assets[id] = { type: kind, mime, dataUrl, width, height, name, ...(duration !== undefined ? { duration } : {}), ...(poster ? { poster } : {}), ...(cleaned ? { credit: cleaned } : {}) };
   return id;
 }
 
@@ -390,6 +456,7 @@ export function usedAssetIds(doc) {
   const visit = (els) => {
     for (const el of els) {
       if (el.type === 'image' || el.type === 'video') used.add(el.assetId);
+      if (el.type === 'video' && el.still) used.add(el.still);
       if (el.type === 'group') visit(el.children);
     }
   };
@@ -451,6 +518,11 @@ export function validateDesign(doc) {
     }
     // ({ type: 'none' } is kept: it keeps an element still while its page animates.)
     if (el.anim !== undefined) el.anim = el.anim?.type === 'none' ? { type: 'none' } : cleanMotion(el.anim, ANIMATIONS, { duration: LIMITS.duration, delay: LIMITS.delay });
+    // (Only ever set on a document's text cut for its sheets, never saved.)
+    delete el.listStart;
+    delete el.continues;
+    // A sticky note's color (text only): a hex color, else a plain text box.
+    if (el.note !== undefined) el.note = el.type === 'text' && typeof el.note === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(el.note) ? el.note : undefined;
     if (el.type === 'video') {
       el.trim = { start: Math.max(0, Number.isFinite(+el.trim?.start) ? +el.trim.start : 0) };
       el.loop = el.loop !== false;
@@ -471,6 +543,7 @@ export function validateDesign(doc) {
       relink(p.elements);
     }
     if (p.title !== undefined) p.title = typeof p.title === 'string' ? p.title.slice(0, 120) : undefined;
+    if (p.notes !== undefined) p.notes = typeof p.notes === 'string' && p.notes.trim() ? p.notes.slice(0, 10000) : undefined;
     if (p.hidden !== undefined) p.hidden = p.hidden === true || undefined;
     if (p.guides !== undefined) p.guides = (Array.isArray(p.guides) ? p.guides : []).filter((g) => g && (g.axis === 'x' || g.axis === 'y') && Number.isFinite(+g.pos)).map((g) => ({ axis: g.axis, pos: +g.pos }));
     if (p.anim !== undefined) p.anim = cleanMotion(p.anim, PAGE_ANIMATIONS, { duration: LIMITS.duration, stagger: LIMITS.stagger });
@@ -487,8 +560,17 @@ export function validateDesign(doc) {
     if (a && doc.assets[id]) {
       for (const k of ['width', 'height']) if (a[k] !== undefined) a[k] = clampNum(a[k], 1, 100000, undefined);
       if (a.duration !== undefined) a.duration = clampNum(a.duration, 0, 86400, undefined);
+      // A photo's credit: plain text and https links, nothing else.
+      if (a.credit !== undefined) a.credit = cleanCredit(a.credit) || undefined;
     }
   }
+  // A document's flow, a whiteboard's growing: numbers in range, else plain.
+  if (doc.document !== undefined) {
+    const d = doc.document;
+    doc.document = d && typeof d === 'object' ? documentSettings(d) : undefined;
+  }
+  if (doc.board !== undefined) doc.board = doc.board === true || undefined;
+  delete doc.dpi; // (only ever set on a document's sheets, made for paper)
   // The soundtrack: a sound the design has, at a volume from 0 to 1.
   if (doc.audio !== undefined) {
     const a = soundtrackOf(doc);
@@ -501,6 +583,9 @@ export function validateDesign(doc) {
     for (const el of els) {
       // (A picture then is an empty frame to fill; a video, a video whose file is missing.)
       if ((el.type === 'image' || el.type === 'video') && el.assetId && kindOf(el.assetId) && kindOf(el.assetId) !== el.type) el.assetId = el.type === 'image' ? null : 'missing';
+      // A video's still is a picture it has, or it goes (the poster shows).
+      if (el.still !== undefined && !(el.type === 'video' && kindOf(el.still) === 'image')) delete el.still;
+      if (el.stillAt !== undefined) el.stillAt = clampNum(el.stillAt, 0, 86400, 0);
       if (el.type === 'group') check(el.children);
     }
   };

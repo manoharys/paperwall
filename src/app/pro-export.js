@@ -4,6 +4,7 @@
 // can't be drawn any other way (shadows, glows, filters, charts...).
 
 import { renderPage } from '../model/render.js';
+import { onPaper } from '../model/flow.js';
 import { planVectorPdf, buildVectorPdf, rasterScale } from '../model/pdf-vector.js';
 import { planPptx, buildPptx } from '../model/pptx.js';
 import { jpegInfo } from '../model/jpeg.js';
@@ -178,11 +179,14 @@ function stopper(signal) {
 
 /**
  * A vector PDF of these pages; with { print: true } a print PDF (bleed, crop
- * marks, pictures at 300 DPI). onProgress(0..1) as it goes.
+ * marks, pictures at 300 DPI). A document comes as its sheets. onProgress(0..1)
+ * as it goes.
  */
-export async function exportVectorPdf(doc, pages, { print = false, signal, onProgress } = {}) {
+export async function exportVectorPdf(doc0, pages0, { print = false, signal, onProgress } = {}) {
   const check = stopper(signal);
-  await ensureDesignFonts(doc);
+  await ensureDesignFonts(doc0);
+  // (Split into sheets once its fonts are in: they decide where lines break.)
+  const [doc, pages] = onPaper(doc0, pages0, measure);
   const fonts = await designFontFiles(doc);
   check();
   const images = await pdfPictures(doc, pages, check);
@@ -203,10 +207,11 @@ export async function exportVectorPdf(doc, pages, { print = false, signal, onPro
   return new Blob([buildVectorPdf(doc, pages, { ...env, rasters })], { type: 'application/pdf' });
 }
 
-/** A PowerPoint file of these pages, one slide each. */
-export async function exportPptx(doc, pages, { signal, onProgress } = {}) {
+/** A PowerPoint file of these pages, one slide each (a document's sheets, one slide each). */
+export async function exportPptx(doc0, pages0, { signal, onProgress } = {}) {
   const check = stopper(signal);
-  await ensureDesignFonts(doc);
+  await ensureDesignFonts(doc0);
+  const [doc, pages] = onPaper(doc0, pages0, measure);
   const media = await pptxPictures(doc, pages, check);
   const wants = planPptx(doc, pages);
   const pictures = new Map();

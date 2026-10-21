@@ -9,6 +9,7 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, copyFileSync, rmSync, existsSync } from 'node:fs';
 import { dirname, join, resolve, relative } from 'node:path';
 import { createHash } from 'node:crypto';
+import { onlineHosts } from '../src/model/providers.js';
 
 const root = resolve(new URL('..', import.meta.url).pathname);
 const dist = join(root, 'dist');
@@ -92,7 +93,9 @@ function csp(scriptHashes, pwa) {
     pwa ? "img-src 'self' data: blob:" : 'img-src data: blob:',
     'font-src data:',
     'media-src data: blob:',
-    "connect-src 'none'",
+    // Only the online extras' providers, and only once someone turns one on
+    // (src/app/online.js); nothing else, ever.
+    `connect-src ${onlineHosts().join(' ')}`,
     "worker-src 'self'",
     "manifest-src 'self'",
     "base-uri 'none'",
