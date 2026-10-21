@@ -14,7 +14,8 @@ import { TEXT_COMBOS, comboGroup, comboFonts } from '../model/text-combos.js';
 import { readyTemplate } from './templates.js';
 import * as store from './store.js';
 import { photosView } from './photos.js';
-import { t, formatNumber } from './i18n.js';
+import { t, formatNumber, language } from './i18n.js';
+import { templateWords } from './template-words.js';
 import { gridName, comboName, pairName, drawToolName, templateCategory, templateFormat, named } from './names.js';
 
 const TABS = [
@@ -569,7 +570,7 @@ export function templateBrowser({ state, ids, onPick, pageSize = 48, gridClass =
   };
   const fill = (reset = true) => {
     if (reset) state.shown = pageSize;
-    const list = searchTemplates(state);
+    const list = searchTemplates({ ...state, categoryName: templateCategory, synonyms: templateWords(language()) });
     forget(grid);
     clear(grid);
     if (!list.length) grid.append(h('p', { class: 'empty-note' }, t('tpl.none')));

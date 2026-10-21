@@ -127,3 +127,29 @@ test('[TPL-09] search and filter templates by category and size', () => {
   assert.ok(both.length >= 1 && both.every((t) => /birthday/i.test(`${t.name} ${t.tags}`)));
   assert.deepEqual(searchTemplates({ query: 'zzzz-nothing' }), []);
 });
+
+test('[APP-08] templates are found by words in every language: the hint\'s, the common kinds\' and the categories\'', async () => {
+  const { CATALOGS, LANGUAGES, setLanguage } = await import('../../src/app/i18n.js');
+  const { templateCategory } = await import('../../src/app/names.js');
+  const { templateWords, TEMPLATE_WORD_LANGUAGES } = await import('../../src/app/template-words.js');
+  const KINDS = ['invitation', 'resume', 'menu', 'poster', 'flyer', 'birthday', 'wedding', 'business card', 'logo', 'presentation', 'sale'];
+  assert.deepEqual(TEMPLATE_WORD_LANGUAGES.sort(), LANGUAGES.map((l) => l.code).filter((c) => c !== 'en').sort());
+  try {
+    for (const { code } of LANGUAGES) {
+      setLanguage(code);
+      const words = templateWords(code);
+      const find = (query) => searchTemplates({ query, categoryName: templateCategory, synonyms: words });
+      // Every kind has a word here (English needs none), and every word finds templates.
+      if (code !== 'en') for (const kind of KINDS) assert.ok(Object.values(words).includes(kind), `${code}: a word for ${kind}`);
+      for (const word of Object.keys(words)) assert.ok(find(word).length, `${code}: "${word}"`);
+      // The words the "no match" hint suggests, each as written there.
+      const hinted = [...CATALOGS[code]['tpl.none'].matchAll(/["“„«「]\s*([^"”“»」]+?)\s*["”“»」]/g)].map((m) => m[1]);
+      assert.equal(hinted.length, 4, `${code}: ${hinted}`);
+      for (const word of hinted) assert.ok(find(word).length, `${code}: hint "${word}"`);
+      // Categories as they're named here.
+      for (const c of TEMPLATE_CATEGORIES) assert.ok(find(templateCategory(c)).some((tpl) => tpl.category === c), `${code}: ${templateCategory(c)}`);
+    }
+  } finally {
+    setLanguage('en');
+  }
+});

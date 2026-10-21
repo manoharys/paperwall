@@ -89,6 +89,24 @@ test('[APP-08] switching language changes the interface at once and is kept afte
   await context.close();
 });
 
+test('[APP-08] templates are found by the words the language uses', async () => {
+  const { page, context, errors } = await openApp();
+  await pick(page, 'de');
+  // The words the "no match" hint suggests, in German, each finds templates.
+  await page.fill('[data-testid="home-template-search"]', 'zzzz');
+  await page.waitForSelector('[data-testid="home-templates"] .empty-note');
+  const hint = await page.textContent('[data-testid="home-templates"] .empty-note');
+  const words = [...hint.matchAll(/„([^“]+)“/g)].map((m) => m[1]);
+  assert.deepEqual(words, ['Sale', 'Einladung', 'Lebenslauf', 'Speisekarte']);
+  for (const word of [...words, 'Visitenkarte', 'Hochzeit', 'Geburtstag']) {
+    await page.fill('[data-testid="home-template-search"]', word);
+    await page.waitForFunction(() => !document.querySelector('[data-testid="home-templates"] .empty-note'));
+    assert.ok(await page.evaluate(() => document.querySelector('[data-testid="home-templates"]').children.length > 0), word);
+  }
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('[APP-08] a new document and whiteboard start in the language', async () => {
   const { page, context, errors } = await openApp();
   await pick(page, 'es');
