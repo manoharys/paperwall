@@ -225,6 +225,11 @@ export class Canvas {
     const key = part === 'poster' ? `${assetId}|poster` : assetId;
     let entry = this.urls.get(key);
     if (!entry || entry.dataUrl !== dataUrl) {
+      // A new file under the same id: the old one's URL goes (pictures drawn with it are drawn again).
+      if (entry) {
+        URL.revokeObjectURL(entry.url);
+        this.hrefsChanged = (this.hrefsChanged || 0) + 1;
+      }
       entry = { dataUrl, url: blobUrlFor(dataUrl) };
       this.urls.set(key, entry);
     }

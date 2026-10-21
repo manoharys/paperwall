@@ -256,3 +256,32 @@ test('[MOT-07] in Safari, a presented video plays live over the slide, where it 
   await page.keyboard.press('Escape');
   await context.close();
 });
+
+test('[APP-07] a picture whose file changes under the same id lets its old blob: URL go', async () => {
+  const { page, context } = await newDesign('square');
+  const gone = await page.evaluate(async () => {
+    const { editor: ed, canvas } = window.paperwall;
+    const png = (color) => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 8;
+      const g = c.getContext('2d');
+      g.fillStyle = color;
+      g.fillRect(0, 0, 8, 8);
+      return c.toDataURL('image/png');
+    };
+    ed.doc.assets.swap = { type: 'image', mime: 'image/png', dataUrl: png('#ff0000'), width: 8, height: 8, name: 'swap.png' };
+    const first = canvas.assetHref('swap');
+    const again = canvas.assetHref('swap');
+    ed.doc.assets.swap = { ...ed.doc.assets.swap, dataUrl: png('#0000ff') };
+    const second = canvas.assetHref('swap');
+    const loads = (url) => new Promise((ok) => {
+      const img = new Image();
+      img.onload = () => ok(true);
+      img.onerror = () => ok(false);
+      img.src = url;
+    });
+    return { same: first === again, changed: first !== second, oldLoads: await loads(first), newLoads: await loads(second) };
+  });
+  assert.deepEqual(gone, { same: true, changed: true, oldLoads: false, newLoads: true });
+  await context.close();
+});

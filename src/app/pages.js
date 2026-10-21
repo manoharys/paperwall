@@ -26,6 +26,7 @@ export class PageStrip {
         iconButton('plus', t('zoom.in'), () => canvas.zoomBy(1.25), { 'data-testid': 'zoom-in' }),
         iconButton('fit', t('zoom.fit'), () => canvas.zoomToFit(), { 'data-testid': 'zoom-fit' })));
     this.images = new Map(); // page id → { looks, img }: each page's picture as last drawn
+    this.contents = new WeakMap(); // page → { at, json }: its contents as of the editor's last change
     this.drawnCount = 0;
     this.redraw = debounce(() => this.render(), 250);
     editor.on((what) => {
@@ -61,7 +62,10 @@ export class PageStrip {
    */
   pageImage(p, i, keep) {
     const ed = this.ed;
-    const looks = `${ed.doc.width}x${ed.doc.height}|${measureVersion()}|${JSON.stringify(p)}`;
+    // (Its contents are written out again only after a change, not on every redraw.)
+    let seen = this.contents.get(p);
+    if (!seen || seen.at !== ed.looks) this.contents.set(p, (seen = { at: ed.looks, json: JSON.stringify(p) }));
+    const looks = `${ed.doc.width}x${ed.doc.height}|${measureVersion()}|${this.canvas.hrefsChanged || 0}|${seen.json}`;
     const kept = keep ? this.images.get(p.id) : null;
     if (kept?.looks === looks) return kept.img;
     if (kept) forget(kept.img);
