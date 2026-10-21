@@ -37,10 +37,13 @@ export function buildMp4Parts({ video, audio = null, duration }) {
   const ftyp = box('ftyp', fourcc('isom'), u32(0x200), fourcc('isom'), fourcc('iso2'), fourcc(video.codec === 'avc' ? 'avc1' : 'iso6'), fourcc('mp41'));
   const tracks = [{ kind: 'video', ...video, timescale: 90000 }];
   if (audio) tracks.push({ kind: 'audio', ...audio, timescale: audio.sampleRate });
-  // Samples of all tracks in time order (sound next to its pictures), so a
-  // player streaming the file has both from the start.
-  const order = tracks.flatMap((t, ti) => t.chunks.map((c, ci) => ({ ti, ci, at: c.timestamp ?? 0 })))
-    .sort((a, b) => a.at - b.at || a.ti - b.ti);
+  // Samples of all tracks in decode-time order (sound next to its pictures,
+  // each track's samples in the order they're decoded), so a player
+  // streaming the file has both from the start and never reads backwards.
+  const order = tracks.flatMap((t, ti) => {
+    const dts = t.chunks.map((c) => c.timestamp ?? 0).sort((a, b) => a - b);
+    return t.chunks.map((c, ci) => ({ ti, ci, at: dts[ci] }));
+  }).sort((a, b) => a.at - b.at || a.ti - b.ti || a.ci - b.ci);
   const moovFor = (base) => {
     const offsets = tracks.map((t) => new Array(t.chunks.length));
     let at = base;
