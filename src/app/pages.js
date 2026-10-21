@@ -196,7 +196,9 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
       }
     } else if (live) {
       // Nothing to draw: the videos play themselves.
-    } else if (settled && info.keeps && now - drawn < 33 && drawn) {
+    } else if ((settled && info.keeps) || info.videos.length ? now - drawn < 33 && drawn : false) {
+      // (With videos on the page, 30 a second while things come in too: each
+      // frame carries their pictures.)
       frame = requestAnimationFrame(draw);
       return;
     } else {

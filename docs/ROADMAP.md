@@ -49,6 +49,7 @@ on-device AI models. Not approved: a collaboration server.
 - [ ] Whiteboards: infinite canvas, sticky notes, connectors
 - [ ] Carried over from v0.4 review: keep pictures, videos and sounds in their own store (as files, not text inside each saved design), so big videos don't slow saving
 - [ ] Carried over from v0.4 review: a video's still picture (on the page, in thumbnails and in PNG, JPG, PDF and SVG downloads) shows the frame it starts at, at full size
+- [ ] Carried over from v0.4 review: faster GIF and video downloads of pages with big photos and videos (still layers drawn once, video frames drawn straight to the canvas), and live videos in Safari when presenting
 
 ## v0.6 Online extras (opt-in)
 
