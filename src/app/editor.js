@@ -404,7 +404,9 @@ export class Editor {
   addText(style = 'body', props = {}) {
     const base = TEXT_STYLES[style] || TEXT_STYLES.body;
     const k = Math.max(0.3, this.sizeRef / 1080);
-    const el = createText({ ...base, size: Math.round(base.size * k), w: Math.round(Math.min(this.doc.width, this.sizeRef * 1.5) * 0.7), ...props });
+    // (On a whiteboard, as wide as on its first canvas.)
+    const wide = this.doc.board ? Math.min(this.doc.width, 3600) : this.doc.width;
+    const el = createText({ ...base, size: Math.round(base.size * k), w: Math.round(wide * 0.7), ...props });
     return this.insert(el);
   }
 
@@ -483,6 +485,7 @@ export class Editor {
         // (Still listed while it's taken, so changes meanwhile don't start another.)
         this.takeStill(id).finally(() => {
           if (this.stills.get(id)?.timer === timer) this.stills.delete(id);
+          this.retakeStills(); // (its start may have moved while it was taken)
           done();
         });
       }, 250);
@@ -517,7 +520,7 @@ export class Editor {
       const img = await loadImage(url);
       const now = locate(this.doc, id, this.pageData.id)?.el;
       if (!now) return;
-      if ((now.trim?.start || 0) !== start) return void this.retakeStills(); // moved on meanwhile: from where it starts now
+      if ((now.trim?.start || 0) !== start) return; // moved on meanwhile: retaken from where it starts now, once this is done
       // (The still it replaces stays while the design is open: undo can bring
       // it back. Saving leaves it out.)
       now.still = addAsset(this.doc, { dataUrl: url, mime: url.slice(5, url.indexOf(';')), width: img.naturalWidth, height: img.naturalHeight });

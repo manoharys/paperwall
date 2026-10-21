@@ -11,7 +11,7 @@ import { scaleElement } from './commands.js';
 import { DOCUMENT } from './doc.js';
 
 export { DOCUMENT };
-export const BOARD = { grow: 1200, edge: 400, max: 24000 };
+export const BOARD = { grow: 1200, edge: 400, max: 20000 }; // (20000: as big as any design may be)
 
 /** The blocks of a page in flow order: top to bottom (as last placed). Lines joined to things follow them, so aren't blocks (a free line is one). */
 const joined = (el) => el.type === 'connector' && (el.start?.id || el.end?.id);
@@ -186,13 +186,16 @@ export function growBoard(doc) {
   if (left === Infinity) return null;
   let dx = 0;
   let dy = 0;
+  // (Everything moves over by just as much as the canvas grew.)
   while (left + dx < BOARD.edge && doc.width < BOARD.max) {
-    dx += BOARD.grow;
-    doc.width = Math.min(BOARD.max, doc.width + BOARD.grow);
+    const by = Math.min(BOARD.grow, BOARD.max - doc.width);
+    dx += by;
+    doc.width += by;
   }
   while (top + dy < BOARD.edge && doc.height < BOARD.max) {
-    dy += BOARD.grow;
-    doc.height = Math.min(BOARD.max, doc.height + BOARD.grow);
+    const by = Math.min(BOARD.grow, BOARD.max - doc.height);
+    dy += by;
+    doc.height += by;
   }
   let grew = dx > 0 || dy > 0;
   if (grew) {

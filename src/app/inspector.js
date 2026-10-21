@@ -712,7 +712,8 @@ export function resizeDialog(editor) {
   const doc = editor.doc;
   let unit = 'px';
   const wIn = h('input', { type: 'number', min: '1', value: doc.width, 'aria-label': 'New width', 'data-testid': 'resize-w' });
-  const hIn = h('input', { type: 'number', min: '1', value: doc.height, 'aria-label': 'New height', 'data-testid': 'resize-h' });
+  // (A document's height is its sheet's, not the long page it has grown to.)
+  const hIn = h('input', { type: 'number', min: '1', value: doc.document?.pageHeight || doc.height, 'aria-label': 'New height', 'data-testid': 'resize-h' });
   const unitSel = h('select', { 'aria-label': 'Units' }, ['px', 'mm', 'in'].map((u) => h('option', { value: u }, u)));
   unitSel.addEventListener('change', () => {
     const w = toPx(+wIn.value, unit);

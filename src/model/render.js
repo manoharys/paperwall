@@ -4,7 +4,7 @@
 import { shapePath, dashArray, maskPath, drawPath } from './shapes.js';
 import { connectorGeometry, arrowHead } from './connectors.js';
 import { hexToRgb, mixHex, sortedStops } from './color.js';
-import { layoutText, displayText, approxMeasure, measureWith, notePad } from './text-layout.js';
+import { layoutText, displayText, approxMeasure, measureWith, notePad, noteInner } from './text-layout.js';
 import { iconById, stickerById } from './graphics.js';
 import { qrMatrix, qrPath } from './qr.js';
 import { animationOf, motionAt, readingOrder, transitionAt } from './motion.js';
@@ -341,7 +341,7 @@ function renderText(ctx, el) {
     // A sticky note: its square of color (lifted a little off the page), and
     // the text inside its edges.
     const p = notePad(el);
-    const inner = renderText(ctx, { ...el, note: null, w: Math.max(1, el.w - p * 2), h: Math.max(1, el.h - p * 2) });
+    const inner = renderText(ctx, noteInner(el));
     const r = Math.min(8, el.w * 0.02);
     return `<rect x="0" y="${f(el.h * 0.012 + 2)}" width="${f(el.w)}" height="${f(el.h)}" rx="${f(r)}" fill="#000" fill-opacity="0.12"/>` +
       `<rect width="${f(el.w)}" height="${f(el.h)}" rx="${f(r)}" fill="${esc(el.note)}"/><g transform="translate(${f(p)} ${f(p)})">${inner}</g>`;
@@ -705,8 +705,7 @@ export function textRuns(doc, pageIndex, measure = approxMeasure) {
       }
       if (el0.type !== 'text') continue;
       // A sticky note's words sit inside its edges (the same middle, so it turns the same).
-      const inset = notePad(el0);
-      const el = inset ? { ...el0, note: null, x: el0.x + inset, y: el0.y + inset, w: Math.max(1, el0.w - inset * 2), h: Math.max(1, el0.h - inset * 2) } : el0;
+      const el = el0.note ? noteInner(el0) : el0;
       const x0 = ox + el.x;
       const y0 = oy + el.y;
       const cx = x0 + el.w / 2;

@@ -154,7 +154,7 @@ async function fittedPictures(doc, pages, width) {
       c.height = Math.max(1, Math.round(img.naturalHeight * s));
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
       // (Pictures that may be see-through stay PNG.)
-      const clear = /^data:image\/(png|webp|gif)/.test(a.dataUrl);
+      const clear = !/^data:image\/jpe?g/.test(a.dataUrl); // (only JPEGs are never see-through)
       assets[id] = { ...a, dataUrl: c.toDataURL(clear ? 'image/png' : 'image/jpeg', 0.92), width: c.width, height: c.height };
     } catch {
       /* kept as it is */

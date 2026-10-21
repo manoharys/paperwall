@@ -221,7 +221,8 @@ export class Canvas {
     // (A document or whiteboard growing as you work stays where you are;
     // made smaller, as by undo or a restored version, it's fitted again.)
     const [ow, oh] = resized ? this.pageSizeWas.split('x').map(Number) : [0, 0];
-    const grew = resized && ed.doc.width >= ow && ed.doc.height >= oh;
+    // (A document's height comes and goes with its words: only a new width refits it.)
+    const grew = resized && ed.doc.width >= ow && (ed.doc.height >= oh || !!ed.doc.document);
     if (resized && !((ed.doc.document || ed.doc.board) && grew)) this.zoomToFit();
     else if (ed.boardMoved) {
       this.el.scrollLeft += ed.boardMoved.dx * ed.zoom;

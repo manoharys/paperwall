@@ -34,6 +34,12 @@ export function notePad(el) {
   return el.note ? Math.round(Math.max(16, el.size * 0.6)) : 0;
 }
 
+/** A sticky note's words as plain text in the box inside its edges (the same middle). */
+export function noteInner(el) {
+  const p = notePad(el);
+  return { ...el, note: null, x: el.x + p, y: el.y + p, w: Math.max(1, el.w - p * 2), h: Math.max(1, el.h - p * 2) };
+}
+
 /**
  * Lay out a text element.
  * Returns lines with their text, left offset (x, for list indents) and width,
@@ -41,7 +47,7 @@ export function notePad(el) {
  */
 export function layoutText(el, measure) {
   // A sticky note's text wraps inside its edges.
-  if (el.note) return layoutText({ ...el, note: null, w: Math.max(1, el.w - notePad(el) * 2) }, measure);
+  if (el.note) return layoutText(noteInner(el), measure);
   const m = measureWith(measure, el);
   const lineHeight = el.size * (el.lineHeight || 1.2);
   const lines = [];
