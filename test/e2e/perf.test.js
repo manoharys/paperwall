@@ -226,7 +226,7 @@ test('[APP-07] a video download draws what is still once, with the video and wha
   await context.close();
 });
 
-test('[APP-07] previews shrink every photo, empty frames before them or not', async () => {
+test('[APP-07] previews shrink every photo, empty frames before them or not, to the size asked', async () => {
   const { page, context, errors } = await newDesign('square');
   const sizes = await page.evaluate(async () => {
     const photo = (color) => {
@@ -245,9 +245,12 @@ test('[APP-07] previews shrink every photo, empty frames before them or not', as
     // Two empty frames (no picture yet) first, then the photos.
     doc.pages[0].elements = [img('e1', null, 0), img('e2', null, 300), img('p1', 'a', 600), img('p2', 'b', 0)];
     const small = await window.paperwall.withSmallPictures(doc);
-    return ['a', 'b'].map((id) => small.assets[id].width);
+    // Asked again, bigger: its own copy, not the small one kept from before.
+    const bigger = await window.paperwall.withSmallPictures(doc, 1200);
+    const again = await window.paperwall.withSmallPictures(doc);
+    return [small, bigger, again].map((d) => ['a', 'b'].map((id) => d.assets[id].width));
   });
-  assert.deepEqual(sizes, [720, 720]);
+  assert.deepEqual(sizes, [[720, 720], [1200, 1200], [720, 720]]);
   assert.deepEqual(errors, []);
   await context.close();
 });

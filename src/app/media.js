@@ -369,25 +369,34 @@ export function videosOn(doc, pageIndexes) {
   return pageIndexes.flatMap((i) => (doc.pages[i] ? videosIn(doc.pages[i], doc.assets) : []));
 }
 
-const smaller = new WeakMap(); // a picture → its smaller copy ({ dataUrl, width, height }), or null if it's small already
+// A picture → its smaller copies by size (side → { dataUrl, width, height },
+// or null if it's that small already).
+const smaller = new WeakMap();
+const smallerAt = (side) => ({
+  get: (a) => smaller.get(a)?.get(side),
+  set: (a, copy) => {
+    if (!smaller.has(a)) smaller.set(a, new Map());
+    smaller.get(a).set(side, copy);
+  },
+});
 
 /**
  * The design with the pictures on its first page no bigger than `side` px,
  * for small previews: drawing one then doesn't copy and decode every
- * full-size photo. Each picture is made smaller once. Not a copy: shares
+ * full-size photo. Each picture is made smaller once per size. Not a copy: shares
  * everything else with `doc`.
  */
 export function withSmallPictures(doc, side = 720) {
   const ids = usedAssetIds({ pages: doc.pages.slice(0, 1) });
-  return shrinkPictures(doc, ids, (img) => side / Math.max(img.naturalWidth, img.naturalHeight), { under: 0.75, quality: 0.85, cache: smaller });
+  return shrinkPictures(doc, ids, (img) => side / Math.max(img.naturalWidth, img.naturalHeight), { under: 0.75, quality: 0.85, cache: smallerAt(side) });
 }
 
 /**
  * The design with pictures `ids` redrawn smaller: `scaleFor(img, id)` says
  * how big each needs to be, as a share of its own size; one that needn't be
  * under `under` of it stays as it is. A copy of the design's assets (the
- * design keeps its pictures); everything else is shared. `cache` (a WeakMap)
- * keeps each picture's smaller copy for next time.
+ * design keeps its pictures); everything else is shared. `cache` (get(asset),
+ * set(asset, copy)) keeps each picture's smaller copy for next time.
  */
 export async function shrinkPictures(doc, ids, scaleFor, { under = 0.9, quality = 0.92, cache = null } = {}) {
   const assets = { ...doc.assets };
