@@ -202,7 +202,8 @@ async function writeDesign(doc, thumb) {
   for (const k of Object.values(assets)) known.add(k.stored);
   seen.set(doc.id, known);
   // (A document's height: a sheet's, not the long page it has grown to.)
-  await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: kept.document?.pageHeight || doc.height, pages: kept.pages.length, thumb: thumb ?? null, doc: { ...kept, assets } });
+  // (Its details as they were when the save began, like its pages.)
+  await put('designs', doc.id, { id: doc.id, name: kept.name, updatedAt: kept.updatedAt, width: kept.width, height: kept.document?.pageHeight || kept.height, pages: kept.pages.length, thumb: thumb ?? null, doc: { ...kept, assets } });
   // Files this design no longer uses go: ones this tab has known it to
   // use (another tab's new file isn't taken for an old one).
   const keep = new Set(Object.values(assets).map((a) => a.stored));

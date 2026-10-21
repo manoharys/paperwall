@@ -181,7 +181,8 @@ export class Editor {
     if (edit) {
       this.doc.updatedAt = Date.now();
       this.changedSinceVersion = true;
-    } else this.lastThumb = null; // (its look changed all the same)
+    }
+    this.looks = (this.looks || 0) + 1; // (every change to how it looks, edits or not)
     this.selection = this.selection.filter((id) => cmd.findElement(this.pageData, id));
     if (!quiet) this.emit('doc');
     this.save();
@@ -206,10 +207,11 @@ export class Editor {
     if (this.isDragging?.() && !this.closed) return void this.thumb(); // not a half-moved picture: after the drag
     try {
       const at = this.doc.updatedAt;
+      const looks = this.looks;
       const url = await this.makeThumb(this.doc);
       // Reused by a version saved soon after, if it's known to show that state
-      // (nothing changed while it was drawn).
-      if (this.doc.updatedAt === at) this.lastThumb = { url, at };
+      // (nothing changed while it was drawn, not even a correction).
+      if (this.looks === looks) this.lastThumb = { url, at, looks };
       // Just the preview: the design itself is saved by persist.
       await store.saveThumb(this.doc.id, url);
     } catch {
@@ -248,7 +250,7 @@ export class Editor {
     try {
       // A small picture of the first page, so the history list needn't load
       // whole designs: the home-screen one if it's up to date, else a new one.
-      const fresh = () => (this.lastThumb?.at === snapshot.updatedAt ? this.lastThumb.url : null);
+      const fresh = () => (this.lastThumb?.at === snapshot.updatedAt && this.lastThumb.looks === this.looks ? this.lastThumb.url : null);
       // A home-screen thumbnail is usually on its way: draw it now and use it for both.
       if (!fresh() && !quick) await this.thumb.flushPending();
       const thumb = fresh() || (quick || !this.makeThumb ? null : await this.makeThumb(snapshot).catch(() => null));
@@ -482,7 +484,8 @@ export class Editor {
     const el = createImage(assetId, { w: Math.round(upload.width * s), h: Math.round(upload.height * s) });
     if (at) {
       el.x = at.x - el.w / 2;
-      el.y = at.y - el.h / 2;
+      // (In a document, its top where it's dropped: blocks go in order of their tops.)
+      el.y = this.doc.document ? at.y : at.y - el.h / 2;
       return this.insert(el, { center: false });
     }
     return this.insert(el);
@@ -582,7 +585,8 @@ export class Editor {
     const el = createVideo(assetId, { w: Math.round(vw * s), h: Math.round(vh * s) });
     if (at) {
       el.x = at.x - el.w / 2;
-      el.y = at.y - el.h / 2;
+      // (In a document, its top where it's dropped: blocks go in order of their tops.)
+      el.y = this.doc.document ? at.y : at.y - el.h / 2;
     }
     this.insert(el, { center: !at }); // (its full-size still is taken once it's in: see retakeStills)
     return el;

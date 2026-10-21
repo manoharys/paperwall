@@ -344,6 +344,9 @@ function presentingKey(key) {
   return { Home: 'first', End: 'last', Escape: 'stop' }[key] || null;
 }
 
+// (This tab's own: another tab presenting keeps its slides window.)
+const SLIDES_WINDOW = `paperwall-slides-${Math.random().toString(36).slice(2, 8)}`;
+
 /**
  * The presenter view: the slides in a window of their own (for the
  * audience: drag it to the projector), and here the page now, the next one,
@@ -353,7 +356,7 @@ export function presenterView(editor, canvas) {
   const doc = editor.doc;
   if (!visiblePages(doc).length) return toast('Every page is hidden. Show a page to present it.');
   // Opened first, while the click still counts (pop-up blockers allow that).
-  const audience = window.open('', 'paperwall-slides', 'popup,width=960,height=600');
+  const audience = window.open('', SLIDES_WINDOW, 'popup,width=960,height=600');
   if (!audience) {
     toast('Allow pop-ups for this page to show the slides in their own window. Presenting here instead.', 'error');
     return present(editor, canvas);
