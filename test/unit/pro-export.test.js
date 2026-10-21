@@ -482,3 +482,78 @@ test('[EXP-15] PowerPoint: a photo whose picture couldn\'t be read comes as a pi
   assert.equal([...slide.matchAll(/<p:pic>/g)].length, 3, 'the photo, the icon and the neon text, each a picture');
   assert.equal([...parts.keys()].filter((n) => n.startsWith('ppt/media/')).length, 3);
 });
+
+test('[EXP-13] effect copies and the outline under letters are no text of their own: the words come once', () => {
+  const doc = createDesign({ width: 1000, height: 800 });
+  const els = [
+    createText({ id: 'echo', x: 50, y: 50, w: 900, h: 120, text: 'Echoing', size: 60, effect: { type: 'echo' } }),
+    createText({ id: 'splice', x: 50, y: 200, w: 900, h: 120, text: 'Spliced', size: 60, effect: { type: 'splice' } }),
+    createText({ id: 'glitch', x: 50, y: 350, w: 900, h: 120, text: 'Glitchy', size: 60, effect: { type: 'glitch' } }),
+    createText({ id: 'outlined', x: 50, y: 500, w: 900, h: 120, text: 'Outlined', size: 60, outline: { width: 3, color: '#ff0000' } }),
+  ];
+  doc.pages[0].elements.push(...els);
+  // The page marks which copies are only for looks.
+  const svg = renderPage(doc, 0, { measure: approxMeasure });
+  assert.equal((svg.match(/data-copy="1"/g) || []).length, 5, 'two echoes, one splice, two glitch copies');
+  const fonts = new Map();
+  for (const { font, weight } of fontsUsed(doc)) fonts.set(`${font.name}|${weight}`, fontBytes(fontFile(font.slug, weight)));
+  assert.deepEqual(planVectorPdf(doc, [0], { fonts }), [], 'all drawn as text');
+  const bytes = buildVectorPdf(doc, [0], { fonts });
+  const pdf = readPdf(bytes);
+  const streams = [...pdf.objects.values()].filter((o) => o.data).map((o) => {
+    try {
+      return zlib.inflateSync(o.data).toString('latin1');
+    } catch {
+      return o.data.toString('latin1');
+    }
+  }).join('\n');
+  const shown = [...streams.matchAll(/(\/Span << \/ActualText \(\) >> BDC )?BT [^]*? Tj ET/g)];
+  assert.equal(shown.length, 4 + 5 + 1, 'each word, five copies, one outline pass');
+  assert.equal(shown.filter((m) => !m[1]).length, 4, 'only the words themselves are text');
+  assert.equal([...streams.matchAll(/\/Artifact BMC \/Span << \/ActualText \(\) >> BDC BT [^]*? Tj ET EMC EMC/g)].length, 6, 'the rest are artifacts');
+  if (has('pdftotext', ['-v'])) {
+    const dir = mkdtempSync(join(tmpdir(), 'paperwall-unit-'));
+    writeFileSync(join(dir, 'a.pdf'), bytes);
+    const words = execFileSync('pdftotext', ['-raw', join(dir, 'a.pdf'), '-']).toString().split(/\s+/).filter(Boolean);
+    assert.deepEqual(words, ['Echoing', 'Spliced', 'Glitchy', 'Outlined'], 'copied and searched once');
+  }
+});
+
+test('[EXP-15] PowerPoint: numbered lists count on over blank lines', () => {
+  const doc = createDesign({ width: 1920, height: 1080 });
+  doc.pages[0].elements.push(createText({ id: 'n', x: 100, y: 100, w: 900, h: 600, text: 'One\nTwo\n\nThree\nFour\n \nFive', list: 'number', size: 40 }));
+  doc.pages[0].elements.push(createText({ id: 'later', x: 1000, y: 100, w: 800, h: 600, text: 'Seven\n\nEight', list: 'number', listStart: 7, size: 40 }));
+  const slide = unzip(buildPptx(doc, [0], {})).get('ppt/slides/slide1.xml').toString();
+  checkXml(slide, 'slide1.xml');
+  const paras = (id) => {
+    const sp = [...slide.matchAll(/<p:sp>.*?<\/p:sp>/g)].map((m) => m[0]).find((x) => x.includes(`<a:t>${id}</a:t>`));
+    return [...sp.matchAll(/<a:p>(.*?)<\/a:p>/g)].map((m) => {
+      const num = /<a:buAutoNum type="arabicPeriod"(?: startAt="(\d+)")?\/>/.exec(m[1]);
+      return num ? `#${num[1] || 1}` : 'none';
+    });
+  };
+  // A blank line ends PowerPoint's run: the next run starts where the count is.
+  assert.deepEqual(paras('One'), ['#1', '#1', 'none', '#3', '#3', 'none', '#5']);
+  assert.deepEqual(paras('Seven'), ['#7', 'none', '#8']);
+});
+
+test('[EXP-15] PowerPoint: linear gradients run as the page draws them, stretched with their box', () => {
+  const doc = createDesign({ width: 1920, height: 1080 });
+  const stops = [{ offset: 0, color: '#ff0000' }, { offset: 0.5, color: '#ff0000' }, { offset: 0.5, color: '#0000ff' }, { offset: 1, color: '#0000ff' }];
+  doc.pages[0].elements.push(createShape('rect', { id: 'wide', x: 0, y: 0, w: 400, h: 100, fill: { type: 'linear', angle: 45, stops } }));
+  doc.pages[0].elements.push(createShape('rect', { id: 'down', x: 0, y: 200, w: 400, h: 100, fill: { type: 'linear', angle: 180, stops } }));
+  const slide = unzip(buildPptx(doc, [0], {})).get('ppt/slides/slide1.xml').toString();
+  const grads = [...slide.matchAll(/<a:gradFill[^>]*>(.*?)<\/a:gradFill>/g)].map((m) => ({
+    ang: +/<a:lin ang="(\d+)" scaled="0"\/>/.exec(m[1])[1] / 60000,
+    pos: [...m[1].matchAll(/<a:gs pos="(\d+)">/g)].map((g) => +g[1]),
+  }));
+  // The page's 45° in a 400 × 100 box: its colors change along (sin a / w, -cos a / h),
+  // so the edge between them runs corner to corner, as the page has it.
+  const want = (((Math.atan2(-Math.cos(Math.PI / 4) / 100, Math.sin(Math.PI / 4) / 400) * 180) / Math.PI) + 360) % 360;
+  assert.ok(Math.abs(grads[0].ang - want) < 0.001, `${grads[0].ang} vs ${want}`);
+  assert.ok(Math.abs(grads[0].ang - 284.04) < 0.01);
+  // PowerPoint's run reaches the corners (√2 times the page's at 45°): the stops move in, the ends padded.
+  const k = 1 / Math.SQRT2;
+  assert.deepEqual(grads[0].pos, [0, Math.round((0.5 - 0.5 * k) * 100000), 50000, 50000, Math.round((0.5 + 0.5 * k) * 100000), 100000]);
+  assert.deepEqual(grads[1], { ang: 90, pos: [0, 50000, 50000, 100000] }, 'straight down, as before');
+});

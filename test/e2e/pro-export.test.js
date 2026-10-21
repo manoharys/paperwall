@@ -375,3 +375,36 @@ test('[EXP-13] the flattened PDF splits a document into sheets with its fonts in
   assert.equal(flat, vector, 'the same sheets as the vector PDF');
   await other.context.close();
 });
+
+test('[EXP-13] [EXP-15] SVG pictures are drawn at the size they\'re shown, in the PDF and in PowerPoint', async () => {
+  const { page, context } = await newDesign('square');
+  // A tiny SVG (40 × 30 of its own), shown 600 × 450.
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30" viewBox="0 0 40 30"><rect width="40" height="30" fill="#2a9d8f"/><circle cx="20" cy="15" r="10" fill="#e9c46a"/></svg>';
+  await uploadImages(page, [{ name: 'logo.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svg) }]);
+  await page.evaluate(() => window.paperwall.editor.update({ x: 100, y: 100, w: 600, h: 450 }));
+  const doc = await state(page);
+  assert.equal(rasterScale(doc), 2);
+  const widths = (pdf) => find(pdf, /\/Subtype \/Image/).map((o) => +/\/Width (\d+)/.exec(o.dict)[1]);
+  const pdf = readPdf((await downloadVia(page, pdfKind(page, 'vector'))).bytes);
+  assert.deepEqual(widths(pdf), [1200], 'shown 600 px wide, at twice that');
+  const deck = unzip((await downloadVia(page, () => page.click('[data-testid="export-format"] [data-value="pptx"]'))).bytes);
+  const pngs = [...deck.keys()].filter((n) => n.startsWith('ppt/media/'));
+  assert.equal(pngs.length, 1);
+  assert.deepEqual([deck.get(pngs[0]).readUInt32BE(16), deck.get(pngs[0]).readUInt32BE(20)], [1200, 900]);
+  // One with no size of its own (just a viewBox): its shape from the viewBox, not a blank 1 × 1.
+  const bare = (d) => {
+    const el = d.pages[0].elements.find((e) => e.type === 'image');
+    d.assets[el.assetId].dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 30"><rect width="40" height="30" fill="#2a9d8f"/></svg>')}`;
+  };
+  const one = readPdf(await exportCopy(page, 'exportVectorPdf', bare));
+  const [img] = find(one, /\/Subtype \/Image/);
+  assert.match(img.dict, /\/Width 1200 \/Height 900 /);
+  const png = renderPdf(await exportCopy(page, 'exportVectorPdf', bare), 72);
+  if (png) {
+    // The middle of the picture is its color, not blank (600 px at 96 per inch: 450 pt).
+    const at = Math.round((100 + 300) * 0.75);
+    const px = (await pixelAt(page, png, 'image/png', at, at)).slice(0, 3);
+    assert.ok(Math.abs(px[0] - 0x2a) < 6 && Math.abs(px[1] - 0x9d) < 6 && Math.abs(px[2] - 0x8f) < 6, `${px}`);
+  }
+  await context.close();
+});
