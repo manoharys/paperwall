@@ -11,6 +11,7 @@ import { renderElementOnly, TEXT_EFFECTS } from '../model/render.js';
 import { measure, addCustomFont, customFontNames, ensureFont, fontSettled } from './fonts.js';
 import { iconById, stickerById } from '../model/graphics.js';
 import { getSetting } from './store.js';
+import { aiWritingSection } from './ai-writing.js';
 
 const DUOTONES = [
   ['Ink', '#1a1a2e', '#f7f4ef'], ['Ocean', '#0b2a45', '#7fd1c7'], ['Sunset', '#5b1a6e', '#ffb36b'], ['Berry', '#3b1426', '#ff8fa3'],
@@ -356,6 +357,7 @@ export class Inspector {
         ] }),
         slider({ label: 'Line spacing', value: el.lineHeight, min: 0.6, max: 3, step: 0.05, testid: 'line-height', onChange: this.live('lineHeight') }),
         slider({ label: 'Letter spacing', value: el.letterSpacing, min: -Math.round(el.size * 0.1), max: Math.round(el.size * 0.8), step: 0.5, testid: 'letter-spacing', onChange: this.live('letterSpacing') })),
+      aiWritingSection(ed, el),
       section('Text effects',
         this.textEffects(el),
         toggle({ label: 'Outline', checked: !!el.outline, testid: 'outline-toggle', onChange: (on) => this.up({ outline: on ? { width: Math.max(1, Math.round(el.size * 0.04)), color: '#ffffff' } : null }) }),
