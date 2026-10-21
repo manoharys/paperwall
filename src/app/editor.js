@@ -372,22 +372,30 @@ export class Editor {
 
   insert(el, { center = true } = {}) {
     if (el.type === 'text') this.fitText(el);
-    // On a whiteboard, something new goes in the middle of what's in view.
-    if (this.doc.board && center && this.viewCenter) {
-      const at = this.viewCenter();
+    // (Unless it was put somewhere: dropped between two blocks, say.)
+    const shift = center ? this.newPlace(el) : null;
+    if (shift) {
       center = false;
-      el.x = Math.round(at.x - el.w / 2);
-      el.y = Math.round(at.y - el.h / 2);
-    }
-    // In a document, something new goes at the end (where it flows to),
-    // unless it was put somewhere (dropped between two blocks, say).
-    if (this.doc.document && center) {
-      center = false;
-      el.y = this.pageData.elements.reduce((end, e) => Math.max(end, e.y + e.h), 0) + 1;
+      el.x += shift.dx;
+      el.y += shift.dy;
     }
     this.change(() => cmd.addElement(this.doc, this.page, el, { center }));
     this.select([el.id]);
     return el;
+  }
+
+  /**
+   * Where something new (its box) goes: on a whiteboard, the middle of
+   * what's in view; in a document, the end (where it flows to). How far to
+   * move it there, or null (anywhere else: the middle of the page).
+   */
+  newPlace(box) {
+    if (this.doc.board && this.viewCenter) {
+      const at = this.viewCenter();
+      return { dx: Math.round(at.x - box.w / 2) - box.x, dy: Math.round(at.y - box.h / 2) - box.y };
+    }
+    if (this.doc.document) return { dx: 0, dy: this.pageData.elements.reduce((end, e) => Math.max(end, e.y + e.h), 0) + 1 - box.y };
+    return null;
   }
 
   /** How big the page is for sizing new things: its shorter side (a whiteboard's as it began, however it has grown). */
@@ -791,7 +799,9 @@ export class Editor {
     // (On a whiteboard or document: the size it began with, or a sheet.)
     const s = this.sizeRef;
     const boxes = gridBoxes(grid, this.fitW, this.fitH, { margin: Math.round(s * 0.04), gap: Math.round(s * 0.02) });
-    const frames = boxes.map((b) => createFrame('none', b));
+    // (Where new things go, on a whiteboard or in a document.)
+    const shift = this.newPlace(unionBounds(boxes)) || { dx: 0, dy: 0 };
+    const frames = boxes.map((b) => createFrame('none', { ...b, x: b.x + shift.dx, y: b.y + shift.dy }));
     const group = this.change(() => {
       for (const el of frames) cmd.addElement(this.doc, this.page, el, { center: false });
       // (In a document, one block: its frames stay a grid as it flows.)

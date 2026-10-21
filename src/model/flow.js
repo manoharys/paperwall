@@ -166,8 +166,7 @@ function textPieces(el, room, measure, first = room) {
     const text = chunk.reduce((t, l, k) => (k === 0 ? l.text : `${t}${l.start ? '\n' : l.glue ? '' : ' '}${l.text}`), '');
     // A piece that starts inside a paragraph goes on with it (no new bullet or number).
     const piece = { ...el, id: `${el.id}-${pieces.length + 1}`, text, listStart: items + 1, continues: !chunk[0].start };
-    // (An item it goes on with was counted with the piece before.)
-    items += chunk.filter((l, k) => l.start && l.text.trim() && !(k === 0 && piece.continues)).length;
+    items += chunk.filter((l) => l.start && l.text.trim()).length;
     piece.h = Math.min(pieces.length ? room : first, Math.ceil(chunk.length * lineHeight + pad * 2));
     pieces.push(piece);
   }

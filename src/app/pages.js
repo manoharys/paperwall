@@ -191,7 +191,9 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
         const v = videos.videoOf({ id: box.dataset.video });
         if (!v) continue;
         v.className = 'slide-video';
+        const playing = !v.paused;
         box.append(v);
+        if (playing && v.paused) v.play().catch(() => null); // (moved to another window, a video can stop)
         // The picture under it goes once the video shows (it'd show through
         // a see-through video).
         const under = box.parentNode.querySelector(`image[data-under="${CSS.escape(box.dataset.video)}"]`);
