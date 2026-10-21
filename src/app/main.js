@@ -125,6 +125,7 @@ async function openEditor(id) {
     editor.refitAllText();
     pendingFit = false;
   }
+  editor.arrange(); // a document laid out with its fonts measured (before its first look and version)
   // The first time a design is opened, keep its original as a version; after
   // that, the next version comes after a few minutes of work. The original is
   // copied now (text measured), before any edit can land while storage answers.

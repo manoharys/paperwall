@@ -59,11 +59,11 @@ export function layoutText(el, measure) {
     let first = true;
     const push = (text) => {
       const t = text.replace(/\s+$/, '');
-      lines.push({ text: t, prefix: first ? prefix : '', indent, width: m(t) });
+      lines.push({ text: t, prefix: first ? prefix : '', indent, width: m(t), start: first });
       first = false;
     };
     if (!words.length) {
-      lines.push({ text: '', prefix: '', indent: 0, width: 0 });
+      lines.push({ text: '', prefix: '', indent: 0, width: 0, start: true });
       continue;
     }
     for (const word of words) {

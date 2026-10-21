@@ -400,9 +400,12 @@ export function presenterView(editor, canvas) {
     const s = Math.floor((performance.now() - begun) / 1000);
     clock.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   }, 250);
+  // The same keys as presenting.
   const onKey = (e) => {
-    if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(e.key)) move(1);
-    else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) move(-1);
+    if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(e.key)) move(1);
+    else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(e.key)) move(-1);
+    else if (e.key === 'Home') ctl?.go(0);
+    else if (e.key === 'End') ctl?.go(Infinity);
     else if (e.key === 'Escape') ctl?.close();
     else return;
     e.preventDefault();

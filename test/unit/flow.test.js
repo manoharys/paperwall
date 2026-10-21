@@ -9,7 +9,7 @@ test('[DW-01] a document flows its blocks down the page, as wide as the page, an
   const doc = createDesignFromPreset('doc');
   assert.ok(doc.document, 'a document');
   const page = doc.pages[0];
-  page.elements.push(createText({ ...DOC_STYLES.bullets, y: 5 }));
+  page.elements.push(createText({ ...DOC_STYLES.bullets, y: 99999 }));
   flowDocument(doc, approxMeasure);
   const [title, body, list] = page.elements;
   const inner = doc.width - DOCUMENT.margin * 2;
@@ -82,4 +82,24 @@ test('[DW-05] a sticky note: text inside a square of color, its color checked wh
   note.note = 'url(javascript:x)';
   validateDesign(doc);
   assert.equal(doc.pages[0].elements[0].note, undefined, 'not a color: a plain text box');
+});
+
+test('[DW-03] text taller than a sheet goes on over the next sheets, in whole lines; a tall picture fits one', () => {
+  const doc = createDesignFromPreset('doc');
+  const page = doc.pages[0];
+  const words = Array.from({ length: 3000 }, (_, i) => `w${i}`);
+  page.elements[1].text = words.join(' ');
+  doc.assets.a = { type: 'image', dataUrl: 'data:image/png;base64,AA==', width: 100, height: 400 };
+  page.elements.push(createImage('a', { w: 100, h: 400, y: 99999 }), createText({ ...DOC_STYLES.body, text: 'After', y: 999999 }));
+  flowDocument(doc, approxMeasure);
+  const paper = paginate(doc, approxMeasure);
+  assert.ok(paper.pages.length >= 4, `${paper.pages.length} sheets`);
+  const texts = paper.pages.flatMap((p) => p.elements.filter((e) => e.type === 'text').map((e) => e.text));
+  const all = texts.join(' ').split(/\s+/);
+  for (const w of words) assert.ok(all.includes(w), `${w} is on a sheet`);
+  const room = DOCUMENT.pageHeight - DOCUMENT.margin * 2;
+  for (const sheet of paper.pages) for (const el of sheet.elements) assert.ok(el.y + el.h <= DOCUMENT.pageHeight - DOCUMENT.margin + 0.5, `${el.type} fits its sheet`);
+  const pic = paper.pages.flatMap((p) => p.elements).find((e) => e.type === 'image');
+  assert.ok(pic.h <= room + 0.5, 'the tall picture fits a sheet');
+  assert.ok(texts.includes('After'), 'what follows is there');
 });

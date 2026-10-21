@@ -188,14 +188,33 @@ async function writeDesign(doc, thumb) {
     assets[id] = { ...details, stored: key };
   }
   if (writes.length) await batch('media', writes);
+  const known = seen.get(doc.id) || new Set();
+  for (const k of Object.values(assets)) known.add(k.stored);
+  seen.set(doc.id, known);
   await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: doc.height, pages: doc.pages.length, thumb: thumb ?? null, doc: { ...kept, assets } });
-  // Files this design no longer uses go.
+  // Files this design no longer uses go: ones this tab has known it to
+  // use (another tab's new file isn't taken for an old one).
   const keep = new Set(Object.values(assets).map((a) => a.stored));
-  const stale = [...have].filter((k) => !keep.has(k));
+  const stale = [...have].filter((k) => !keep.has(k) && known.has(k));
+  for (const k of stale) known.delete(k);
   if (stale.length) await batch('media', stale.map((k) => [k, undefined]));
 }
 
 const mediaKey = (designId, assetId) => `${designId}|${assetId}`;
+const seen = new Map(); // design id → the files this tab has saved it with
+
+/** Whether a design is stored (without reading it). */
+export async function hasDesign(id) {
+  return (await run('designs', 'readonly', (s) => s.count(id), () => (memory.designs.has(id) ? 1 : 0))) > 0;
+}
+
+/** Rename a stored design (without reading its files). */
+export async function renameDesign(id, name) {
+  const row = await get('designs', id);
+  if (!row) return;
+  const updatedAt = Date.now();
+  await put('designs', id, { ...row, name, updatedAt, doc: { ...row.doc, name, updatedAt } });
+}
 
 function mediaKeys(designId) {
   const [lo, hi] = range(`${designId}|`);

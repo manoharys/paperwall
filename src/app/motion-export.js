@@ -10,7 +10,6 @@ import { buildWebmParts } from '../model/webm.js';
 import { buildMp4Parts } from '../model/mp4.js';
 import { measure, fontCssFor } from './fonts.js';
 import { loadImage } from './ui.js';
-import { usedAssetIds } from '../model/doc.js';
 import { VideoFrames, videosOn } from './media.js';
 
 /** A copy of what an encoder hands over as bytes (an ArrayBuffer or a view of one). */
@@ -42,7 +41,7 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
   if (!tl.parts.length) throw new Error('Pick at least one page.');
   // Big photos made only as big as the frames can show, once, rather than
   // decoded at full size for every frame.
-  const doc = await fittedPictures(doc0, pages, width, height);
+  const doc = await fittedPictures(doc0, pages, width);
   const count = Math.max(1, Math.round(tl.total * fps));
   // Fonts of just the pages being played (each frame carries them).
   const fontCss = await fontCssFor({ ...doc, pages: pages.map((i) => doc.pages[i]) });
@@ -111,22 +110,39 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
 }
 
 /**
- * The design with each picture no bigger than frames `width` × `height`
- * could use (twice their longest side, so a zoomed-in crop stays sharp).
- * A copy: the design itself keeps its pictures.
+ * The design with each picture made only as big as it shows in frames
+ * `width` px wide (a little more, for smooth scaling; a zoomed-in crop
+ * counts as the whole picture shown bigger). A copy: the design itself
+ * keeps its pictures.
  */
-async function fittedPictures(doc, pages, width, height) {
-  const cap = Math.max(width, height) * 2;
+async function fittedPictures(doc, pages, width) {
+  const scale = width / doc.width;
+  // How big each picture shows, as a share of its own size (its biggest use).
+  const share = new Map();
+  const use = (id, w, h) => {
+    const a = doc.assets[id];
+    if (!a?.width || !a?.height) return share.set(id, Infinity);
+    share.set(id, Math.max(share.get(id) || 0, (w * scale) / a.width, (h * scale) / a.height));
+  };
+  const walk = (els) => {
+    for (const el of els) {
+      if (el.type === 'image' && el.assetId) use(el.assetId, el.w / (el.crop?.w || 1), el.h / (el.crop?.h || 1));
+      if (el.type === 'video' && el.still) use(el.still, el.w, el.h);
+      if (el.type === 'group') walk(el.children);
+    }
+  };
+  for (const i of pages) {
+    const page = doc.pages[i];
+    walk(page.elements);
+    if (page.background?.type === 'image') use(page.background.assetId, doc.width, doc.height);
+  }
   const assets = { ...doc.assets };
-  // (Only those on the pages being played.)
-  const used = usedAssetIds({ ...doc, pages: pages.map((i) => doc.pages[i]) });
-  for (const [id, a] of Object.entries(doc.assets)) {
-    if (!used.has(id) || !a || (a.type && a.type !== 'image') || typeof a.dataUrl !== 'string') continue;
-    if (!(Math.max(a.width || 0, a.height || 0) > cap) || a.dataUrl.startsWith('data:image/svg')) continue;
+  for (const [id, part] of share) {
+    const a = doc.assets[id];
+    const s = part * 1.25;
+    if (!(s < 0.9) || typeof a?.dataUrl !== 'string' || a.dataUrl.startsWith('data:image/svg')) continue;
     try {
       const img = await loadImage(a.dataUrl);
-      const s = cap / Math.max(img.naturalWidth, img.naturalHeight);
-      if (!(s < 1)) continue;
       const c = document.createElement('canvas');
       c.width = Math.max(1, Math.round(img.naturalWidth * s));
       c.height = Math.max(1, Math.round(img.naturalHeight * s));

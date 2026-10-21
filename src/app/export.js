@@ -72,7 +72,7 @@ export function pagePoints(doc) {
 /** On paper, a document is sheets (split between its blocks); anything else is as it is. */
 function onPaper(doc, pages) {
   if (!doc.document) return [doc, pages];
-  const sheets = paginate({ ...doc, pages: pages.map((i) => doc.pages[i]) });
+  const sheets = paginate({ ...doc, pages: pages.map((i) => doc.pages[i]) }, measure);
   return [sheets, sheets.pages.map((_, i) => i)];
 }
 

@@ -370,7 +370,7 @@ export class Editor {
     // In a document, something new goes at the end (where it flows to).
     if (this.doc.document) {
       center = false;
-      el.y = Number.MAX_SAFE_INTEGER;
+      el.y = this.pageData.elements.reduce((end, e) => Math.max(end, e.y + e.h), 0) + 1;
     }
     this.change(() => cmd.addElement(this.doc, this.page, el, { center }));
     this.select([el.id]);

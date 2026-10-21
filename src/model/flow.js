@@ -4,7 +4,7 @@
 // split into sheets between blocks. A whiteboard's canvas grows as things
 // are added near its edges.
 
-import { fitHeight } from './text-layout.js';
+import { fitHeight, layoutText, approxMeasure } from './text-layout.js';
 import { clone } from './doc.js';
 import { scaleElement } from './commands.js';
 
@@ -64,31 +64,72 @@ export function flowDocument(doc, measure) {
 
 /**
  * A document as sheets of paper, for PDF and print: each page split between
- * blocks into pages a sheet tall (a block taller than a sheet gets one of
- * its own). A new design; the document itself is left as it is.
+ * blocks into pages a sheet tall. Text taller than a sheet goes on over the
+ * next sheets, in whole lines; anything else that tall is made to fit one.
+ * A new design; the document itself is left as it is.
  */
-export function paginate(doc) {
+export function paginate(doc, measure = approxMeasure) {
   const opts = { ...DOCUMENT, ...doc.document };
-  const out = clone(doc);
-  out.height = opts.pageHeight;
-  delete out.document;
-  out.pages = [];
+  const room = opts.pageHeight - opts.margin * 2; // a sheet's height for blocks
+  // (Shallow: the files aren't copied, just shared.)
+  const out = { ...doc, height: opts.pageHeight, document: undefined, pages: [] };
   for (const page of doc.pages) {
     let sheet = null;
     let top = 0; // where this sheet starts on the long page
+    const where = new Map(); // block id → the sheet and its top, for the lines between them
     const start = (y) => {
-      sheet = { ...clone({ ...page, elements: [] }), id: `${page.id}-${out.pages.length + 1}` };
+      sheet = { ...page, id: `${page.id}-${out.pages.length + 1}`, elements: [] };
       out.pages.push(sheet);
       top = y - opts.margin;
     };
+    const place = (el) => {
+      sheet.elements.push({ ...clone(el), y: el.y - top });
+      where.set(el.id, { sheet, top });
+    };
     start(opts.margin);
     for (const el of blocks(page)) {
-      const bottom = el.y + el.h - top;
-      if (bottom > opts.pageHeight - opts.margin && sheet.elements.length) start(el.y);
-      sheet.elements.push({ ...clone(el), y: el.y - top });
+      if (el.h <= room) {
+        if (el.y + el.h - top > opts.pageHeight - opts.margin && sheet.elements.length) start(el.y);
+        place(el);
+        continue;
+      }
+      // Too tall for a sheet: text goes on over as many sheets as it takes,
+      // anything else is made to fit one. What follows goes just below the
+      // last of it.
+      if (sheet.elements.length) start(el.y);
+      const pieces = el.type === 'text' && !el.curve
+        ? textPieces(el, room, measure)
+        : [{ ...el, w: el.w * (room / el.h), h: room, x: el.x + (el.w - el.w * (room / el.h)) / 2 }];
+      pieces.forEach((piece, k) => {
+        if (k > 0) start(0);
+        sheet.elements.push({ ...clone(piece), y: opts.margin });
+        if (k === 0) where.set(el.id, { sheet, top: el.y - opts.margin });
+      });
+      const lastH = pieces[pieces.length - 1].h;
+      top = el.y + el.h - (opts.margin + lastH);
+    }
+    // Lines between blocks: on the sheet of what they start from.
+    for (const el of page.elements) {
+      if (el.hidden || el.type !== 'connector') continue;
+      const at = where.get(el.start?.id) || where.get(el.end?.id);
+      if (at) at.sheet.elements.push({ ...clone(el), y: el.y - at.top });
     }
   }
   return out;
+}
+
+/** A text block cut into pieces at most `room` tall, in whole lines (a paragraph cut goes on in the next). */
+function textPieces(el, room, measure) {
+  const { lines, lineHeight } = layoutText(el, measure);
+  const per = Math.max(1, Math.floor(room / lineHeight));
+  const pieces = [];
+  for (let i = 0; i < lines.length; i += per) {
+    const text = lines.slice(i, i + per).reduce((t, l, k) => (k === 0 ? l.text : `${t}${l.start ? '\n' : ' '}${l.text}`), '');
+    const piece = { ...el, id: `${el.id}-${pieces.length + 1}`, text };
+    piece.h = fitHeight(piece, measure);
+    pieces.push(piece);
+  }
+  return pieces;
 }
 
 /**

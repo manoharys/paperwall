@@ -411,6 +411,8 @@ export function resizeDesign(doc, width, height) {
   out.id = uid('d');
   const sx = width / doc.width;
   const sy = height / doc.height;
+  // A document: its sheets become the new size, its margins and gaps in step.
+  if (out.document) out.document = { pageHeight: height, margin: Math.round(out.document.margin * sx), gap: Math.round(out.document.gap * sx) };
   const s = Math.min(sx, sy);
   for (const page of out.pages) {
     for (const el of page.elements) {

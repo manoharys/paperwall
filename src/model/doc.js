@@ -115,6 +115,13 @@ export function makeDocument(doc) {
   doc.document = { pageHeight: doc.height, margin: 120, gap: 28 };
   doc.name = 'Untitled document';
   doc.pages[0].elements.push(createText({ ...DOC_STYLES.title, y: 0 }), createText({ ...DOC_STYLES.body, y: 1 }));
+  // (Laid out as text is measured once open; roughly right till then.)
+  const m = doc.document.margin;
+  let y = m;
+  for (const el of doc.pages[0].elements) {
+    Object.assign(el, { x: m, y, w: doc.width - m * 2 });
+    y += el.size * el.lineHeight + doc.document.gap;
+  }
   return doc;
 }
 
