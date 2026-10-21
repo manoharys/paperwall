@@ -211,13 +211,17 @@ export async function hasDesign(id) {
 }
 
 /** Rename a stored design (without reading its files). */
-export async function renameDesign(id, name) {
-  // After a save of it under way (which would put the old name back).
-  await saving.get(id)?.catch(() => null);
-  const row = await get('designs', id);
-  if (!row) return;
-  const updatedAt = Date.now();
-  await put('designs', id, { ...row, name, updatedAt, doc: { ...row.doc, name, updatedAt } });
+export function renameDesign(id, name) {
+  // In turn with the design's saves (a save under way would put the old name back).
+  const job = (saving.get(id) || Promise.resolve()).catch(() => null).then(async () => {
+    const row = await get('designs', id);
+    if (!row) return;
+    const updatedAt = Date.now();
+    await put('designs', id, { ...row, name, updatedAt, doc: { ...row.doc, name, updatedAt } });
+  });
+  saving.set(id, job);
+  job.finally(() => saving.get(id) === job && saving.delete(id)).catch(() => null);
+  return job;
 }
 
 function mediaKeys(designId) {

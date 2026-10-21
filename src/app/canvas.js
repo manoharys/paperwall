@@ -222,7 +222,7 @@ export class Canvas {
     // made smaller, as by undo or a restored version, it's fitted again.)
     const [ow, oh] = resized ? this.pageSizeWas.split('x').map(Number) : [0, 0];
     // (A document's height comes and goes with its words: only a new width refits it.)
-    const grew = resized && ed.doc.width >= ow && (ed.doc.height >= oh || !!ed.doc.document);
+    const grew = ed.doc.document ? ed.doc.width === ow : resized && ed.doc.width >= ow && ed.doc.height >= oh;
     if (resized && !((ed.doc.document || ed.doc.board) && grew)) this.zoomToFit();
     else if (ed.boardMoved) {
       this.el.scrollLeft += ed.boardMoved.dx * ed.zoom;

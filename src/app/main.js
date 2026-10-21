@@ -71,6 +71,7 @@ async function closeEditor() {
   // A drag still going (leaving by a key or the back button) ends as if let go.
   editor.endDrag?.();
   editor.closed = true;
+  editor.stopStills();
   unbind();
   window.paperwall = null;
   // Save the design and its thumbnail first; then, if it changed, keep a

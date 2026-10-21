@@ -5,7 +5,7 @@ import { History } from '../model/history.js';
 import * as cmd from '../model/commands.js';
 import {
   createText, createShape, createLine, createImage, createVideo, createFrame, createDrawing, thinPoints, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
-  TEXT_STYLES, versionSnapshot, isEmptyFrame, DOCUMENT, stillIsCurrent,
+  TEXT_STYLES, versionSnapshot, isEmptyFrame, DOCUMENT, stillIsCurrent, presetById,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
 import { flowDocument, growBoard } from '../model/flow.js';
@@ -390,7 +390,6 @@ export class Editor {
     return el;
   }
 
-  /** Scale a new element so it suits the page size. */
   /** How big the page is for sizing new things: its shorter side (a whiteboard's as it began, however it has grown). */
   get sizeRef() {
     return Math.min(this.fitW, this.fitH);
@@ -398,12 +397,16 @@ export class Editor {
 
   /** The page's width and height for sizing new things (a whiteboard's as it began, however it has grown). */
   get fitW() {
-    return this.doc.board ? Math.min(3600, this.doc.width) : this.doc.width;
+    return this.doc.board ? Math.min(presetById('whiteboard').w, this.doc.width) : this.doc.width;
   }
 
   get fitH() {
-    return this.doc.board ? Math.min(2400, this.doc.height) : this.doc.height;
+    // (A document's: its sheet's, not the long page it has grown to.)
+    if (this.doc.document) return Math.min(this.doc.document.pageHeight, this.doc.height);
+    return this.doc.board ? Math.min(presetById('whiteboard').h, this.doc.height) : this.doc.height;
   }
+
+  /** Scale a new element so it suits the page size. */
 
   scaled(el, share = 0.4) {
     const s = (this.sizeRef * share) / Math.max(el.w, el.h);
@@ -520,7 +523,17 @@ export class Editor {
     for (const page of this.doc.pages) if (walk(page.elements)) return;
   }
 
+  /** Stop taking stills (the editor is closing). */
+  stopStills() {
+    for (const { timer, done } of this.stills?.values() || []) {
+      clearTimeout(timer);
+      done();
+    }
+    this.stills?.clear();
+  }
+
   async takeStill(id) {
+    if (this.closed) return;
     const found = locate(this.doc, id, this.pageData.id);
     if (found?.el.type !== 'video') return;
     const start = found.el.trim?.start || 0;
@@ -771,8 +784,9 @@ export class Editor {
 
   /** Fill the page with a grid of empty frames, ready for photos. */
   addGrid(grid) {
-    const s = Math.min(this.doc.width, this.doc.height);
-    const boxes = gridBoxes(grid, this.doc.width, this.doc.height, { margin: Math.round(s * 0.04), gap: Math.round(s * 0.02) });
+    // (On a whiteboard or document: the size it began with, or a sheet.)
+    const s = this.sizeRef;
+    const boxes = gridBoxes(grid, this.fitW, this.fitH, { margin: Math.round(s * 0.04), gap: Math.round(s * 0.02) });
     const frames = boxes.map((b) => createFrame('none', b));
     this.change(() => {
       for (const el of frames) cmd.addElement(this.doc, this.page, el, { center: false });
@@ -1106,7 +1120,7 @@ export class Editor {
    * Its fonts must already be loaded (see readyTemplate).
    */
   addTemplatePage(templateDoc) {
-    const resized = cmd.resizeDesign(templateDoc, this.doc.width, this.doc.height);
+    const resized = cmd.resizeDesign(templateDoc, this.fitW, this.fitH);
     const first = this.change(() => {
       for (const [id, a] of Object.entries(resized.assets || {})) this.doc.assets[id] = a;
       let at = this.page;

@@ -206,7 +206,8 @@ export class InsertPanel {
     } }, label);
     const notes = section('Sticky notes', h('div', { class: 'note-grid', 'data-testid': 'note-colors' }, NOTE_COLORS.map((c, i) => h('button', {
       type: 'button', class: 'note-swatch', style: { background: c }, 'aria-label': `Add a sticky note (${i + 1})`, 'data-testid': `note-add-${i}`,
-      onClick: () => ed.insert(createSticky(c)),
+      // (As big as on a whiteboard as it began: a share of the page's shorter side.)
+      onClick: () => ed.insert(ed.scaled(createSticky(c), ed.doc.board ? 320 / 2400 : 0.3)),
     }))), h('p', { class: 'hint' }, 'Double-click a note to write on it. Connect notes with lines from Elements.'));
     return [
       ed.doc.document
