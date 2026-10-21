@@ -4,7 +4,9 @@
 // (WebCodecs) into files we put together ourselves.
 
 import { renderFrame } from '../model/render.js';
-import { timeline, frameAt, soundFade, animationsEnd, hasLoop, videosIn } from '../model/motion.js';
+import { timeline, frameAt, soundFade, animationsEnd, hasLoop, videosIn, animationOf } from '../model/motion.js';
+import { DEFAULT_FILTERS } from '../model/doc.js';
+import { maskPath } from '../model/shapes.js';
 import { GifEncoder } from '../model/gif.js';
 import { buildWebmParts } from '../model/webm.js';
 import { buildMp4Parts } from '../model/mp4.js';
@@ -74,6 +76,17 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
     if (!onPage.has(index)) onPage.set(index, videosOn(doc, [index]));
     return onPage.get(index);
   };
+  // Once only its videos move, a page is drawn from layers: what's between
+  // its videos, drawn once, and each video's picture straight from its player.
+  const layered = new Map(); // page index → its layers, or null (drawn whole each frame)
+  const ends = new Map(); // page index → when its animations are over (Infinity if one loops)
+  const layersOf = async (frame) => {
+    if (!ends.has(frame.index)) ends.set(frame.index, hasLoop(doc.pages[frame.index]) ? Infinity : animationsEnd(doc.pages[frame.index]));
+    if (frame.from || frame.local < ends.get(frame.index)) return null;
+    // (Drawn at the first such moment: the same at any later one.)
+    if (!layered.has(frame.index)) layered.set(frame.index, await stillLayers(doc, frame, { fontCss, width, height }));
+    return layered.get(frame.index);
+  };
   try {
     for (let i = 0; i < count; i++) {
       if (signal?.aborted) throw new Error('Stopped');
@@ -85,6 +98,25 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
         await each(canvas, ctx, i, t, true);
         onProgress?.((i + 1) / count);
         continue;
+      }
+      const layers = videos ? await layersOf(frame) : null;
+      if (layers) {
+        const players = await Promise.all(layers.videos.map((el) => videos.at(el, frame.local)));
+        // (A video that can't be followed here shows its still: the whole frame drawn, below.)
+        if (players.every(Boolean)) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, width, height);
+          let k = 0;
+          for (const layer of layers.list) {
+            if (layer.el) drawVideo(ctx, players[k++], layer.el, width / doc.width);
+            else ctx.drawImage(layer.canvas, 0, 0, width, height);
+          }
+          last = null;
+          lastIndex = settled ? frame.index : -1;
+          await each(canvas, ctx, i, t, false);
+          onProgress?.((i + 1) / count);
+          continue;
+        }
       }
       const pictures = new Map();
       if (videos) {
@@ -164,18 +196,92 @@ async function fittedPictures(doc, pages, width) {
   return { ...doc, assets };
 }
 
-/** One frame (the page(s) at their moment, as SVG) into the canvas. */
-async function drawFrame(svg, { ctx, width, height }) {
+/** One frame (the page(s) at their moment, as SVG) into the canvas (on white, unless `clear`). */
+async function drawFrame(svg, { ctx, width, height, clear = false }) {
   const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
   try {
     const img = await loadImage(url);
     if (img.decode) await img.decode().catch(() => null);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, width, height);
+    if (!clear) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+    }
     ctx.drawImage(img, 0, 0, width, height);
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+/** Whether a video is drawn just as a picture is: no filters, shadow or animation of its own (those need the whole frame drawn). */
+function plainVideo(page, el) {
+  const filters = Object.entries(el.filters || {}).every(([k, v]) => (v ?? null) === (DEFAULT_FILTERS[k] ?? null));
+  return filters && !el.shadow && !animationOf(page, el);
+}
+
+/**
+ * A page at a moment when only its videos move (its animations are over,
+ * and none loop), as layers: what's below, between and above its videos,
+ * each drawn once, with its videos in between. { videos, list: [{ canvas }
+ * | { el }] }, or null when it can't be drawn so (a video in a group, or
+ * with filters).
+ */
+async function stillLayers(doc, frame, { fontCss, width, height }) {
+  const page = doc.pages[frame.index];
+  const videos = page.elements.filter((el) => el.type === 'video' && !el.hidden && doc.assets[el.assetId]);
+  if (!videos.length || videosIn(page, doc.assets).length !== videos.length || !videos.every((el) => plainVideo(page, el))) return null;
+  const list = [];
+  let run = [];
+  const flush = async () => {
+    if (!run.length) return;
+    const shown = new Set(run.map((el) => el.id));
+    const skip = new Set(page.elements.filter((el) => !shown.has(el.id)).map((el) => el.id));
+    const svg = renderFrame(doc, frame, { measure, fontCss, scale: width / doc.width, idPrefix: `ly${list.length}`, skip, transparent: list.length > 0 });
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    await drawFrame(svg, { ctx: canvas.getContext('2d'), width, height, clear: true });
+    list.push({ canvas });
+    run = [];
+  };
+  for (const el of page.elements) {
+    if (!videos.includes(el)) run.push(el);
+    else {
+      await flush();
+      // (The white and the page's background always come first.)
+      if (!list.length) list.push({ canvas: await backdrop(doc, frame, { fontCss, width, height }) });
+      list.push({ el });
+    }
+  }
+  await flush();
+  return { videos, list };
+}
+
+/** Just the white and the page's background. */
+async function backdrop(doc, frame, { fontCss, width, height }) {
+  const page = doc.pages[frame.index];
+  const svg = renderFrame(doc, frame, { measure, fontCss, scale: width / doc.width, idPrefix: 'lyb', skip: new Set(page.elements.map((el) => el.id)) });
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  await drawFrame(svg, { ctx: canvas.getContext('2d'), width, height });
+  return canvas;
+}
+
+/** A video's picture straight onto the frame: placed, turned, cropped and clipped to its shape as the renderer does. `k`: frame px per page px. */
+function drawVideo(ctx, v, el, k) {
+  const crop = el.crop || { x: 0, y: 0, w: 1, h: 1 };
+  const iw = el.w / crop.w;
+  const ih = el.h / crop.h;
+  ctx.save();
+  ctx.scale(k, k);
+  ctx.translate(el.x + el.w / 2, el.y + el.h / 2);
+  if (el.rotation) ctx.rotate((el.rotation * Math.PI) / 180);
+  ctx.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
+  ctx.translate(-el.w / 2, -el.h / 2);
+  ctx.globalAlpha = el.opacity ?? 1;
+  ctx.clip(new Path2D(maskPath(el)));
+  ctx.drawImage(v, -crop.x * iw, -crop.y * ih, iw, ih);
+  ctx.restore();
 }
 
 /** The design as an animated GIF. */

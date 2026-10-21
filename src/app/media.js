@@ -185,6 +185,16 @@ export class VideoFrames {
    * the seek), at `scale` (output px per page px). Null if it can't be played here.
    */
   async seek(el, local, scale = 1.5) {
+    const v = await this.at(el, local);
+    return v ? this.grab(this.players.get(el.id), el, scale) : null;
+  }
+
+  /**
+   * `el`'s player showing its picture at `local` seconds into its page,
+   * exactly (waits for the seek), to draw straight from. Null if it can't be
+   * played here.
+   */
+  async at(el, local) {
     const p = this.player(el);
     if (!(await p.ready)) return null; // the poster shows instead
     const v = p.video;
@@ -201,7 +211,7 @@ export class VideoFrames {
         return null;
       }
     }
-    return this.grab(p, el, scale);
+    return v.videoWidth ? v : null;
   }
 
   /**

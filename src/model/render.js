@@ -703,8 +703,10 @@ export function renderFrame(doc, frame, opts = {}) {
     body = layer(frame.from.index, frame.from.local, tr.from) + layer(frame.index, frame.local, tr.to);
   } else body = layer(frame.index, frame.local, null);
   // On white, as in every download (so a see-through moment of a transition
-  // looks the same played, presented or downloaded).
-  return svgDocument(ctx, `<rect width="${f(w)}" height="${f(h)}" fill="#ffffff"/>${body}`, w, h, opts, ' overflow="hidden"');
+  // looks the same played, presented or downloaded). `transparent`: neither
+  // the white nor the page's background (a layer to go over others).
+  const white = opts.transparent ? '' : `<rect width="${f(w)}" height="${f(h)}" fill="#ffffff"/>`;
+  return svgDocument(ctx, `${white}${body}`, w, h, opts, ' overflow="hidden"');
 }
 
 /** Render a single element on its own, for previews (layers list, thumbnails). */
