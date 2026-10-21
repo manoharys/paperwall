@@ -188,6 +188,8 @@ export class Canvas {
     this.unlisten();
     this.gone.abort();
     if (this.frame) cancelAnimationFrame(this.frame);
+    if (this.overlayFrame) cancelAnimationFrame(this.overlayFrame);
+    this.frame = this.overlayFrame = 0;
   }
 
   /**
