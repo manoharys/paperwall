@@ -91,7 +91,7 @@ test('[ON-03] AI writing: off until turned on; a text action replaces the text a
   assert.equal(r.headers['anthropic-version'], '2023-06-01');
   assert.equal(r.headers['anthropic-dangerous-direct-browser-access'], 'true');
   const body = JSON.parse(r.body);
-  assert.equal(body.model, 'claude-sonnet-5-5');
+  assert.equal(body.model, 'claude-opus-5-5');
   assert.ok(body.messages[0].content.includes('Add a heading'), 'the text is sent to be shortened');
   const after = await textEl(page, t.id);
   for (const k of ['font', 'size', 'weight', 'color', 'align', 'x', 'w']) assert.deepEqual(after[k], t[k], `${k} kept`);

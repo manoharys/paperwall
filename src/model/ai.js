@@ -13,11 +13,11 @@ import { layoutDesign } from './layout.js';
 // ---------- providers ----------
 
 /** The model each provider uses until the person picks another. */
-export const DEFAULT_MODELS = { claude: 'claude-sonnet-5-5', openai: 'gpt-4.1-mini', gemini: 'gemini-2.5-flash', ollama: 'llama3.2' };
+export const DEFAULT_MODELS = { claude: 'claude-opus-5-5', openai: 'gpt-4.1-mini', gemini: 'gemini-2.5-flash', ollama: 'llama3.2' };
 
 /** Models offered in the model box (any other name can be typed). */
 export const MODEL_CHOICES = {
-  claude: ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-5-5'],
+  claude: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'],
   openai: ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4.1-nano'],
   gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite'],
   ollama: ['llama3.2'],
@@ -41,7 +41,15 @@ export function buildRequest(provider, { model, key = '', base = 'http://localho
   const post = (url, headers, body) => ({ url, init: { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) } });
   const messages = [{ role: 'system', content: system }, { role: 'user', content: prompt }];
   if (provider === 'claude') {
-    return post('https://api.anthropic.com/v1/messages', authHeaders(provider, key), { model, max_tokens: maxTokens, system, messages: [{ role: 'user', content: prompt }] });
+    // Claude thinks before it answers, and that counts against max_tokens:
+    // room for both, and a light effort (writing is quick; a design, a little more).
+    // Models that can hand a declined request to another do (fallbacks).
+    const fallbacks = /^claude-(opus-5|sonnet-5-5|fable-5)/.test(model);
+    return post('https://api.anthropic.com/v1/messages', { ...authHeaders(provider, key), ...(fallbacks ? { 'anthropic-beta': 'server-side-fallback-2026-07-01' } : {}) }, {
+      model, max_tokens: Math.max(16000, maxTokens), system, messages: [{ role: 'user', content: prompt }],
+      output_config: { effort: json ? 'medium' : 'low' },
+      ...(fallbacks ? { fallbacks: 'default' } : {}),
+    });
   }
   if (provider === 'openai') {
     return post('https://api.openai.com/v1/chat/completions', authHeaders(provider, key),

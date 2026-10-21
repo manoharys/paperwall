@@ -17,7 +17,11 @@ test('[ON-03] each provider gets a request in its own format, the key only where
   assert.equal(claude.init.headers['anthropic-version'], '2023-06-01');
   assert.equal(claude.init.headers['anthropic-dangerous-direct-browser-access'], 'true');
   const cb = JSON.parse(claude.init.body);
-  assert.equal(cb.model, 'claude-sonnet-5-5');
+  assert.equal(cb.model, 'claude-opus-5-5');
+  assert.ok(cb.max_tokens >= 16000, 'room to think and answer');
+  assert.equal(cb.output_config.effort, 'low');
+  assert.equal(cb.fallbacks, 'default');
+  assert.equal(claude.init.headers['anthropic-beta'], 'server-side-fallback-2026-07-01');
   assert.equal(cb.system, 'Be brief.');
   assert.deepEqual(cb.messages, [{ role: 'user', content: 'Say hi' }]);
   assert.ok(cb.max_tokens > 0);

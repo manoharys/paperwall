@@ -48,7 +48,7 @@ export function photosView(ed, state) {
     if (state.provider !== provider) {
       // Another provider: its own results.
       forgetPreviews();
-      Object.assign(state, { provider, results: [], page: 0, more: false, error: '' });
+      Object.assign(state, { provider, results: [], page: 0, more: false, error: '', search: (state.search || 0) + 1 });
     }
     const settings = h('button', { type: 'button', class: 'link-btn', 'data-testid': 'photos-settings', onClick: () => openOnlineSettings('photos') }, 'Online extras…');
     if (!on) {
