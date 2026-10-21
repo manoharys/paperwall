@@ -351,10 +351,11 @@ function sayChanges(editor) {
     const sel = editor.selected;
     if (!sel.length) return say(t('a11y.nothing'));
     if (sel.length > 1) return say(t('a11y.selectedMany', { n: sel.length }));
+    // (Only elements on the page itself are selected, never one inside a group: its place is on the page.)
     const els = editor.pageData.elements.filter((el) => !el.hidden);
     let name = elementName(sel[0]);
     if (sel[0].locked) name = t('a11y.locked', { name });
-    // (A hidden one isn't among those Tab goes through: no place to count.)
+    // (A hidden one isn't among those N goes through: no place to count.)
     if (sel[0].hidden) return say(t('a11y.selectedHidden', { name }));
     say(t('a11y.selected', { name, n: els.indexOf(sel[0]) + 1 || 1, total: els.length || 1 }));
   };

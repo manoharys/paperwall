@@ -14,7 +14,7 @@ export const SHORTCUTS = [
   ['shortcut.deselect', () => 'Esc'],
   ['shortcut.nudge', () => t('keys.arrows')],
   ['shortcut.resize', () => t('keys.altArrows')],
-  ['shortcut.cycle', () => t('keys.tab')],
+  ['shortcut.cycle', () => t('keys.cycle')],
   ['shortcut.group', () => `${mod}+G / ${mod}+Shift+G`],
   ['shortcut.lock', () => `${mod}+L`],
   ['shortcut.order', () => '] / ['],
@@ -123,6 +123,7 @@ export function bindShortcuts(editor, canvas, actions) {
       return;
     }
     if (e.key === '?') return done(), cheatSheet();
+    if (k === 'n') return done(), canvas.cycleSelection(e.shiftKey ? -1 : 1);
     if (k === 't') return done(), editor.addText('body');
     if (k === 'r' && e.shiftKey) return done(), editor.setView({ rulers: !editor.view.rulers });
     if (k === 'r') return done(), editor.addShape('rect');

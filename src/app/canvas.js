@@ -53,14 +53,11 @@ export class Canvas {
     this.rulerY = h('div', { class: 'ruler y', 'data-testid': 'ruler-y', title: t('canvas.rulerY') });
     this.wrap = h('div', { class: 'page-wrap', 'data-testid': 'page' }, this.svgHost, this.overlay, this.rulerX, this.rulerY);
     this.board = h('div', { class: 'board' }, this.wrap);
-    // The canvas takes keyboard focus: Tab picks elements one at a time (see
-    // cycleSelection), the arrow keys move them (shortcuts.js).
+    // The canvas takes keyboard focus, and Tab leaves it as anywhere else: N
+    // and Shift+N pick elements one at a time (see cycleSelection), the arrow
+    // keys move them (shortcuts.js). Its description says so.
     const help = h('p', { id: 'canvas-help', class: 'sr-only' }, t('canvas.help'));
     this.el = h('div', { class: 'stage', 'data-testid': 'stage', tabindex: '0', role: 'application', 'aria-label': t('canvas.label'), 'aria-describedby': help.id }, this.board, help);
-    this.el.addEventListener('keydown', (e) => {
-      if (e.target !== this.el || e.key !== 'Tab' || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (this.cycleSelection(e.shiftKey ? -1 : 1)) e.preventDefault();
-    });
     this.textarea = null;
     this.frame = 0;
 
@@ -192,16 +189,15 @@ export class Canvas {
 
   /**
    * Select the next (dir 1) or previous (-1) element on the page, back to
-   * front, for the keyboard. Past either end it returns false: Tab then
-   * leaves the canvas as usual, and the selection stays.
+   * front, for the keyboard; past either end, round to the other. Returns
+   * whether there was one to pick.
    */
   cycleSelection(dir) {
     const ed = this.ed;
     const els = ed.pageData.elements.filter((el) => !el.hidden);
     if (!els.length) return false;
     const at = ed.selection.length === 1 ? els.findIndex((el) => el.id === ed.selection[0]) : -1;
-    const next = at < 0 ? (dir > 0 ? 0 : els.length - 1) : at + dir;
-    if (next < 0 || next >= els.length) return false;
+    const next = at < 0 ? (dir > 0 ? 0 : els.length - 1) : (at + dir + els.length) % els.length;
     ed.select([els[next].id]);
     return true;
   }

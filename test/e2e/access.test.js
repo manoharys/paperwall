@@ -206,20 +206,21 @@ test('[APP-09] keyboard alone: create a design, add text and a shape, select, mo
   let els = await elements(page);
   assert.equal(els.length, 2);
   const [text, square] = els;
-  // On the canvas, Tab picks elements one by one, and each is announced.
+  // On the canvas, N picks elements one by one, and each is announced.
   await tabTo(page, '[data-testid="stage"]');
   await page.keyboard.press('Escape');
   assert.deepEqual(await selection(page), []);
-  await page.keyboard.press('Tab');
+  await page.keyboard.press('n');
   assert.deepEqual(await selection(page), [text.id]);
   await page.waitForFunction(() => /selected, 1 of 2/.test(document.querySelector('[data-testid="announcer"]').textContent));
-  await page.keyboard.press('Tab');
+  await page.keyboard.press('n');
   assert.deepEqual(await selection(page), [square.id]);
-  assert.equal(await focused(page), 'stage', 'Tab stays on the canvas while it picks');
+  assert.equal(await focused(page), 'stage', 'focus stays on the canvas while it picks');
   await page.waitForFunction(() => /^Rectangle selected, 2 of 2$/.test(document.querySelector('[data-testid="announcer"]').textContent));
-  await page.keyboard.press('Shift+Tab');
-  assert.deepEqual(await selection(page), [text.id], 'Shift+Tab goes back');
-  await page.keyboard.press('Tab');
+  await page.keyboard.press('Shift+N');
+  assert.deepEqual(await selection(page), [text.id], 'Shift+N goes back');
+  await page.keyboard.press('Shift+N');
+  assert.deepEqual(await selection(page), [square.id], 'and round from the first to the last');
   // Arrows move it; with Shift by 10; with Alt they resize.
   for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
   await page.keyboard.press('Shift+ArrowDown');
@@ -231,7 +232,7 @@ test('[APP-09] keyboard alone: create a design, add text and a shape, select, mo
   assert.equal(moved.w, square.w + 1);
   assert.equal(moved.h, square.h + 10);
   assert.equal(await page.evaluate(() => document.querySelector('[data-testid="stage"]').getAttribute('role')), 'application');
-  // Past the last element, Tab leaves the canvas and the selection stays.
+  // Tab leaves the canvas at once, and the selection stays.
   await page.keyboard.press('Tab');
   assert.notEqual(await focused(page), 'stage');
   assert.deepEqual(await selection(page), [square.id]);
@@ -328,11 +329,22 @@ test('[APP-09] the canvas is a labelled, described place on the page', async () 
   });
   assert.equal(stage.tab, 0);
   assert.equal(stage.label, 'Page canvas');
-  assert.match(stage.help, /Tab and Shift\+Tab/);
+  assert.match(stage.help, /N and Shift\+N pick elements one at a time; Tab leaves the canvas/);
   // The skip link reaches it.
   await page.keyboard.press('Tab');
   await page.keyboard.press('Enter');
   assert.equal(await focused(page), 'stage');
+  // Tab and Shift+Tab never stop on the canvas's elements: straight on out.
+  await addShape(page, 'Square');
+  await page.focus('[data-testid="stage"]');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Tab');
+  assert.notEqual(await focused(page), 'stage');
+  assert.deepEqual(await selection(page), []);
+  await page.focus('[data-testid="stage"]');
+  await page.keyboard.press('Shift+Tab');
+  assert.notEqual(await focused(page), 'stage');
+  assert.deepEqual(await selection(page), []);
   // Enter on a selected text edits it; Escape comes back to the canvas.
   const el = await addText(page);
   await page.focus('[data-testid="stage"]');
@@ -405,7 +417,7 @@ test('[APP-09] Alt+Arrows resize a turned element in place; a hidden one is anno
   await page.keyboard.press('Alt+ArrowLeft');
   await page.keyboard.press('Alt+ArrowUp');
   assert.deepEqual(await steps(), was);
-  // Hidden, it isn't counted among the elements Tab goes through.
+  // Hidden, it isn't counted among the elements N goes through.
   await addText(page);
   await page.evaluate((id) => {
     const ed = window.paperwall.editor;
@@ -413,5 +425,20 @@ test('[APP-09] Alt+Arrows resize a turned element in place; a hidden one is anno
     ed.select([id]);
   }, sq.id);
   await page.waitForFunction(() => /^Rectangle selected \(hidden\)$/.test(document.querySelector('[data-testid="announcer"]').textContent));
+  // An element inside a group can't be selected on its own: the group is, counted on the page.
+  const inner = await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    const shape = (id, x) => ({ id, type: 'shape', shape: 'rect', x, y: 600, w: 80, h: 80, rotation: 0, opacity: 1, fill: '#336699' });
+    ed.change(() => ed.pageData.elements.push(shape('g1', 100), shape('g2', 200), shape('g3', 300)));
+    ed.select(['g1', 'g2', 'g3']);
+    ed.group();
+    const group = ed.pageData.elements.find((el) => el.type === 'group');
+    ed.select([group.children[2].id]);
+    const nested = ed.selected.length;
+    ed.select([group.id]);
+    return { nested, at: ed.pageData.elements.filter((el) => !el.hidden).indexOf(group) + 1 };
+  });
+  assert.deepEqual(inner, { nested: 0, at: 2 });
+  await page.waitForFunction(() => / selected, 2 of 2$/.test(document.querySelector('[data-testid="announcer"]').textContent));
   await context.close();
 });
