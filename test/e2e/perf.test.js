@@ -249,11 +249,15 @@ test('[APP-07] previews shrink every photo to the size it shows (cropped too), e
     // Asked again, bigger: its own copy, not the small one kept from before.
     const bigger = await window.paperwall.withSmallPictures(doc, 1200);
     const again = await window.paperwall.withSmallPictures(doc);
-    return [small, bigger, again].map((d) => ['a', 'b'].map((id) => d.assets[id].width));
+    // A document: only what's on its first sheet is in its preview (a photo further down isn't touched).
+    const long = { ...doc, height: 3000, document: { pageHeight: 1080, margin: 60, gap: 20, dpi: 150 } };
+    long.pages = [{ ...doc.pages[0], elements: [img('p1', 'a', 600), { ...img('p3', 'b', 0), y: 2000 }] }];
+    const sheet = await window.paperwall.withSmallPictures(long);
+    return [small, bigger, again, sheet].map((d) => ['a', 'b'].map((id) => d.assets[id].width));
   });
   // A 720 px preview of the 1080 px page shows them 200 and 800 px wide (made
   // up to the next twentieth of 2400: 240 and 840); 1200 px, 333 and 1333 (360 and 1440).
-  assert.deepEqual(sizes, [[240, 840], [360, 1440], [240, 840]]);
+  assert.deepEqual(sizes, [[240, 840], [360, 1440], [240, 840], [240, 2400]]);
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -307,6 +311,49 @@ test('[APP-07] one slow video frame is just that frame: the video is followed on
   assert.ok(out.took < 20000, `made in ${Math.round(out.took)} ms`);
   assert.ok(out.sent > 30, `still sent along with the frames: ${out.sent} times`);
   assert.deepEqual(out.notes, [], 'nothing to say: it was followed');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('[APP-07] a video still waits longer for its picture; one too slow is tried again after the next change', async () => {
+  const { page, context, errors } = await newDesign('square');
+  // Videos report no picture where they're sent while window.slowUntil is ahead.
+  await page.evaluate(() => {
+    const ready = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'readyState');
+    window.slowUntil = Infinity;
+    window.unstub = () => Object.defineProperty(HTMLMediaElement.prototype, 'readyState', ready);
+    Object.defineProperty(HTMLMediaElement.prototype, 'readyState', { configurable: true, get() { const r = ready.get.call(this); return performance.now() < window.slowUntil ? Math.min(1, r) : r; } });
+  });
+  await addClip(page, { x: 0, y: 0, w: 1080, h: 810 });
+  // Its still: too slow, so not taken, but not given up on either.
+  await page.waitForFunction(() => window.paperwall.editor.stillLate?.has('clip-el'), null, { timeout: 15000 });
+  assert.deepEqual(await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    return [!!ed.find('clip-el').still, ed.stillFailed.has('clip-el')];
+  }), [false, false]);
+  // A picture 2.5 s late: too late for a frame of a download, in time for a still.
+  const waits = await page.evaluate(async () => {
+    const { editor: ed, VideoFrames } = window.paperwall;
+    const el = ed.find('clip-el');
+    const tryAt = async (opts, at) => {
+      const frames = new VideoFrames(ed.doc, opts);
+      await frames.player(el).ready;
+      window.slowUntil = performance.now() + 2500;
+      try {
+        return !!(await frames.at(el, at));
+      } finally {
+        frames.dispose();
+      }
+    };
+    return { frame: await tryAt({}, 0.4), still: await tryAt({ patient: true }, 0.6) };
+  });
+  assert.deepEqual(waits, { frame: false, still: true });
+  // Quick again: the next change takes it.
+  await page.evaluate(() => {
+    window.unstub();
+    window.paperwall.editor.update({ x: 10 }, null, ['clip-el']);
+  });
+  await page.waitForFunction(() => window.paperwall.editor.find('clip-el').still, null, { timeout: 15000 });
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -397,7 +444,7 @@ test('[MOT-07] in Safari, a presented video plays live over the slide, where it 
   await context.close();
 });
 
-test('[APP-07] a picture whose file changes under the same id lets its old blob: URL go, and going home lets them all go', async () => {
+test('[APP-07] a picture whose file changes under the same id gets a new blob: URL; going home lets them all go', async () => {
   const { page, context } = await newDesign('square');
   const gone = await page.evaluate(async () => {
     const { editor: ed, canvas } = window.paperwall;
@@ -414,7 +461,7 @@ test('[APP-07] a picture whose file changes under the same id lets its old blob:
     const again = canvas.assetHref('swap');
     ed.doc.assets.swap = { ...ed.doc.assets.swap, dataUrl: png('#0000ff') };
     const second = canvas.assetHref('swap');
-    window.lastHref = second;
+    window.hrefs = [first, second];
     const loads = (url) => new Promise((ok) => {
       const img = new Image();
       img.onload = () => ok(true);
@@ -423,15 +470,16 @@ test('[APP-07] a picture whose file changes under the same id lets its old blob:
     });
     return { same: first === again, changed: first !== second, oldLoads: await loads(first), newLoads: await loads(second) };
   });
-  assert.deepEqual(gone, { same: true, changed: true, oldLoads: false, newLoads: true });
-  // Back home, the design's blob: URLs go too.
+  // The old one still works while the design is open (a page grid or presenter view may show it).
+  assert.deepEqual(gone, { same: true, changed: true, oldLoads: true, newLoads: true });
+  // Back home, the design's blob: URLs go, old and new.
   await page.click('[data-testid="home-link"]');
   await page.waitForSelector('[data-testid="presets"]');
-  assert.equal(await page.evaluate(() => new Promise((ok) => {
+  assert.deepEqual(await page.evaluate(() => Promise.all(window.hrefs.map((url) => new Promise((ok) => {
     const img = new Image();
     img.onload = () => ok(true);
     img.onerror = () => ok(false);
-    img.src = window.lastHref;
-  })), false);
+    img.src = url;
+  })))), [false, false]);
   await context.close();
 });

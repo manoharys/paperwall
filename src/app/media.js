@@ -44,6 +44,7 @@ function once(target, ok, bad = 'error', ms = 15000) {
 // and how many times running before it's given up on.
 const PICTURE_WAIT = 1500;
 const SLOW_TIMES = 3;
+const PATIENT_WAIT = 5000;
 
 /**
  * Wait until a video has its picture where it is now (readyState 2 or more),
@@ -154,8 +155,10 @@ export function blobUrlFor(dataUrl) {
  * data: URL of the picture, sized for the element.
  */
 export class VideoFrames {
-  constructor(doc) {
+  /** `patient`: wait longer for each picture (one still, not a frame of many). */
+  constructor(doc, { patient = false } = {}) {
     this.doc = doc;
+    this.wait = patient ? PATIENT_WAIT : PICTURE_WAIT;
     // One player per element (two elements may show the same file from
     // different points): element id → { video, url, ready (resolves to whether it loaded) }.
     this.players = new Map();
@@ -232,12 +235,14 @@ export class VideoFrames {
       if (!(await seeked)) return this.giveUp(p);
     }
     // (Its picture there, ready to draw: a busy device can lag behind the seek.)
-    if (!(await pictureHere(v))) {
+    if (!(await pictureHere(v, this.wait))) {
       // Too slow this once: its poster for this frame. Three times running, and it's given up on.
+      this.late = true;
       p.slow = (p.slow || 0) + 1;
       return p.slow >= SLOW_TIMES ? this.giveUp(p) : null;
     }
     p.slow = 0;
+    this.late = false;
     return v.videoWidth ? v : null;
   }
 
@@ -431,7 +436,9 @@ const smaller = new WeakMap();
  */
 export function withSmallPictures(doc, side = 720) {
   const tall = doc.document ? Math.min(doc.height, doc.document.pageHeight) : doc.height;
-  return shrinkPictures(doc, pictureShares(doc, [0], side / Math.max(doc.width, tall)), { under: 0.75, quality: 0.85, cache: smaller });
+  // (A document's first sheet: the elements that start on it, not the whole long page.)
+  const first = doc.pages[0] && doc.document ? { ...doc, pages: [{ ...doc.pages[0], elements: doc.pages[0].elements.filter((el) => el.y < tall) }] } : doc;
+  return shrinkPictures(doc, pictureShares(first, [0], side / Math.max(doc.width, tall)), { under: 0.75, quality: 0.85, cache: smaller });
 }
 
 /**

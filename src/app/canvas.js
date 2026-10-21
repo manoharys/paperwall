@@ -4,7 +4,7 @@
 import { renderPageParts } from '../model/render.js';
 import {
   boundsOf, unionBounds, boxCorners, handlePosition, resizeBox, angleTo, snapAngle, snapMove,
-  pointInBox, rectFromPoints, rectsIntersect, HANDLES,
+  pointInBox, rectFromPoints, rectsIntersect, HANDLES, MIN_SIZE,
 } from '../model/geometry.js';
 import { resizeElement, coverCrop, topmost, findElement } from '../model/commands.js';
 import { clone, DRAW_TOOLS, pxPerUnit, isEmptyFrame, restroke, KEEPS_RATIO } from '../model/doc.js';
@@ -23,8 +23,10 @@ const RATIO_LOCKED = new Set([...KEEPS_RATIO, 'group']);
 
 // The blob: URLs of the design last opened (key → { dataUrl, url }). Opening
 // it again without going home reuses them (its photos aren't copied again);
-// opening another design, or going home, lets them go.
-let opened = { id: null, urls: new Map() };
+// opening another design, or going home, lets them go, and those of files
+// replaced meanwhile (`retired`: views still open, like the page grid or the
+// presenter's, may show them till then).
+let opened = { id: null, urls: new Map(), retired: [] };
 function blobUrls(designId) {
   if (opened.id !== designId) forgetBlobUrls();
   opened.id = designId;
@@ -34,7 +36,8 @@ function blobUrls(designId) {
 /** Let the last design's blob: URLs go (back on the home screen). */
 export function forgetBlobUrls() {
   for (const { url } of opened.urls.values()) URL.revokeObjectURL(url);
-  opened = { id: null, urls: new Map() };
+  for (const url of opened.retired) URL.revokeObjectURL(url);
+  opened = { id: null, urls: new Map(), retired: [] };
 }
 
 export class Canvas {
@@ -233,9 +236,10 @@ export class Canvas {
     const key = part === 'poster' ? `${assetId}|poster` : assetId;
     let entry = this.urls.get(key);
     if (!entry || entry.dataUrl !== dataUrl) {
-      // A new file under the same id: the old one's URL goes (pictures drawn with it are drawn again).
+      // A new file under the same id: the old one's URL is let go of with the
+      // rest (pictures drawn with it here are drawn again).
       if (entry) {
-        URL.revokeObjectURL(entry.url);
+        opened.retired.push(entry.url);
         this.hrefsChanged = (this.hrefsChanged || 0) + 1;
       }
       entry = { dataUrl, url: blobUrlFor(dataUrl) };
@@ -664,7 +668,7 @@ export class Canvas {
       const o = d.orig;
       const corner = d.handle.length === 2;
       const keepRatio = corner && (RATIO_LOCKED.has(o.type) || o.type === 'text' ? !e.shiftKey : e.shiftKey);
-      const box = resizeBox(o, d.handle, dx, dy, { keepRatio, minSize: 4 });
+      const box = resizeBox(o, d.handle, dx, dy, { keepRatio, minSize: MIN_SIZE });
       Object.assign(el, clone(o));
       if (o.type === 'text') {
         if (corner) {
@@ -683,7 +687,7 @@ export class Canvas {
       }
     } else if (d.mode === 'resize-many') {
       d.moved = true;
-      const nb = resizeBox({ ...d.box, rotation: 0 }, d.handle, dx, dy, { keepRatio: true, minSize: 4 });
+      const nb = resizeBox({ ...d.box, rotation: 0 }, d.handle, dx, dy, { keepRatio: true, minSize: MIN_SIZE });
       const s = nb.w / d.box.w;
       for (const it of d.items) {
         Object.assign(it.el, clone(it.orig));

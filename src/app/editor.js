@@ -10,7 +10,7 @@ import {
 import { fitHeight } from '../model/text-layout.js';
 import { flowDocument, growBoard } from '../model/flow.js';
 import { curveGeometry } from '../model/render.js';
-import { unionBounds, pointInBox, toLocal, refitGroup, handlePosition } from '../model/geometry.js';
+import { unionBounds, pointInBox, toLocal, refitGroup, handlePosition, MIN_SIZE } from '../model/geometry.js';
 import { gridBoxes } from '../model/grids.js';
 import { createConnector, updateConnectors, isLine, lineHit } from '../model/connectors.js';
 import { gridLines, marginSize } from '../model/view.js';
@@ -174,6 +174,7 @@ export class Editor {
     // Mid-drag, outside change() (text refitted as a font loads): after the
     // drag, which it mustn't cut short.
     if (this.isDragging?.() && !this.changing) return void this.whenIdle(() => this.afterChange(quiet, { edit }));
+    this.looks = (this.looks || 0) + 1; // (every change to how it looks, edits or not; first, so stills too slow before are tried again)
     this.arrange();
     this.retakeStills();
     // Connectors on every page follow what they're attached to (pages
@@ -183,7 +184,6 @@ export class Editor {
       this.doc.updatedAt = Date.now();
       this.changedSinceVersion = true;
     }
-    this.looks = (this.looks || 0) + 1; // (every change to how it looks, edits or not)
     this.selection = this.selection.filter((id) => cmd.findElement(this.pageData, id));
     if (!quiet) this.emit('doc');
     this.save();
@@ -528,12 +528,13 @@ export class Editor {
     // whole video. One waiting to be taken waits on for the latest change.)
     if (this.closed || [...(this.stills?.values() || [])].some((s) => s.taking)) return;
     this.stillFailed ||= new Map(); // video id → a start no still could be taken from (not tried again and again)
+    this.stillLate ||= new Map(); // video id → the change a still was too slow at (tried again after the next)
     const walk = (els) => {
       for (const el of els) {
         if (el.type === 'group' && walk(el.children)) return true;
         if (el.type !== 'video' || !this.doc.assets[el.assetId]) continue;
         const start = el.trim?.start || 0;
-        if (stillIsCurrent(this.doc, el) || this.stillFailed.get(el.id) === start) continue;
+        if (stillIsCurrent(this.doc, el) || this.stillFailed.get(el.id) === start || (this.stillLate.has(el.id) && this.stillLate.get(el.id) === this.looks)) continue;
         if (!this.stills?.size || this.stills.has(el.id)) this.refreshStill(el.id);
         return true;
       }
@@ -555,10 +556,12 @@ export class Editor {
     const found = locate(this.doc, id, this.pageData.id);
     if (found?.el.type !== 'video') return;
     const start = found.el.trim?.start || 0;
-    const frames = new VideoFrames(this.doc);
+    const frames = new VideoFrames(this.doc, { patient: true });
     try {
       const url = await frames.seek(found.el, 0, 1920 / Math.max(found.el.w, found.el.h));
-      if (!url) this.stillFailed?.set(id, start);
+      // Too slow this time (a busy device): tried again after the next change, not given up on.
+      if (!url && frames.late) this.stillLate?.set(id, this.looks);
+      else if (!url) this.stillFailed?.set(id, start);
       if (!url || this.closed) return;
       const img = await loadImage(url);
       if (this.closed) return;
@@ -1107,12 +1110,13 @@ export class Editor {
     if (!el || el.locked || el.type === 'connector' || el.type === 'line' || (!dw && !dh)) return;
     this.change(() => {
       const e = cmd.findElement(this.pageData, el.id);
-      let w = Math.max(1, e.w + dw);
-      let h = Math.max(1, e.h + dh);
+      // (No smaller than dragging a handle makes it.)
+      let w = Math.max(MIN_SIZE, e.w + dw);
+      let h = Math.max(MIN_SIZE, e.h + dh);
       if (KEEPS_RATIO.includes(e.type) || e.type === 'group') {
         const r = e.w / e.h;
-        if (dw) h = Math.max(1, w / r);
-        else w = Math.max(1, h * r);
+        if (dw) h = Math.max(MIN_SIZE, w / r);
+        else w = Math.max(MIN_SIZE, h * r);
       }
       const was = [e.x, e.y, e.w, e.h].join();
       // Its top-left corner (as turned) stays put, as when dragging the opposite handle.
