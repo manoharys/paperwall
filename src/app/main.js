@@ -107,9 +107,16 @@ async function changeLanguage(code, { focus } = {}) {
 
 // ---------- routing ----------
 
+// Each route() is a run; a newer one makes the older stale, and a stale run
+// stops at its next step (so a design being opened twice, as when the
+// language changes meanwhile, ends up with one editor).
+let routing = 0;
+const stale = (run) => run !== routing;
+
 function route() {
+  const run = ++routing;
   const m = location.hash.match(/^#\/d\/([\w-]+)/);
-  return m ? openEditor(m[1]) : showHome();
+  return m ? openEditor(m[1], run) : showHome(run);
 }
 
 async function closeEditor() {
@@ -132,8 +139,9 @@ async function closeEditor() {
   await editor.maybeSaveVersion(-1);
 }
 
-async function showHome() {
+async function showHome(run) {
   await closeEditor();
+  if (stale(run)) return;
   forgetBlobUrls();
   document.title = t('app.title');
   renderHome(root, {
@@ -152,9 +160,10 @@ async function showHome() {
 
 let pendingFit = false;
 
-async function openEditor(id) {
+async function openEditor(id, run) {
   await closeEditor();
   let doc = await store.loadDesign(id);
+  if (stale(run)) return;
   if (!doc) {
     toast(t('editor.missingDesign'), 'error');
     location.hash = '#/';
@@ -169,6 +178,9 @@ async function openEditor(id) {
   }
   await registerDesignFonts(doc);
   await ensureDesignFonts(doc);
+  // (Whether it has a preview yet, asked now: from here on, no waiting till it's open.)
+  const hasThumb = !!(await store.getThumb(doc.id).catch(() => null));
+  if (stale(run)) return;
   const editor = new Editor(doc, {
     onOpenDesign: (newId) => (location.hash = `#/d/${newId}`),
     // (From smaller copies of its photos: quicker, and just as sharp that small.)
@@ -191,7 +203,7 @@ async function openEditor(id) {
     editor.versionAt = Date.now(); // can't tell: carry on keeping versions every few minutes
   });
   // (Just its preview: not every design, videos and all.)
-  if (!(await store.getThumb(doc.id).catch(() => null))) editor.thumb();
+  if (!hasThumb) editor.thumb();
   current = { editor, unbind: drawEditor(editor) };
 }
 

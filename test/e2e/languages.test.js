@@ -89,6 +89,48 @@ test('[APP-08] switching language changes the interface at once and is kept afte
   await context.close();
 });
 
+test('[APP-08] switching language while a design is opening leaves one editor', async () => {
+  const { page, context, errors } = await openApp();
+  const cdp = await context.newCDPSession(page);
+  const keyListeners = async () => {
+    const { result } = await cdp.send('Runtime.evaluate', { expression: 'document' });
+    return (await cdp.send('DOMDebugger.getEventListeners', { objectId: result.objectId })).listeners.filter((l) => l.type === 'keydown').length;
+  };
+  // The language changes just as the design starts opening.
+  await page.evaluate(async () => {
+    const opening = new Promise((ok) => window.addEventListener('hashchange', ok, { once: true }));
+    document.querySelector('[data-testid="preset-square"]').click();
+    await opening;
+    const pickLang = document.querySelector('[data-testid="language-select"]');
+    pickLang.value = 'de';
+    pickLang.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await waitForEditor(page);
+  await page.waitForFunction((w) => document.querySelector('[data-testid="download"]')?.textContent.trim() === w, say('de', 'common.download'));
+  await page.waitForTimeout(500); // (a second editor would be bound by now)
+  const switched = await keyListeners();
+  assert.equal(await page.locator('[data-testid="stage"]').count(), 1);
+  // Delete takes away the one element selected, once.
+  await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    const shape = (id, x) => ({ id, type: 'shape', shape: 'rect', x, y: 100, w: 100, h: 100, rotation: 0, opacity: 1, fill: '#336699' });
+    ed.change(() => ed.pageData.elements.push(shape('one', 100), shape('two', 300)));
+    ed.select(['two']);
+  });
+  await page.focus('[data-testid="stage"]');
+  await page.keyboard.press('Delete');
+  assert.deepEqual(await page.evaluate(() => window.paperwall.editor.pageData.elements.map((el) => el.id)), ['one']);
+  // As many key listeners as the same design opened the usual way.
+  await page.evaluate(() => window.paperwall.editor.flush());
+  await page.reload();
+  await waitForEditor(page);
+  await page.waitForTimeout(500);
+  assert.equal(switched, await keyListeners(), 'one editor listening to keys');
+  assert.deepEqual(await page.evaluate(() => window.paperwall.editor.pageData.elements.map((el) => el.id)), ['one']);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('[APP-08] templates are found by the words the language uses', async () => {
   const { page, context, errors } = await openApp();
   await pick(page, 'de');
