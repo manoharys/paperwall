@@ -499,7 +499,8 @@ export function validateDesign(doc) {
   const kindOf = (id) => doc.assets[id] && (doc.assets[id].type || 'image');
   const check = (els) => {
     for (const el of els) {
-      if ((el.type === 'image' || el.type === 'video') && el.assetId && kindOf(el.assetId) && kindOf(el.assetId) !== el.type) el.assetId = null;
+      // (A picture then is an empty frame to fill; a video, a video whose file is missing.)
+      if ((el.type === 'image' || el.type === 'video') && el.assetId && kindOf(el.assetId) && kindOf(el.assetId) !== el.type) el.assetId = el.type === 'image' ? null : 'missing';
       if (el.type === 'group') check(el.children);
     }
   };
