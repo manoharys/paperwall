@@ -1,14 +1,14 @@
 {
   "summary": {
     "date": "2026-10-21",
-    "total": 179,
-    "verified": 179,
+    "total": 181,
+    "verified": 181,
     "failing": 0,
     "todo": 0,
-    "e2eTests": 170,
-    "e2ePassing": 170,
-    "unitTests": 195,
-    "unitPassing": 195
+    "e2eTests": 184,
+    "e2ePassing": 184,
+    "unitTests": 207,
+    "unitPassing": 207
   },
   "areas": [
     {
@@ -1004,6 +1004,16 @@
         {
           "id": "APP-07",
           "title": "Stays quick with 50+ pages, long documents and large photos",
+          "status": "verified"
+        },
+        {
+          "id": "APP-08",
+          "title": "Interface in 7+ languages, right-to-left included",
+          "status": "verified"
+        },
+        {
+          "id": "APP-09",
+          "title": "Works with a keyboard alone and with screen readers",
           "status": "verified"
         }
       ]
