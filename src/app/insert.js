@@ -5,7 +5,7 @@ import { colorButton, selectField, section, slider } from './widgets.js';
 import { FONTS, FONT_PAIRS } from '../model/fonts.js';
 import { ALL_ICONS, ALL_STICKERS, searchGraphics } from '../model/graphics.js';
 import { renderPage, renderElementOnly } from '../model/render.js';
-import { DRAW_TOOLS, createShape, createFrame, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES, DOC_STYLES, NOTE_COLORS, createSticky } from '../model/doc.js';
+import { DRAW_TOOLS, createShape, createFrame, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES, DOC_STYLES, NOTE_COLORS, createSticky, DOCUMENT } from '../model/doc.js';
 import { GRIDS, gridBoxes } from '../model/grids.js';
 import { collectColors, scaleElement } from '../model/commands.js';
 import { TEMPLATES, TEMPLATE_CATEGORIES, TEMPLATE_FORMATS, searchTemplates, templateFormatLabel } from '../templates/index.js';
@@ -199,7 +199,11 @@ export class InsertPanel {
     const ed = this.ed;
     const add = (style) => h('button', { type: 'button', class: `text-add ${style}`, 'data-testid': `add-${style}`, onClick: () => ed.addText(style) }, TEXT_STYLES[style].text);
     // A document's blocks go at its end, in its own sizes.
-    const block = (style, label) => h('button', { type: 'button', class: `text-add doc-${style}`, 'data-testid': `doc-add-${style}`, onClick: () => ed.insert(createText({ ...DOC_STYLES[style] })) }, label);
+    // (Sized to the document's width: its sizes are for a 1240 px sheet.)
+    const block = (style, label) => h('button', { type: 'button', class: `text-add doc-${style}`, 'data-testid': `doc-add-${style}`, onClick: () => {
+      const k = ed.doc.width / DOCUMENT.width;
+      ed.insert(createText({ ...DOC_STYLES[style], size: Math.round(DOC_STYLES[style].size * k) }));
+    } }, label);
     const notes = section('Sticky notes', h('div', { class: 'note-grid', 'data-testid': 'note-colors' }, NOTE_COLORS.map((c, i) => h('button', {
       type: 'button', class: 'note-swatch', style: { background: c }, 'aria-label': `Add a sticky note (${i + 1})`, 'data-testid': `note-add-${i}`,
       onClick: () => ed.insert(createSticky(c)),

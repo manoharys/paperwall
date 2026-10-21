@@ -65,10 +65,18 @@ test('[DW-04] a whiteboard grows when something is put near its edges', () => {
   assert.equal(doc.board, true);
   const w = doc.width;
   const h = doc.height;
-  assert.equal(growBoard(doc), false, 'nothing near the edges yet');
+  assert.equal(growBoard(doc), null, 'nothing near the edges yet');
   doc.pages[0].elements.push(createSticky(undefined, { x: w - 300, y: h - 100 }));
-  assert.equal(growBoard(doc), true);
+  assert.ok(growBoard(doc));
   assert.ok(doc.width > w && doc.height > h);
+  // Near the left: everything moves over to make room.
+  const note = doc.pages[0].elements[0];
+  const x = note.x;
+  note.x = 50;
+  const moved = growBoard(doc);
+  assert.ok(moved.dx > 0, 'grew on the left');
+  assert.equal(note.x, 50 + moved.dx);
+  assert.ok(doc.pages[0].elements[1].x > x, 'the rest moved over too');
 });
 
 test('[DW-05] a sticky note: text inside a square of color, its color checked when opened', () => {

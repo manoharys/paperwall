@@ -216,9 +216,18 @@ export class Canvas {
     // The page changed size (a restored version, resizing, undoing either): fit it in view again.
     const size = `${ed.doc.width}x${ed.doc.height}`;
     const resized = this.pageSize && this.pageSize !== size;
+    this.pageSizeWas = this.pageSize;
     this.pageSize = size;
-    // (A document or whiteboard growing as you work stays where you are.)
-    if (resized && !ed.doc.document && !ed.doc.board) this.zoomToFit();
+    // (A document or whiteboard growing as you work stays where you are;
+    // made smaller, as by undo or a restored version, it's fitted again.)
+    const [ow, oh] = resized ? this.pageSizeWas.split('x').map(Number) : [0, 0];
+    const grew = resized && ed.doc.width >= ow && ed.doc.height >= oh;
+    if (resized && !((ed.doc.document || ed.doc.board) && grew)) this.zoomToFit();
+    else if (ed.boardMoved) {
+      this.el.scrollLeft += ed.boardMoved.dx * ed.zoom;
+      this.el.scrollTop += ed.boardMoved.dy * ed.zoom;
+    }
+    ed.boardMoved = null;
   }
 
   zoomToFit() {

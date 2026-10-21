@@ -406,14 +406,20 @@ export function setBackground(doc, pageIndex, background) {
  * relative to the page and is scaled by the smaller of the two ratios, so
  * nothing gets stretched.
  */
-export function resizeDesign(doc, width, height) {
+/**
+ * A resized copy of a design, everything in proportion. `asDocument`: a
+ * document stays one (its sheets become the new size and its blocks run on
+ * down the page); otherwise all of it is fitted into the new size.
+ */
+export function resizeDesign(doc, width, height, { asDocument = !!doc.document } = {}) {
   const out = clone(doc);
   out.id = uid('d');
+  const flows = asDocument && !!doc.document;
   const sx = width / doc.width;
-  // (A document is measured by its sheet, not the long page it has grown to.)
-  const sy = height / (doc.document?.pageHeight || doc.height);
-  // A document: its sheets become the new size, its margins and gaps in step.
-  if (out.document) out.document = { ...out.document, pageHeight: height, margin: Math.round(out.document.margin * sx), gap: Math.round(out.document.gap * sx), dpi: Math.round((out.document.dpi || 150) * sx) };
+  // (A document staying one is measured by its sheet, not the long page it has grown to.)
+  const sy = height / (flows ? doc.document.pageHeight : doc.height);
+  if (flows) out.document = { ...out.document, pageHeight: height, margin: Math.round(out.document.margin * sx), gap: Math.round(out.document.gap * sx), dpi: Math.round((out.document.dpi || 150) * sx) };
+  else delete out.document;
   const s = Math.min(sx, sy);
   for (const page of out.pages) {
     for (const el of page.elements) {
@@ -426,7 +432,7 @@ export function resizeDesign(doc, width, height) {
       const b = boundsOf(el);
       if (b.w <= width) el.x += Math.max(0, -b.x) - Math.max(0, b.x + b.w - width);
       // (Not a document's height: its blocks run on down past the first sheet, in order.)
-      if (b.h <= height && !out.document) el.y += Math.max(0, -b.y) - Math.max(0, b.y + b.h - height);
+      if (b.h <= height && !flows) el.y += Math.max(0, -b.y) - Math.max(0, b.y + b.h - height);
     }
     // Guides keep their place relative to the page (a centre guide stays centred).
     if (page.guides) page.guides = page.guides.map((g) => ({ ...g, pos: Math.round(g.pos * (g.axis === 'x' ? sx : sy)) }));

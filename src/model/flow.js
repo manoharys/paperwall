@@ -166,26 +166,52 @@ function textPieces(el, room, measure, first = room) {
 }
 
 /**
- * Let a whiteboard grow: when something is placed near its right or bottom
- * edge, the canvas gets bigger that way. Returns whether it grew.
+ * Let a whiteboard grow: when something is placed near an edge, the canvas
+ * gets bigger that way (on the left or top, everything moves over to make
+ * the room). Returns how far things moved ({ dx, dy }), or null if it didn't grow.
  */
 export function growBoard(doc) {
+  let left = Infinity;
+  let top = Infinity;
   let right = 0;
   let bottom = 0;
   for (const page of doc.pages) {
     for (const el of page.elements) {
+      left = Math.min(left, el.x);
+      top = Math.min(top, el.y);
       right = Math.max(right, el.x + el.w);
       bottom = Math.max(bottom, el.y + el.h);
     }
   }
-  let grew = false;
-  while (right > doc.width - BOARD.edge && doc.width < BOARD.max) {
+  if (left === Infinity) return null;
+  let dx = 0;
+  let dy = 0;
+  while (left + dx < BOARD.edge && doc.width < BOARD.max) {
+    dx += BOARD.grow;
+    doc.width = Math.min(BOARD.max, doc.width + BOARD.grow);
+  }
+  while (top + dy < BOARD.edge && doc.height < BOARD.max) {
+    dy += BOARD.grow;
+    doc.height = Math.min(BOARD.max, doc.height + BOARD.grow);
+  }
+  let grew = dx > 0 || dy > 0;
+  if (grew) {
+    for (const page of doc.pages) {
+      for (const el of page.elements) {
+        el.x += dx;
+        el.y += dy;
+        // (A line's own points are measured from its box, so they move with it.)
+      }
+      if (page.guides) page.guides = page.guides.map((g) => ({ ...g, pos: g.pos + (g.axis === 'x' ? dx : dy) }));
+    }
+  }
+  while (right + dx > doc.width - BOARD.edge && doc.width < BOARD.max) {
     doc.width = Math.min(BOARD.max, doc.width + BOARD.grow);
     grew = true;
   }
-  while (bottom > doc.height - BOARD.edge && doc.height < BOARD.max) {
+  while (bottom + dy > doc.height - BOARD.edge && doc.height < BOARD.max) {
     doc.height = Math.min(BOARD.max, doc.height + BOARD.grow);
     grew = true;
   }
-  return grew;
+  return grew ? { dx, dy } : null;
 }

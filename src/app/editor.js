@@ -363,7 +363,11 @@ export class Editor {
   /** A document's blocks flow down its page; a whiteboard grows to hold what's on it (see flow.js). */
   arrange() {
     if (this.doc.document) flowDocument(this.doc, measure);
-    else if (this.doc.board) growBoard(this.doc);
+    else if (this.doc.board) {
+      // (Grown on the left or top: the canvas scrolls by as much, so nothing seems to move.)
+      const moved = growBoard(this.doc);
+      if (moved && (moved.dx || moved.dy)) this.boardMoved = { dx: (this.boardMoved?.dx || 0) + moved.dx, dy: (this.boardMoved?.dy || 0) + moved.dy };
+    }
   }
 
   insert(el, { center = true } = {}) {
@@ -386,16 +390,21 @@ export class Editor {
   }
 
   /** Scale a new element so it suits the page size. */
+  /** How big the page is for sizing new things: its shorter side (a whiteboard's as it began, however it has grown). */
+  get sizeRef() {
+    return this.doc.board ? Math.min(2400, this.doc.width, this.doc.height) : Math.min(this.doc.width, this.doc.height);
+  }
+
   scaled(el, share = 0.4) {
-    const s = (Math.min(this.doc.width, this.doc.height) * share) / Math.max(el.w, el.h);
+    const s = (this.sizeRef * share) / Math.max(el.w, el.h);
     if (Math.abs(s - 1) > 0.05) cmd.scaleElement(el, s, s);
     return el;
   }
 
   addText(style = 'body', props = {}) {
     const base = TEXT_STYLES[style] || TEXT_STYLES.body;
-    const k = Math.max(0.3, Math.min(this.doc.width, this.doc.height) / 1080);
-    const el = createText({ ...base, size: Math.round(base.size * k), w: Math.round(this.doc.width * 0.7), ...props });
+    const k = Math.max(0.3, this.sizeRef / 1080);
+    const el = createText({ ...base, size: Math.round(base.size * k), w: Math.round(Math.min(this.doc.width, this.sizeRef * 1.5) * 0.7), ...props });
     return this.insert(el);
   }
 
@@ -471,8 +480,11 @@ export class Editor {
     }
     return new Promise((done) => {
       const timer = setTimeout(() => {
-        this.stills.delete(id);
-        this.takeStill(id).finally(done);
+        // (Still listed while it's taken, so changes meanwhile don't start another.)
+        this.takeStill(id).finally(() => {
+          if (this.stills.get(id)?.timer === timer) this.stills.delete(id);
+          done();
+        });
       }, 250);
       this.stills.set(id, { timer, done });
     });
@@ -512,7 +524,7 @@ export class Editor {
       now.stillAt = start; // (shown only while it still starts there: an undo can part them)
       this.afterChange(false, { edit: false });
     } catch {
-      /* the poster stays */
+      this.stillFailed?.set(id, start); // the poster stays (and it isn't tried again from there)
     } finally {
       frames.dispose();
     }
@@ -1105,23 +1117,23 @@ export class Editor {
 
   /** Make a resized copy and open it; the original stays as it was. */
   async resizeTo(width, height, name, preset = null) {
-    const copy = cmd.resizeDesign(this.doc, width, height);
-    // To a Document or Whiteboard size: one of those (and only that), as made
-    // from the home screen, its margins in proportion to its width.
-    if (preset?.id === 'doc') {
+    // What the copy is: to Document or Whiteboard, one of those; a document to
+    // a paper size stays a document (on that paper); to any other size, a
+    // design of just that size. A custom size keeps the kind it was.
+    const kind = preset?.id === 'doc' ? 'doc'
+      : preset?.id === 'whiteboard' ? 'board'
+      : preset ? (this.doc.document && preset.unit ? 'doc' : 'plain')
+      : this.doc.document ? 'doc' : this.doc.board ? 'board' : 'plain';
+    const copy = cmd.resizeDesign(this.doc, width, height, { asDocument: kind === 'doc' });
+    delete copy.board;
+    if (kind === 'board') copy.board = true;
+    if (kind === 'doc') {
+      // (Its margins in proportion to its width; its sheets at the paper's
+      // resolution: print sizes 300 dpi, the Document size 150.)
       const k = width / DOCUMENT.width;
       copy.document ||= { pageHeight: height, margin: Math.round(DOCUMENT.margin * k), gap: Math.round(DOCUMENT.gap * k), dpi: DOCUMENT.dpi };
-      delete copy.board;
-    } else if (preset?.id === 'whiteboard') {
-      copy.board = true;
-      delete copy.document;
-    } else if (preset) {
-      // Any other preset: a design of just that size (it doesn't flow or grow).
-      delete copy.board;
-      delete copy.document;
+      if (preset) copy.document.dpi = preset.unit ? 300 : DOCUMENT.dpi;
     }
-    // A document's sheets print at the paper's size: print sizes at 300 dpi, the Document size at 150.
-    if (copy.document && preset) copy.document.dpi = preset.unit ? 300 : preset.id === 'doc' ? 150 : copy.document.dpi;
     copy.name = name || `${this.doc.name} (${width} × ${height})`;
     copy.createdAt = Date.now();
     await this.flush();

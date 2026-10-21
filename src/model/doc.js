@@ -142,7 +142,7 @@ export function makeBoard(doc) {
   doc.board = true;
   doc.name = 'Untitled whiteboard';
   doc.pages[0].background = { type: 'color', color: '#f6f6f2' };
-  doc.pages[0].elements.push(createSticky(NOTE_COLORS[0], { x: 200, y: 200, text: 'Ideas go here' }));
+  doc.pages[0].elements.push(createSticky(NOTE_COLORS[0], { x: 600, y: 600, text: 'Ideas go here' }));
   return doc;
 }
 
