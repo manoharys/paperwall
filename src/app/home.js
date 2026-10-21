@@ -1,15 +1,18 @@
 // The home screen: start a design, pick a template, see your designs.
 
 import { h, icon, iconButton, clear, toast, pickFile, dialog, forget } from './ui.js';
-import { PRESETS, createDesign, createDesignFromPreset, toPx, uid, clone } from '../model/doc.js';
+import { PRESETS, DOC_STYLES, createDesign, createDesignFromPreset, toPx, uid, clone } from '../model/doc.js';
 import { templateBrowser } from './insert.js';
 import { readyTemplate } from './templates.js';
 import * as store from './store.js';
 import { readProjectFile } from './export.js';
 import { aiDesignBlock } from './ai-design.js';
 import { openOnlineSettings } from './online-settings.js';
+import { languagePicker } from './widgets.js';
+import { t, tn, formatAgo } from './i18n.js';
+import { presetName, presetSize, sizeLabel } from './names.js';
 
-export function renderHome(root, { openDesign, newDesign, toggleTheme, installPrompt }) {
+export function renderHome(root, { openDesign, newDesign, toggleTheme, changeLanguage, installPrompt }) {
   forget(root);
   clear(root);
   const designsGrid = h('div', { class: 'design-grid', 'data-testid': 'my-designs' });
@@ -29,36 +32,47 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, installPr
     const rows = await store.listDesigns();
     clear(designsGrid);
     if (!rows.length) {
-      designsGrid.append(h('p', { class: 'empty-note' }, 'Your designs will appear here. They are saved on this device automatically.'));
+      designsGrid.append(h('p', { class: 'empty-note' }, t('home.noDesigns')));
       return;
     }
     for (const row of rows) {
       const card = h('div', { class: 'design-card', 'data-testid': 'design-card', 'data-id': row.id },
-        h('button', { type: 'button', class: 'design-open', 'aria-label': `Open ${row.name}`, onClick: () => openDesign(row.id) },
+        h('button', { type: 'button', class: 'design-open', 'aria-label': t('home.openDesign', { name: row.name }), onClick: () => openDesign(row.id) },
           h('span', { class: 'design-img', style: { aspectRatio: `${row.width} / ${row.height}` } }, row.thumb ? h('img', { src: row.thumb, alt: '' }) : icon('page', 32))),
         h('div', { class: 'design-meta' },
           h('b', { class: 'design-name', title: row.name }, row.name),
-          h('small', null, `${row.width} × ${row.height} · ${row.pages} page${row.pages === 1 ? '' : 's'} · ${ago(row.updatedAt)}`)),
+          h('small', null, t('home.cardMeta', { size: sizeLabel(row.width, row.height, row.unit), pages: t('common.pages', { n: row.pages }), when: formatAgo(row.updatedAt) }))),
         h('div', { class: 'design-actions' },
-          iconButton('text', 'Rename', () => renameDialog(row, fillDesigns), { 'data-testid': 'design-rename' }),
-          iconButton('dup', 'Duplicate', async () => {
+          iconButton('text', t('home.rename'), () => renameDialog(row, fillDesigns), { 'data-testid': 'design-rename' }),
+          iconButton('dup', t('common.duplicate'), async () => {
             const doc = await store.loadDesign(row.id);
             const copy = clone(doc);
             copy.id = uid('d');
-            copy.name = `${doc.name} (copy)`;
+            copy.name = t('home.copyName', { name: doc.name });
             copy.createdAt = copy.updatedAt = Date.now();
             await store.saveDesign(copy, row.thumb);
-            toast('Duplicated');
+            toast(t('home.duplicated'));
             fillDesigns();
           }, { 'data-testid': 'design-duplicate' }),
-          iconButton('trash', 'Delete', () => confirmDelete(row, fillDesigns), { 'data-testid': 'design-delete' })));
+          iconButton('trash', t('common.delete'), () => confirmDelete(row, fillDesigns), { 'data-testid': 'design-delete' })));
       designsGrid.append(card);
     }
   };
 
-  const custom = customSizeForm((w, hgt, unit) => newDesign(createDesign({ width: w, height: hgt, unit })));
+  // A new design's placeholder words (its name, a document's title and first
+  // paragraph, a whiteboard's first note) in the person's language; a document
+  // in other words than English has its text measured again.
+  const newBlank = (p) => {
+    const name = { doc: t('common.untitledDoc'), whiteboard: t('common.untitledBoard') }[p.id] || t('common.untitled');
+    const title = t('common.untitledDoc');
+    const body = t('newText.docBody');
+    const doc = createDesignFromPreset(p.id, { name, title, body, note: t('newText.boardNote') });
+    return newDesign(doc, doc.document && (title !== DOC_STYLES.title.text || body !== DOC_STYLES.body.text) ? { fit: true } : undefined);
+  };
 
-  const install = installPrompt() ? h('button', { type: 'button', class: 'btn', 'data-testid': 'install', onClick: () => installPrompt()?.prompt() }, icon('download'), 'Install app') : null;
+  const custom = customSizeForm((w, hgt, unit) => newDesign(createDesign({ width: w, height: hgt, unit, name: t('common.untitled') })));
+
+  const install = installPrompt() ? h('button', { type: 'button', class: 'btn', 'data-testid': 'install', onClick: () => installPrompt()?.prompt() }, icon('download'), t('home.install')) : null;
 
   root.append(
     h('header', { class: 'home-top' },
@@ -76,80 +90,70 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, installPr
           } catch (e) {
             toast(e.message, 'error');
           }
-        } }, icon('open'), 'Open a file'),
+        } }, icon('open'), t('home.openFile')),
         install,
-        h('button', { type: 'button', class: 'btn', 'data-testid': 'home-online', onClick: () => openOnlineSettings() }, 'Online extras'),
-        iconButton('moon', 'Dark mode', toggleTheme, { 'data-testid': 'theme-toggle' }))),
+        h('label', { class: 'lang-pick' }, icon('globe', 18), languagePicker({ testid: 'language-select', onChange: changeLanguage })),
+        h('button', { type: 'button', class: 'btn', 'data-testid': 'home-online', onClick: () => openOnlineSettings() }, t('home.online')),
+        iconButton('moon', t('common.darkMode'), toggleTheme, { 'data-testid': 'theme-toggle' }))),
     h('main', { class: 'home' },
       h('section', { class: 'hero' },
-        h('h1', null, 'Design without', h('br'), h('em', null, 'the paywall.')),
-        h('p', { class: 'lead' }, 'Posters, posts, invitations and slides. Free, offline and yours: no account, no watermark, and your work stays on this device.')),
+        h('h1', null, t('home.heroA'), h('br'), h('em', null, t('home.heroB'))),
+        h('p', { class: 'lead' }, t('home.lead'))),
       h('section', { class: 'block' },
-        h('h2', null, 'Create a design'),
-        h('div', { class: 'preset-grid', 'data-testid': 'presets' }, PRESETS.map((p) => h('button', { type: 'button', class: 'preset', 'data-testid': `preset-${p.id}`, onClick: () => newDesign(createDesignFromPreset(p.id)) },
+        h('h2', null, t('home.create')),
+        h('div', { class: 'preset-grid', 'data-testid': 'presets' }, PRESETS.map((p) => h('button', { type: 'button', class: 'preset', 'data-testid': `preset-${p.id}`, onClick: () => newBlank(p) },
           h('span', { class: 'preset-shape', style: { aspectRatio: `${p.w} / ${p.h}` } }),
-          h('b', null, p.name),
-          h('small', null, p.unit === 'mm' ? `${Math.round((p.w / 300) * 25.4)} × ${Math.round((p.h / 300) * 25.4)} mm` : p.unit === 'in' ? `${p.w / 300} × ${p.h / 300} in` : `${p.w} × ${p.h} px`)))),
+          h('b', null, presetName(p)),
+          h('small', null, presetSize(p))))),
         custom),
       aiDesignBlock({ newDesign }),
       h('section', { class: 'block' },
-        h('div', { class: 'block-head' }, h('h2', null, 'Start from a template')),
+        h('div', { class: 'block-head' }, h('h2', null, t('home.templates'))),
         ...templates,
-        h('p', { class: 'fine' }, 'Every template was made for Paperwall and is free for any use, including commercial (CC0).')),
-      h('section', { class: 'block' }, h('h2', null, 'Your designs'), designsGrid)),
+        h('p', { class: 'fine' }, t('home.templatesFine'))),
+      h('section', { class: 'block' }, h('h2', null, t('home.yours')), designsGrid)),
     h('footer', { class: 'home-foot' },
-      h('p', null, icon('lock', 16), ' Everything stays in this browser on this device. Paperwall makes no network requests unless you turn on an online extra.'),
-      h('p', null, 'Open source (MIT) · ', h('a', { href: 'https://github.com/manoharys/paperwall', rel: 'noopener', target: '_blank' }, 'Code and feature scoreboard'), ' · Not affiliated with Canva.')));
+      h('p', null, icon('lock', 16), ' ', t('home.private')),
+      h('p', null, ...tn('home.footer', { code: h('a', { href: 'https://github.com/manoharys/paperwall', rel: 'noopener', target: '_blank' }, t('home.code')) }))));
 
   fillDesigns();
 }
 
 function customSizeForm(onCreate) {
   let unit = 'px';
-  const w = h('input', { type: 'number', min: '1', value: '1200', 'aria-label': 'Width', 'data-testid': 'custom-w' });
-  const hh = h('input', { type: 'number', min: '1', value: '800', 'aria-label': 'Height', 'data-testid': 'custom-h' });
-  const u = h('select', { 'aria-label': 'Units', 'data-testid': 'custom-unit' }, ['px', 'mm', 'in'].map((x) => h('option', { value: x }, x)));
+  const w = h('input', { type: 'number', min: '1', value: '1200', 'aria-label': t('common.width'), 'data-testid': 'custom-w' });
+  const hh = h('input', { type: 'number', min: '1', value: '800', 'aria-label': t('common.height'), 'data-testid': 'custom-h' });
+  const u = h('select', { 'aria-label': t('common.units'), 'data-testid': 'custom-unit' }, ['px', 'mm', 'in'].map((x) => h('option', { value: x }, x)));
   u.addEventListener('change', () => (unit = u.value));
   return h('form', { class: 'custom-size', 'data-testid': 'custom-size', onSubmit: (e) => {
     e.preventDefault();
     const pw = toPx(+w.value, unit);
     const ph = toPx(+hh.value, unit);
-    if (!(pw > 0 && ph > 0) || pw > 20000 || ph > 20000) return toast('Pick a size between 1 and 20000 px (about 1.6 m at print quality).', 'error');
+    if (!(pw > 0 && ph > 0) || pw > 20000 || ph > 20000) return toast(t('home.sizeError'), 'error');
     onCreate(pw, ph, unit);
-  } }, h('span', { class: 'label' }, 'Custom size'), w, h('span', null, '×'), hh, u, h('button', { type: 'submit', class: 'btn primary', 'data-testid': 'custom-create' }, 'Create'));
+  } }, h('span', { class: 'label' }, t('common.customSize')), w, h('span', null, '×'), hh, u, h('button', { type: 'submit', class: 'btn primary', 'data-testid': 'custom-create' }, t('home.createBtn')));
 }
 
 function renameDialog(row, after) {
-  const input = h('input', { type: 'text', value: row.name, maxlength: '120', 'aria-label': 'Design name', 'data-testid': 'rename-input' });
-  const d = dialog('Rename design', h('form', { class: 'stack', onSubmit: async (e) => {
+  const input = h('input', { type: 'text', value: row.name, maxlength: '120', 'aria-label': t('top.designName'), 'data-testid': 'rename-input' });
+  const d = dialog(t('home.renameTitle'), h('form', { class: 'stack', onSubmit: async (e) => {
     e.preventDefault();
-    await store.renameDesign(row.id, input.value.trim() || 'Untitled design');
+    await store.renameDesign(row.id, input.value.trim() || t('common.untitled'));
     d.close();
     after();
-  } }, input, h('button', { type: 'submit', class: 'btn primary', 'data-testid': 'rename-save' }, 'Save')));
+  } }, input, h('button', { type: 'submit', class: 'btn primary', 'data-testid': 'rename-save' }, t('common.save'))));
   input.select();
 }
 
 function confirmDelete(row, after) {
-  const d = dialog('Delete this design?', h('div', { class: 'stack' },
-    h('p', null, `"${row.name}" will be deleted from this device. This can't be undone. Save it to a file first if you might want it later.`),
+  const d = dialog(t('home.deleteTitle'), h('div', { class: 'stack' },
+    h('p', null, t('home.deleteBody', { name: row.name })),
     h('div', { class: 'row end' },
-      h('button', { type: 'button', class: 'btn', onClick: () => d.close() }, 'Keep it'),
+      h('button', { type: 'button', class: 'btn', onClick: () => d.close() }, t('home.keep')),
       h('button', { type: 'button', class: 'btn danger', 'data-testid': 'confirm-delete', onClick: async () => {
         await store.deleteDesign(row.id);
         d.close();
-        toast('Deleted');
+        toast(t('home.deleted'));
         after();
-      } }, 'Delete'))));
-}
-
-function ago(t) {
-  const s = Math.max(1, Math.round((Date.now() - t) / 1000));
-  if (s < 60) return 'just now';
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m} min ago`;
-  const hr = Math.round(m / 60);
-  if (hr < 24) return `${hr} h ago`;
-  const d = Math.round(hr / 24);
-  return d < 30 ? `${d} d ago` : new Date(t).toLocaleDateString();
+      } }, t('common.delete')))));
 }

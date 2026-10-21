@@ -4,6 +4,7 @@
 
 import { getSetting, setSetting, del } from './store.js';
 import { PROVIDERS, FEATURES } from '../model/providers.js';
+import { t } from './i18n.js';
 
 export { PROVIDERS, FEATURES };
 
@@ -67,27 +68,28 @@ export async function setOllamaUrl(url) {
  */
 export async function providerFetch(id, url, init = {}) {
   const p = PROVIDERS[id];
-  if (!p || !p.hosts.some((h) => url.startsWith(`${h}/`) || url === h)) throw new Error(`Not a ${p?.name || id} address`);
+  if (!p || !p.hosts.some((h) => url.startsWith(`${h}/`) || url === h)) throw new Error(t('online.notAddress', { name: p?.name || id }));
   let res;
   try {
     res = await fetch(url, { ...init, credentials: 'omit', referrerPolicy: 'no-referrer' });
   } catch {
-    throw new Error(id === 'ollama' ? "Couldn't reach Ollama. Is it running, with OLLAMA_ORIGINS set to allow this page?" : `Couldn't reach ${p.name}. Are you online?`);
+    throw new Error(id === 'ollama' ? t('online.noOllama') : t('online.unreachable', { name: p.name }));
   }
-  if ((res.status === 401 || res.status === 403) && p.key) throw new Error(`${p.name} didn't accept the key. Check it in Settings → Online extras.`);
-  if (res.status === 403 && id === 'ollama') throw new Error('Ollama turned this page away. Start it with OLLAMA_ORIGINS set to allow this page.');
-  if (res.status === 429) throw new Error(`${p.name} says too many requests. Try again in a little while.`);
+  if ((res.status === 401 || res.status === 403) && p.key) throw new Error(t('online.badKey', { name: p.name }));
+  if (res.status === 403 && id === 'ollama') throw new Error(t('online.ollamaRefused'));
+  if (res.status === 429) throw new Error(t('online.tooMany', { name: p.name }));
   if (!res.ok) {
     // (The provider's own reason, when it gives one: a low balance, too long a request.)
-    const detail = await res.text().then((t) => {
+    const detail = await res.text().then((body) => {
       try {
-        const j = JSON.parse(t);
+        const j = JSON.parse(body);
         return j?.error?.message || j?.message || (typeof j?.error === 'string' ? j.error : '');
       } catch {
         return '';
       }
     }, () => '');
-    throw new Error(`${p.name} answered ${res.status}${detail ? `: ${String(detail).slice(0, 200)}` : '.'}`);
+    // (The status and the provider's own words ride along, so callers needn't read the translated message.)
+    throw Object.assign(new Error(detail ? t('online.answeredDetail', { name: p.name, status: String(res.status), detail: String(detail).slice(0, 200) }) : t('online.answered', { name: p.name, status: String(res.status) })), { status: res.status, detail: detail ? String(detail) : '' });
   }
   return res;
 }

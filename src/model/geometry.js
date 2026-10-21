@@ -111,6 +111,9 @@ export function handlePosition(b, handle) {
   return rotatePoint(c.x + (dx * b.w) / 2, c.y + (dy * b.h) / 2, c.x, c.y, b.rotation || 0);
 }
 
+/** The smallest an element is made by resizing it (page px). */
+export const MIN_SIZE = 4;
+
 /**
  * Resize a box by dragging one handle.
  * start: the box when the drag began. (dx, dy): pointer movement in page coordinates.

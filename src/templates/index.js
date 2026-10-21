@@ -279,11 +279,27 @@ export function templateById(id) {
 }
 
 /** Templates matching a search, a category and a format ('All' for any). */
-export function searchTemplates({ query = '', category = 'All', format = 'All' } = {}) {
-  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  return TEMPLATES.filter((t) => (category === 'All' || t.category === category) &&
-    (format === 'All' || t.format === format) &&
-    words.every((w) => `${t.name} ${t.category} ${t.tags}`.toLowerCase().includes(w)));
+/**
+ * Templates by category, format and words. Words match a template's name,
+ * category and tags; in another language, also its category as
+ * `categoryName(category)` writes it, and `synonyms` (that language's words
+ * → the English ones templates are tagged with). Typed words can be partial.
+ */
+export function searchTemplates({ query = '', category = 'All', format = 'All', categoryName = null, synonyms = {} } = {}) {
+  const words = fold(query).split(/\s+/).filter(Boolean);
+  const local = Object.entries(synonyms).map(([word, en]) => [fold(word), en]);
+  // (The English words a typed word may stand for.)
+  const english = new Map(words.map((w) => [w, local.filter(([word]) => word.includes(w)).map(([, en]) => en)]));
+  return TEMPLATES.filter((t) => {
+    if ((category !== 'All' && t.category !== category) || (format !== 'All' && t.format !== format)) return false;
+    const text = fold(`${t.name} ${t.category} ${t.tags} ${categoryName ? categoryName(t.category) : ''}`);
+    return words.every((w) => text.includes(w) || english.get(w).some((en) => text.includes(en)));
+  });
+}
+
+/** Lower case, without accents (so "menu" finds "menú"); other scripts stay as they are. */
+function fold(s) {
+  return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
 /** The fonts a template uses, without laying it out. */

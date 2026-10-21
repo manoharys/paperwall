@@ -1,10 +1,10 @@
 // The canvas: draws the current page and handles selecting, moving,
 // resizing, rotating, cropping and editing text directly on it.
 
-import { renderPage } from '../model/render.js';
+import { renderPageParts } from '../model/render.js';
 import {
   boundsOf, unionBounds, boxCorners, handlePosition, resizeBox, angleTo, snapAngle, snapMove,
-  pointInBox, rectFromPoints, rectsIntersect, HANDLES,
+  pointInBox, rectFromPoints, rectsIntersect, HANDLES, MIN_SIZE,
 } from '../model/geometry.js';
 import { resizeElement, coverCrop, topmost, findElement } from '../model/commands.js';
 import { clone, DRAW_TOOLS, pxPerUnit, isEmptyFrame, restroke, KEEPS_RATIO } from '../model/doc.js';
@@ -15,15 +15,35 @@ import { mediaKind, blobUrlFor } from './media.js';
 import { notePad } from '../model/text-layout.js';
 import { h, toast, pickFile } from './ui.js';
 import * as store from './store.js';
+import { t } from './i18n.js';
 
 const PAD = 64;
 const RATIO_LOCKED = new Set([...KEEPS_RATIO, 'group']);
 
 
+// The blob: URLs of the design last opened (key → { dataUrl, url }). Opening
+// it again without going home reuses them (its photos aren't copied again);
+// opening another design, or going home, lets them go, and those of files
+// replaced meanwhile (`retired`: views still open, like the page grid or the
+// presenter's, may show them till then).
+let opened = { id: null, urls: new Map(), retired: [] };
+function blobUrls(designId) {
+  if (opened.id !== designId) forgetBlobUrls();
+  opened.id = designId;
+  return opened.urls;
+}
+
+/** Let the last design's blob: URLs go (back on the home screen). */
+export function forgetBlobUrls() {
+  for (const { url } of opened.urls.values()) URL.revokeObjectURL(url);
+  for (const url of opened.retired) URL.revokeObjectURL(url);
+  opened = { id: null, urls: new Map(), retired: [] };
+}
+
 export class Canvas {
   constructor(editor) {
     this.ed = editor;
-    this.urls = new Map();
+    this.urls = blobUrls(editor.doc.id);
     this.hover = null;
     this.drag = null;
     this.marquee = null;
@@ -32,11 +52,15 @@ export class Canvas {
     this.overlay = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     this.overlay.setAttribute('class', 'overlay');
     // Rulers sit just outside the page's top and left edges and scroll with it.
-    this.rulerX = h('div', { class: 'ruler x', 'data-testid': 'ruler-x', title: 'Drag down to add a guide' });
-    this.rulerY = h('div', { class: 'ruler y', 'data-testid': 'ruler-y', title: 'Drag right to add a guide' });
+    this.rulerX = h('div', { class: 'ruler x', 'data-testid': 'ruler-x', title: t('canvas.rulerX') });
+    this.rulerY = h('div', { class: 'ruler y', 'data-testid': 'ruler-y', title: t('canvas.rulerY') });
     this.wrap = h('div', { class: 'page-wrap', 'data-testid': 'page' }, this.svgHost, this.overlay, this.rulerX, this.rulerY);
     this.board = h('div', { class: 'board' }, this.wrap);
-    this.el = h('div', { class: 'stage', 'data-testid': 'stage', tabindex: '-1' }, this.board);
+    // The canvas takes keyboard focus, and Tab leaves it as anywhere else: N
+    // and Shift+N pick elements one at a time (see cycleSelection), the arrow
+    // keys move them (shortcuts.js). Its description says so.
+    const help = h('p', { id: 'canvas-help', class: 'sr-only' }, t('canvas.help'));
+    this.el = h('div', { class: 'stage', 'data-testid': 'stage', tabindex: '0', role: 'application', 'aria-label': t('canvas.label'), 'aria-describedby': help.id }, this.board, help);
     this.textarea = null;
     this.frame = 0;
 
@@ -132,13 +156,14 @@ export class Canvas {
     });
     this.el.addEventListener('dragleave', () => this.el.classList.remove('dropping'));
     this.el.addEventListener('drop', (e) => this.onDrop(e));
+    this.gone = new AbortController(); // (aborted by destroy: the window's listeners go)
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space' && !isTyping(e)) this.spaceDown = true;
-    });
+    }, { signal: this.gone.signal });
     window.addEventListener('keyup', (e) => {
       if (e.code === 'Space') this.spaceDown = false;
-    });
-    editor.on((what) => {
+    }, { signal: this.gone.signal });
+    this.unlisten = editor.on((what) => {
       // Mid-drag: attached connector ends follow what's being moved (group
       // boxes are refitted once the drag ends, in afterChange).
       if (what === 'live') {
@@ -156,6 +181,30 @@ export class Canvas {
       this.frame = 0;
       this.render();
     });
+  }
+
+  /** Let go of the editor and the window (the editor's screen is being taken down). */
+  destroy() {
+    this.unlisten();
+    this.gone.abort();
+    if (this.frame) cancelAnimationFrame(this.frame);
+    if (this.overlayFrame) cancelAnimationFrame(this.overlayFrame);
+    this.frame = this.overlayFrame = 0;
+  }
+
+  /**
+   * Select the next (dir 1) or previous (-1) element on the page, back to
+   * front, for the keyboard; past either end, round to the other. Returns
+   * whether there was one to pick.
+   */
+  cycleSelection(dir) {
+    const ed = this.ed;
+    const els = ed.pageData.elements.filter((el) => !el.hidden);
+    if (!els.length) return false;
+    const at = ed.selection.length === 1 ? els.findIndex((el) => el.id === ed.selection[0]) : -1;
+    const next = at < 0 ? (dir > 0 ? 0 : els.length - 1) : (at + dir + els.length) % els.length;
+    ed.select([els[next].id]);
+    return true;
   }
 
   // ---------- drawing ----------
@@ -180,7 +229,8 @@ export class Canvas {
   }
 
   // A blob: URL for an asset (or a video's poster: `part` 'poster'), made
-  // once, so redrawing doesn't copy the picture's data each time.
+  // once, so redrawing doesn't copy the picture's data each time. Kept while
+  // the design is open, and for opening it again (see blobUrls).
   assetHref = (assetId, part) => {
     const a = this.ed.doc.assets[assetId];
     const dataUrl = part === 'poster' ? a?.poster : a?.dataUrl;
@@ -188,9 +238,16 @@ export class Canvas {
     const key = part === 'poster' ? `${assetId}|poster` : assetId;
     let entry = this.urls.get(key);
     if (!entry || entry.dataUrl !== dataUrl) {
+      // A new file under the same id: the old one's URL is let go of with the
+      // rest (pictures drawn with it here are drawn again).
+      if (entry) {
+        opened.retired.push(entry.url);
+        this.hrefsChanged = (this.hrefsChanged || 0) + 1;
+      }
       entry = { dataUrl, url: blobUrlFor(dataUrl) };
       this.urls.set(key, entry);
     }
+    entry.dataUrl = dataUrl; // (the same file read in again is compared in full just once)
     return entry.url;
   };
 
@@ -211,8 +268,7 @@ export class Canvas {
   render() {
     const ed = this.ed;
     this.layout();
-    const skip = ed.editingTextId ? new Set([ed.editingTextId]) : null;
-    this.svgHost.innerHTML = renderPage(ed.doc, ed.page, { measure, assetHref: this.assetHref, editor: true, scale: ed.zoom, skip, idPrefix: 'cv' });
+    this.drawPage();
     this.drawOverlay();
     if (this.textarea) this.positionTextarea();
     // The page changed size (a restored version, resizing, undoing either): fit it in view again.
@@ -233,6 +289,49 @@ export class Canvas {
       this.el.scrollTop += ed.boardMoved.dy * ed.zoom + this.wrapAt.top - was.top;
     }
     ed.boardMoved = null;
+  }
+
+  /**
+   * Draw the page. Only what changed since it was last drawn is replaced
+   * (typing in a long document, or dragging one thing on a busy page,
+   * leaves the rest as it is); anything else draws it all again.
+   */
+  drawPage() {
+    const ed = this.ed;
+    const skip = ed.editingTextId ? new Set([ed.editingTextId]) : null;
+    const now = renderPageParts(ed.doc, ed.page, { measure, assetHref: this.assetHref, editor: true, scale: ed.zoom, skip, idPrefix: 'cv' });
+    const was = this.drawn;
+    this.drawn = { ...now, pageId: ed.pageData.id };
+    const svg = this.svgHost.firstElementChild;
+    const same = was && svg && was.pageId === ed.pageData.id &&
+      was.elements.length === now.elements.length && now.elements.every((m, i) => !m === !was.elements[i]);
+    const changed = same ? now.elements.flatMap((m, i) => (m === was.elements[i] ? [] : [i])) : null;
+    // Each element shown is one <g>, in order, after the background.
+    const nodes = changed?.length ? svg.querySelectorAll(':scope > g') : [];
+    let k = 0;
+    const at = now.elements.map((m) => (m ? k++ : -1));
+    if (!changed || changed.length > now.elements.length / 2 || (changed.length && nodes.length !== k)) {
+      this.svgHost.innerHTML = `${now.head}<defs>${now.defs}</defs>${now.background}${now.elements.join('')}</svg>`;
+      return;
+    }
+    const scratch = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    // (A document grown longer: just the page's size.)
+    if (was.head !== now.head) {
+      scratch.innerHTML = `${now.head}</svg>`;
+      for (const name of ['width', 'height', 'viewBox']) svg.setAttribute(name, scratch.firstChild.getAttribute(name));
+    }
+    const defs = svg.querySelector(':scope > defs');
+    if (was.defs !== now.defs) defs.innerHTML = now.defs;
+    // (The background is what's between the definitions and the elements: never a <g>.)
+    if (was.background !== now.background) {
+      for (const n of [...svg.children]) if (n !== defs && n.localName !== 'g') n.remove();
+      scratch.innerHTML = now.background;
+      defs.after(...scratch.childNodes);
+    }
+    for (const i of changed) {
+      scratch.innerHTML = now.elements[i];
+      nodes[at[i]].replaceWith(scratch.firstChild);
+    }
   }
 
   zoomToFit() {
@@ -571,7 +670,7 @@ export class Canvas {
       const o = d.orig;
       const corner = d.handle.length === 2;
       const keepRatio = corner && (RATIO_LOCKED.has(o.type) || o.type === 'text' ? !e.shiftKey : e.shiftKey);
-      const box = resizeBox(o, d.handle, dx, dy, { keepRatio, minSize: 4 });
+      const box = resizeBox(o, d.handle, dx, dy, { keepRatio, minSize: MIN_SIZE });
       Object.assign(el, clone(o));
       if (o.type === 'text') {
         if (corner) {
@@ -590,7 +689,7 @@ export class Canvas {
       }
     } else if (d.mode === 'resize-many') {
       d.moved = true;
-      const nb = resizeBox({ ...d.box, rotation: 0 }, d.handle, dx, dy, { keepRatio: true, minSize: 4 });
+      const nb = resizeBox({ ...d.box, rotation: 0 }, d.handle, dx, dy, { keepRatio: true, minSize: MIN_SIZE });
       const s = nb.w / d.box.w;
       for (const it of d.items) {
         Object.assign(it.el, clone(it.orig));
@@ -741,7 +840,7 @@ export class Canvas {
     if (uploadId) {
       try {
         const upload = await store.getUpload(uploadId);
-        if (upload && !upload.dataUrl) toast(`${upload.name} is missing. Try uploading it again.`, 'error');
+        if (upload && !upload.dataUrl) toast(t('upload.missing', { name: upload.name }), 'error');
         else if (upload && !this.ed.closed) await place(upload);
       } catch (err) {
         toast(err.message, 'error');
@@ -770,7 +869,7 @@ export class Canvas {
     ed.history.record(ed.doc);
     ed.editingTextId = el.id;
     this.textBefore = el.text;
-    const ta = h('textarea', { class: 'text-editor', 'data-testid': 'text-editor', spellcheck: 'true', 'aria-label': 'Edit text' });
+    const ta = h('textarea', { class: 'text-editor', 'data-testid': 'text-editor', spellcheck: 'true', dir: 'auto', 'aria-label': t('canvas.editText') });
     ta.value = el.text;
     ta.addEventListener('input', () => {
       el.text = ta.value;
@@ -789,6 +888,8 @@ export class Canvas {
       if (e.key === 'Escape' || ((e.metaKey || e.ctrlKey) && e.key === 'Enter')) {
         e.preventDefault();
         this.finishTextEdit();
+        // Done from the keyboard: back on the canvas, the text still selected.
+        this.el.focus({ preventScroll: true });
       }
     });
     ta.addEventListener('blur', () => this.finishTextEdit());

@@ -2,18 +2,20 @@
 
 import { h, dialog, clear, toast, lazily, forget } from './ui.js';
 import { renderPage } from '../model/render.js';
-import { measure, ensureDesignFonts } from './fonts.js';
+import { measure, ensureDesignFonts, onPaper } from './fonts.js';
 import * as store from './store.js';
+import { t, formatDate } from './i18n.js';
+import { versionLabel, sizeLabel } from './names.js';
 
 function when(at) {
   const d = new Date(at);
   const today = new Date();
-  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  if (d.toDateString() === today.toDateString()) return `Today, ${time}`;
+  const time = formatDate(d, { hour: 'numeric', minute: '2-digit' });
+  if (d.toDateString() === today.toDateString()) return t('history.today', { time });
   const y = new Date(today);
   y.setDate(today.getDate() - 1);
-  if (d.toDateString() === y.toDateString()) return `Yesterday, ${time}`;
-  return `${d.toLocaleDateString([], { day: 'numeric', month: 'short', year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric' })}, ${time}`;
+  if (d.toDateString() === y.toDateString()) return t('history.yesterday', { time });
+  return t('history.dateTime', { date: formatDate(d, { day: 'numeric', month: 'short', year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric' }), time });
 }
 
 export function historyDialog(editor) {
@@ -25,26 +27,28 @@ export function historyDialog(editor) {
     } catch (e) {
       forget(list);
       clear(list);
-      list.append(h('p', { class: 'empty-note' }, `Couldn't read the versions: ${e.message}`));
+      list.append(h('p', { class: 'empty-note' }, t('history.readError', { error: e.message })));
       return;
     }
     forget(list);
     clear(list);
-    if (!rows.length) list.append(h('p', { class: 'empty-note' }, 'No versions yet. One is kept every few minutes while you work, and whenever you leave a design you changed.'));
+    if (!rows.length) list.append(h('p', { class: 'empty-note' }, t('history.none')));
     for (const v of rows) {
       const img = h('span', { class: 'version-img', style: { aspectRatio: `${v.width} / ${v.height}` } });
       // The saved thumbnail if there is one; otherwise drawn from the version
       // as it scrolls into view.
       if (v.thumb) img.append(h('img', { src: v.thumb, alt: '' }));
-      else lazily(img, () => store.versionDoc(v).then(async (doc) => {
-        await ensureDesignFonts(doc);
+      else lazily(img, () => store.versionDoc(v).then(async (whole) => {
+        await ensureDesignFonts(whole);
+        // (A document's first sheet, as its box is one sheet tall: not the whole long page.)
+        const [doc] = await onPaper(whole, [0]);
         img.innerHTML = renderPage(doc, 0, { measure, noSize: true, placeholders: true, idPrefix: `v${v.key.replace(/\W/g, '')}` });
       }).catch(() => img.classList.add('broken')));
       list.append(h('li', { class: 'version', 'data-testid': 'version' },
         img,
         h('div', { class: 'version-meta' },
           h('b', null, when(v.at)),
-          h('small', null, `${v.label ? `${v.label} · ` : ''}${v.pages} page${v.pages === 1 ? '' : 's'} · ${v.width} × ${v.height}`)),
+          h('small', null, `${v.label ? `${versionLabel(v.label)} · ` : ''}${t('common.pages', { n: v.pages })} · ${sizeLabel(v.width, v.height, v.unit)}`)),
         h('button', { type: 'button', class: 'btn small', 'data-testid': 'version-restore', onClick: async () => {
           try {
             const doc = await store.versionDoc(v);
@@ -52,24 +56,24 @@ export function historyDialog(editor) {
             if (editor.closed) return;
             editor.restoreVersion(doc);
             d.close();
-            toast('Restored. Undo to go back to how it was.');
+            toast(t('history.restored'));
           } catch (e) {
-            toast(`Couldn't restore this version: ${e.message}`, 'error');
+            toast(t('history.restoreError', { error: e.message }), 'error');
           }
-        } }, 'Restore')));
+        } }, t('history.restore'))));
     }
   };
-  const d = dialog('Version history', h('div', { class: 'stack' },
-    h('p', { class: 'hint' }, `The last ${store.MAX_VERSIONS} versions are kept in this browser, on this device.`),
+  const d = dialog(t('top.history'), h('div', { class: 'stack' },
+    h('p', { class: 'hint' }, t('history.hint', { n: store.MAX_VERSIONS })),
     h('button', { type: 'button', class: 'btn small', 'data-testid': 'version-save', onClick: async () => {
       // After the first check for versions, so the Original comes first.
       await editor.versionsChecked;
       // Saving the design mustn't start a timed version of its own as well.
       editor.versionAt = Date.now();
       await editor.flush();
-      if (!(await editor.saveVersion('Saved by you'))) toast("Couldn't save a version on this device.", 'error');
+      if (!(await editor.saveVersion('saved'))) toast(t('history.saveError'), 'error');
       fill();
-    } }, 'Save a version now'),
+    } }, t('history.save')),
     list), { wide: true, testid: 'history-dialog', onClose: () => forget(list) });
   fill();
   return d;

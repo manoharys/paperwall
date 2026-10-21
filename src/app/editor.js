@@ -5,12 +5,12 @@ import { History } from '../model/history.js';
 import * as cmd from '../model/commands.js';
 import {
   createText, createShape, createLine, createImage, createVideo, createFrame, createDrawing, thinPoints, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
-  TEXT_STYLES, versionSnapshot, isEmptyFrame, DOCUMENT, stillIsCurrent, presetById, documentSettings,
+  TEXT_STYLES, versionSnapshot, isEmptyFrame, DOCUMENT, stillIsCurrent, presetById, documentSettings, KEEPS_RATIO,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
 import { flowDocument, growBoard } from '../model/flow.js';
 import { curveGeometry } from '../model/render.js';
-import { unionBounds, pointInBox, toLocal, refitGroup } from '../model/geometry.js';
+import { unionBounds, pointInBox, toLocal, refitGroup, handlePosition, MIN_SIZE } from '../model/geometry.js';
 import { gridBoxes } from '../model/grids.js';
 import { createConnector, updateConnectors, isLine, lineHit } from '../model/connectors.js';
 import { gridLines, marginSize } from '../model/view.js';
@@ -21,6 +21,7 @@ import { mediaKind, checkSize, videoInfo, audioInfo, VideoFrames } from './media
 import { removePlainBackground } from '../model/bgremove.js';
 import { readFileAsDataUrl, loadImage, toast, debounce } from './ui.js';
 import * as store from './store.js';
+import { t } from './i18n.js';
 
 const VIEW_KEY = 'paperwall-view';
 const VERSION_EVERY = 5 * 60 * 1000;
@@ -173,6 +174,7 @@ export class Editor {
     // Mid-drag, outside change() (text refitted as a font loads): after the
     // drag, which it mustn't cut short.
     if (this.isDragging?.() && !this.changing) return void this.whenIdle(() => this.afterChange(quiet, { edit }));
+    this.looks = (this.looks || 0) + 1; // (every change to how it looks, edits or not; first, so stills too slow before are tried again)
     this.arrange();
     this.retakeStills();
     // Connectors on every page follow what they're attached to (pages
@@ -182,7 +184,6 @@ export class Editor {
       this.doc.updatedAt = Date.now();
       this.changedSinceVersion = true;
     }
-    this.looks = (this.looks || 0) + 1; // (every change to how it looks, edits or not)
     this.selection = this.selection.filter((id) => cmd.findElement(this.pageData, id));
     if (!quiet) this.emit('doc');
     this.save();
@@ -198,7 +199,7 @@ export class Editor {
       // (Not mid-drag: the design is half-moved then; the next save tries again.)
       this.maybeSaveVersion(VERSION_EVERY);
     } catch (e) {
-      toast(`Couldn't save on this device: ${e.message}`, 'error');
+      toast(t('editor.saveError', { error: e.message }), 'error');
     }
   }
 
@@ -430,7 +431,7 @@ export class Editor {
     const base = TEXT_STYLES[style] || TEXT_STYLES.body;
     const k = Math.max(0.3, this.sizeRef / 1080);
     // (On a whiteboard, as wide as on its first canvas.)
-    const el = createText({ ...base, size: Math.round(base.size * k), w: Math.round(this.fitW * 0.7), ...props });
+    const el = createText({ ...base, text: TEXT_STYLES[style] ? t(`newText.${style}`) : t('newText.body'), size: Math.round(base.size * k), w: Math.round(this.fitW * 0.7), ...props });
     return this.insert(el);
   }
 
@@ -527,12 +528,13 @@ export class Editor {
     // whole video. One waiting to be taken waits on for the latest change.)
     if (this.closed || [...(this.stills?.values() || [])].some((s) => s.taking)) return;
     this.stillFailed ||= new Map(); // video id → a start no still could be taken from (not tried again and again)
+    this.stillLate ||= new Map(); // video id → the change a still was too slow at (tried again after the next)
     const walk = (els) => {
       for (const el of els) {
         if (el.type === 'group' && walk(el.children)) return true;
         if (el.type !== 'video' || !this.doc.assets[el.assetId]) continue;
         const start = el.trim?.start || 0;
-        if (stillIsCurrent(this.doc, el) || this.stillFailed.get(el.id) === start) continue;
+        if (stillIsCurrent(this.doc, el) || this.stillFailed.get(el.id) === start || (this.stillLate.has(el.id) && this.stillLate.get(el.id) === this.looks)) continue;
         if (!this.stills?.size || this.stills.has(el.id)) this.refreshStill(el.id);
         return true;
       }
@@ -554,10 +556,13 @@ export class Editor {
     const found = locate(this.doc, id, this.pageData.id);
     if (found?.el.type !== 'video') return;
     const start = found.el.trim?.start || 0;
-    const frames = new VideoFrames(this.doc);
+    const looks = this.looks; // (as it starts: a change made while it's taken gets it tried again)
+    const frames = new VideoFrames(this.doc, { patient: true });
     try {
       const url = await frames.seek(found.el, 0, 1920 / Math.max(found.el.w, found.el.h));
-      if (!url) this.stillFailed?.set(id, start);
+      // Too slow this time (a busy device): tried again after the next change, not given up on.
+      if (!url && frames.late) this.stillLate?.set(id, looks);
+      else if (!url) this.stillFailed?.set(id, start);
       if (!url || this.closed) return;
       const img = await loadImage(url);
       if (this.closed) return;
@@ -610,18 +615,18 @@ export class Editor {
   async importMediaFile(file) {
     const kind = mediaKind(file);
     if (kind === 'image') return this.importImageFile(file);
-    if (!kind) throw new Error(`${file.name} isn't a picture, video or sound`);
+    if (!kind) throw new Error(t('editor.notMedia', { name: file.name }));
     checkSize(file, kind);
     // Checked first: a file that can't be used isn't read in whole for nothing.
     const info = await (kind === 'video' ? videoInfo(file) : audioInfo(file));
     // A "video" with no picture this browser can show: either a video it
     // can't play (an iPhone's HEVC, say) or music in a video file. There's no
     // telling which, so neither is guessed (a guess could replace the soundtrack).
-    if (info.noPicture) throw new Error(`This browser can't show a picture in ${file.name}. A video plays here as MP4 (H.264) or WebM; a sound as MP3, M4A, OGG or WAV.`);
+    if (info.noPicture) throw new Error(t('editor.noPicture', { name: file.name }));
     const dataUrl = await readFileAsDataUrl(file);
     const upload = { id: uid('u'), name: file.name, mime: file.type, dataUrl, kind, ...info, addedAt: Date.now() };
     // It's used either way; Uploads just can't keep a copy when storage is full.
-    await store.saveUpload(upload).catch(() => toast(`${file.name} couldn't be kept in Uploads: this browser's storage is full.`, 'error'));
+    await store.saveUpload(upload).catch(() => toast(t('editor.uploadsFull', { name: file.name }), 'error'));
     return upload;
   }
 
@@ -630,14 +635,14 @@ export class Editor {
     if (upload.kind === 'video') return this.addVideo(upload, opts);
     if (upload.kind === 'audio') {
       this.setSoundtrack(upload);
-      toast(`${upload.name} is the soundtrack now. It plays when you press Play, and in videos you download.`);
+      toast(t('editor.soundtrackSet', { name: upload.name }));
       return null;
     }
     return this.addImage(upload, opts);
   }
 
   async importImageFile(file) {
-    if (!file.type.startsWith('image/')) throw new Error(`${file.name} isn't an image`);
+    if (!file.type.startsWith('image/')) throw new Error(t('editor.notImage', { name: file.name }));
     const dataUrl = await readFileAsDataUrl(file);
     const img = await loadImage(dataUrl);
     const upload = { id: uid('u'), name: file.name, mime: file.type, dataUrl, width: img.naturalWidth, height: img.naturalHeight, addedAt: Date.now() };
@@ -956,7 +961,7 @@ export class Editor {
     if (!this.selection.length) return;
     const ids = this.selection;
     const removed = this.change(() => cmd.deleteElements(this.doc, this.page, ids));
-    if (removed < ids.length) toast('Locked elements were kept. Unlock them to delete.');
+    if (removed < ids.length) toast(t('editor.lockedKept'));
     // Whatever was locked stays selected, so it can be unlocked right away.
     this.selection = ids.filter((id) => cmd.findElement(this.pageData, id));
     this.emit('selection');
@@ -1010,7 +1015,7 @@ export class Editor {
     const el = this.single;
     if (!el) return;
     styleClipboard = cmd.copyStyle(el);
-    toast('Style copied. Select something and paste the style.');
+    toast(t('editor.styleCopied'));
   }
 
   pasteStyle() {
@@ -1096,6 +1101,39 @@ export class Editor {
     this.change(() => cmd.moveElements(this.doc, this.page, ids, dx, dy), { key: `nudge:${ids.join(',')}` });
   }
 
+  /**
+   * Make the one selected element wider or narrower (dw) and taller or
+   * shorter (dh), from the keyboard. Its top left stays put; pictures, icons
+   * and groups keep their proportions, and text stays as tall as its words.
+   */
+  resizeBy(dw, dh) {
+    const el = this.single;
+    if (!el || el.locked || el.type === 'connector' || el.type === 'line' || (!dw && !dh)) return;
+    this.change(() => {
+      const e = cmd.findElement(this.pageData, el.id);
+      // (No smaller than dragging a handle makes it.)
+      let w = Math.max(MIN_SIZE, e.w + dw);
+      let h = Math.max(MIN_SIZE, e.h + dh);
+      if (KEEPS_RATIO.includes(e.type) || e.type === 'group') {
+        const r = e.w / e.h;
+        if (dw) h = Math.max(MIN_SIZE, w / r);
+        else w = Math.max(MIN_SIZE, h * r);
+      }
+      const was = [e.x, e.y, e.w, e.h].join();
+      // Its top-left corner (as turned) stays put, as when dragging the opposite handle.
+      const corner = handlePosition(e, 'nw');
+      if (e.type === 'text') {
+        cmd.resizeElement(e, { x: e.x, y: e.y, w, h: e.h });
+        this.fitText(e);
+      } else cmd.resizeElement(e, { x: e.x, y: e.y, w, h }, { scaleContent: e.type === 'group' || e.type === 'qr' });
+      const now = handlePosition(e, 'nw');
+      e.x += corner.x - now.x;
+      e.y += corner.y - now.y;
+      // (Nothing changed, as at the smallest size or text refitted back: no undo step, nothing saved.)
+      return [e.x, e.y, e.w, e.h].join() !== was;
+    }, { key: `resize:${el.id}`, unchanged: (changed) => !changed });
+  }
+
   selectionBounds() {
     const els = this.selected;
     return els.length ? unionBounds(els) : null;
@@ -1115,7 +1153,7 @@ export class Editor {
 
   deletePage(i = this.page) {
     if (this.doc.pages.length <= 1) {
-      toast('A design needs at least one page.');
+      toast(t('editor.onePage'));
       return;
     }
     const n = this.change(() => cmd.deletePage(this.doc, i));
@@ -1197,7 +1235,7 @@ export class Editor {
   // ---------- whole design ----------
 
   rename(name) {
-    const clean = name.trim().slice(0, 120) || 'Untitled design';
+    const clean = name.trim().slice(0, 120) || t('common.untitled');
     if (clean === this.doc.name) return;
     this.change(() => (this.doc.name = clean), { key: 'rename' });
     this.emit('name');

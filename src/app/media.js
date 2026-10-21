@@ -4,7 +4,8 @@
 
 import { videoTime } from '../model/doc.js';
 import { videosIn } from '../model/motion.js';
-import { dataUrlToBlob } from './ui.js';
+import { dataUrlToBlob, loadImage } from './ui.js';
+import { t, formatNumber } from './i18n.js';
 
 const LIMITS = { video: 60e6, audio: 25e6 };
 
@@ -20,7 +21,7 @@ export function mediaKind(file) {
 /** Refuse files too big to keep inside a design (they're stored with it). */
 export function checkSize(file, kind) {
   const max = LIMITS[kind];
-  if (max && file.size > max) throw new Error(`${file.name} is too big: up to ${max / 1e6} MB for ${kind === 'video' ? 'videos' : 'sounds'}.`);
+  if (max && file.size > max) throw new Error(t(kind === 'video' ? 'media.videoTooBig' : 'media.soundTooBig', { name: file.name, mb: formatNumber(max / 1e6) }));
 }
 
 function once(target, ok, bad = 'error', ms = 15000) {
@@ -32,10 +33,38 @@ function once(target, ok, bad = 'error', ms = 15000) {
       fn(v);
     };
     const onOk = () => done(resolve);
-    const onBad = () => done(reject, new Error("This file can't be played in this browser"));
-    const timer = setTimeout(() => done(reject, new Error('The file took too long to open')), ms);
+    const onBad = () => done(reject, new Error(t('media.cantPlay')));
+    const timer = setTimeout(() => done(reject, new Error(t('media.tooSlow'))), ms);
     target.addEventListener(ok, onOk);
     target.addEventListener(bad, onBad);
+  });
+}
+
+// How long a video may take to show its picture where it was sent (ms),
+// and how many times running before it's given up on.
+const PICTURE_WAIT = 1500;
+const SLOW_TIMES = 3;
+const PATIENT_WAIT = 5000;
+
+/**
+ * Wait until a video has its picture where it is now (readyState 2 or more),
+ * or `ms` pass. 'loadeddata' comes once per load, not after each seek, and
+ * a paused video may not say when it gets there: so it's also checked often.
+ */
+function pictureHere(v, ms = PICTURE_WAIT) {
+  if (v.readyState >= 2) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const events = ['loadeddata', 'canplay', 'seeked', 'error'];
+    const check = () => (v.readyState >= 2 || v.error) && done();
+    const done = () => {
+      clearTimeout(timer);
+      clearInterval(poll);
+      for (const e of events) v.removeEventListener(e, check);
+      resolve(v.readyState >= 2);
+    };
+    const timer = setTimeout(done, ms);
+    const poll = setInterval(check, 15);
+    for (const e of events) v.addEventListener(e, check);
   });
 }
 
@@ -126,8 +155,10 @@ export function blobUrlFor(dataUrl) {
  * data: URL of the picture, sized for the element.
  */
 export class VideoFrames {
-  constructor(doc) {
+  /** `patient`: wait longer for each picture (one still, not a frame of many). */
+  constructor(doc, { patient = false } = {}) {
     this.doc = doc;
+    this.wait = patient ? PATIENT_WAIT : PICTURE_WAIT;
     // One player per element (two elements may show the same file from
     // different points): element id → { video, url, ready (resolves to whether it loaded) }.
     this.players = new Map();
@@ -185,6 +216,15 @@ export class VideoFrames {
    * the seek), at `scale` (output px per page px). Null if it can't be played here.
    */
   async seek(el, local, scale = 1.5) {
+    return (await this.at(el, local)) ? this.picture(el, scale) : null;
+  }
+
+  /**
+   * `el`'s player showing its picture at `local` seconds into its page,
+   * exactly (waits for the seek), to draw straight from. Null if it can't be
+   * played here.
+   */
+  async at(el, local) {
     const p = this.player(el);
     if (!(await p.ready)) return null; // the poster shows instead
     const v = p.video;
@@ -192,16 +232,36 @@ export class VideoFrames {
     if (Math.abs(v.currentTime - t) > 0.001) {
       const seeked = once(v, 'seeked', 'error', 5000).then(() => true, () => false);
       v.currentTime = t;
-      // A video that won't seek here shows its poster from now on, rather
-      // than holding up every frame for the wait.
-      if (!(await seeked)) {
-        this.stuck = true; // (a download says so)
-        p.failed = true;
-        p.ready = Promise.resolve(false);
-        return null;
-      }
+      if (!(await seeked)) return this.giveUp(p);
     }
-    return this.grab(p, el, scale);
+    // (Its picture there, ready to draw: a busy device can lag behind the seek.)
+    if (!(await pictureHere(v, this.wait))) {
+      // Too slow this once: its poster for this frame. Three times running, and it's given up on.
+      this.late = true;
+      p.slow = (p.slow || 0) + 1;
+      return p.slow >= SLOW_TIMES ? this.giveUp(p) : null;
+    }
+    p.slow = 0;
+    this.late = false;
+    return v.videoWidth ? v : null;
+  }
+
+  /**
+   * A video that won't seek here, or keeps not showing its picture there in
+   * time: its poster shows from now on (no more waits on it for later
+   * frames), and a download says it couldn't be followed.
+   */
+  giveUp(p) {
+    this.stuck = true;
+    p.failed = true;
+    p.ready = Promise.resolve(false);
+    return null;
+  }
+
+  /** `el`'s picture as its player shows it now (after at()), at `scale`. */
+  picture(el, scale = 1.5) {
+    const p = this.players.get(el.id);
+    return p && !p.failed ? this.grab(p, el, scale) : null;
   }
 
   /**
@@ -332,4 +392,98 @@ function seeThrough(v) {
 /** Every video element on the given pages (inside groups too) whose file the design has. */
 export function videosOn(doc, pageIndexes) {
   return pageIndexes.flatMap((i) => (doc.pages[i] ? videosIn(doc.pages[i], doc.assets) : []));
+}
+
+/**
+ * How big each picture on `pages` shows, as a share of its own size, at
+ * `scale` output px per page px: its biggest use, the whole picture counted
+ * (a zoomed-in crop shows all of it bigger). Infinity when its size isn't
+ * known. Picture id → share.
+ */
+export function pictureShares(doc, pages, scale) {
+  const share = new Map();
+  const use = (id, w, h) => {
+    const a = doc.assets[id];
+    if (!a?.width || !a?.height) return share.set(id, Infinity);
+    share.set(id, Math.max(share.get(id) || 0, (w * scale) / a.width, (h * scale) / a.height));
+  };
+  const walk = (els) => {
+    for (const el of els) {
+      if (el.type === 'image' && el.assetId) use(el.assetId, el.w / (el.crop?.w || 1), el.h / (el.crop?.h || 1));
+      if (el.type === 'video' && el.still) use(el.still, el.w / (el.crop?.w || 1), el.h / (el.crop?.h || 1));
+      if (el.type === 'group') walk(el.children);
+    }
+  };
+  for (const i of pages) {
+    const page = doc.pages[i];
+    if (!page) continue;
+    walk(page.elements);
+    if (page.background?.type === 'image') use(page.background.assetId, doc.width, doc.height);
+  }
+  return share;
+}
+
+// A picture → its latest smaller copy: { key (how much smaller, in
+// twentieths), job (→ { dataUrl, width, height }) }.
+const smaller = new WeakMap();
+
+/**
+ * The design with the pictures on its first page (a document's first
+ * sheet) only as big as they show in a preview `side` px on its longest
+ * side, for small previews: drawing one then doesn't copy and decode every
+ * full-size photo. Each picture is made smaller once per size. Not a copy:
+ * shares everything else with `doc`.
+ */
+export function withSmallPictures(doc, side = 720) {
+  const tall = doc.document ? Math.min(doc.height, doc.document.pageHeight) : doc.height;
+  // (A document's first sheet: the elements that start on it, not the whole long page.)
+  const first = doc.pages[0] && doc.document ? { ...doc, pages: [{ ...doc.pages[0], elements: doc.pages[0].elements.filter((el) => el.y < tall) }] } : doc;
+  return shrinkPictures(doc, pictureShares(first, [0], side / Math.max(doc.width, tall)), { under: 0.75, quality: 0.85, cache: smaller });
+}
+
+/**
+ * The design with pictures redrawn smaller: `scales` (picture id → how big
+ * it needs to be, as a share of its own size); one that needn't be under
+ * `under` of it stays as it is. A copy of the design's assets (the design
+ * keeps its pictures); everything else is shared. `cache` (a WeakMap) keeps
+ * each picture's latest smaller copy for next time: sizes are rounded up to
+ * twentieths of the picture's own, so nearby sizes share one.
+ */
+export async function shrinkPictures(doc, scales, { under = 0.9, quality = 0.92, cache = null } = {}) {
+  const assets = { ...doc.assets };
+  const one = async ([id, k]) => {
+    const a = doc.assets[id];
+    // (Pictures only, and not SVGs: they're drawn at any size anyway.)
+    if (!(k < under) || typeof a?.dataUrl !== 'string' || !a.dataUrl.startsWith('data:image/') || a.dataUrl.startsWith('data:image/svg')) return;
+    const key = Math.max(1, Math.ceil(k * 20)); // (rounded up: never less sharp than asked)
+    if (key >= 20) return;
+    let kept = cache?.get(a);
+    if (kept?.key !== key) {
+      kept = { key, job: redrawSmaller(a.dataUrl, key / 20, quality).catch(() => null) };
+      cache?.set(a, kept);
+    }
+    const made = await kept.job;
+    if (made) assets[id] = { ...a, ...made };
+  };
+  // (Two at a time: quicker than one by one, without every big photo
+  // decoded at full size at once.)
+  // (No id: an empty frame. Left out, so it doesn't end the queue for the rest.)
+  const queue = [...scales].filter(([id]) => id);
+  const next = async () => {
+    while (queue.length) await one(queue.shift());
+  };
+  await Promise.all([next(), next()]);
+  return { ...doc, assets };
+}
+
+/** A picture redrawn at `k` of its size: { dataUrl, width, height }. */
+async function redrawSmaller(dataUrl, k, quality) {
+  const img = await loadImage(dataUrl);
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(img.naturalWidth * k));
+  c.height = Math.max(1, Math.round(img.naturalHeight * k));
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  // (Photos stay JPEG; anything that may be see-through, PNG.)
+  const url = /^data:image\/jpe?g/.test(dataUrl) ? c.toDataURL('image/jpeg', quality) : c.toDataURL('image/png');
+  return { dataUrl: url, width: c.width, height: c.height };
 }

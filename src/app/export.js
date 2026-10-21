@@ -5,13 +5,15 @@
 import { renderPage, textRuns } from '../model/render.js';
 import { buildPdf } from '../model/pdf.js';
 import { buildZip } from '../model/zip.js';
-import { validateDesign, clone, visiblePages, printDpi, pageLabel, versionSnapshot, soundtrackOf, keptAssets } from '../model/doc.js';
+import { validateDesign, clone, visiblePages, printDpi, versionSnapshot, soundtrackOf, keptAssets } from '../model/doc.js';
 import { measure, fontCssFor, registerDesignFonts, onPaper } from './fonts.js';
 import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage, canvasScale, toBlob, blobBytes } from './ui.js';
 import { section, segmented, slider, toggle } from './widgets.js';
 import { exportGif, exportVideo, canMakeVideo } from './motion-export.js';
 import { exportVectorPdf, exportPptx } from './pro-export.js';
 import { designMoves, startsTooLate, timeline } from '../model/motion.js';
+import { t, formatNumber, ltr } from './i18n.js';
+import { pageLabel } from './names.js';
 
 export function maxScale(doc, wanted) {
   return canvasScale(doc.width, doc.height, wanted);
@@ -81,7 +83,7 @@ export async function thumbnail(doc0) {
 }
 
 export async function copyToClipboard(doc, pageIndex) {
-  if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') throw new Error("This browser can't copy images. Download instead.");
+  if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') throw new Error(t('export.noClipboard'));
   const blob = await exportImage(doc, pageIndex, { format: 'png', scale: 1 });
   await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
 }
@@ -122,7 +124,7 @@ export async function readProjectFile(file) {
   try {
     doc = JSON.parse(await readFileAsText(file));
   } catch {
-    throw new Error(`${file.name} isn't a Paperwall design file`);
+    throw new Error(t('export.notDesignFile', { name: file.name }));
   }
   validateDesign(doc);
   await registerDesignFonts(doc);
@@ -135,17 +137,17 @@ const MOVING = new Set(['gif', 'mp4', 'webm']);
 
 /** How long the animation will be, and a nudge when nothing moves yet. */
 function motionNote(doc, pages) {
-  if (!pages.length) return 'Pick at least one page.';
+  if (!pages.length) return t('export.pickPage');
   const { total } = timeline(doc, pages);
-  const length = `${Math.round(total * 10) / 10} seconds`;
+  const length = t('export.seconds', { n: Math.round(total * 10) / 10 });
   if (!designMoves(doc, pages)) {
     return pages.length > 1
-      ? `${length} long: each page in turn. To make things move, pick an animation in the Animate panel.`
-      : `${length} long. Nothing moves yet: pick an animation in the Animate panel.`;
+      ? t('export.lengthPages', { length })
+      : t('export.lengthStill', { length });
   }
   const late = pages.find((i) => startsTooLate(doc.pages[i]));
-  if (late !== undefined) return `${length} long. On page ${late + 1}, something is set to come in after the page's time is up, so it won't show: shorten its delay or show the page for longer.`;
-  return `${length} long. Set each page's time and transition with nothing selected.`;
+  if (late !== undefined) return t('export.lengthLate', { length, page: late + 1 });
+  return t('export.length', { length });
 }
 
 /** The design's soundtrack, decoded, or null. (Soundtracks come with video elements and audio.) */
@@ -173,51 +175,51 @@ export function exportDialog(editor) {
   const body = h('div', { class: 'export' });
   const draw = () => {
     body.replaceChildren(...[
-      section('File type', segmented({ label: 'File type', value: state.format, testid: 'export-format', onChange: (v) => {
+      section(t('export.fileType'), segmented({ label: t('export.fileType'), value: state.format, testid: 'export-format', onChange: (v) => {
         if (state.busy) return; // one download at a time: the choices wait
         state.format = v;
         draw();
       }, options: [
-        { value: 'png', label: 'PNG: best for sharing', text: 'PNG' },
-        { value: 'jpg', label: 'JPG: smaller files', text: 'JPG' },
-        { value: 'pdf', label: 'PDF: for printing', text: 'PDF' },
-        { value: 'svg', label: 'SVG: vector, any size', text: 'SVG' },
-        { value: 'pptx', label: 'PowerPoint: slides you can edit', text: 'PPTX' },
-        { value: 'gif', label: 'GIF: a short animation', text: 'GIF' },
-        { value: 'mp4', label: 'MP4: video', text: 'MP4' },
-        { value: 'webm', label: 'WebM: video', text: 'WebM' },
+        { value: 'png', label: t('export.png'), text: 'PNG' },
+        { value: 'jpg', label: t('export.jpg'), text: 'JPG' },
+        { value: 'pdf', label: t('export.pdf'), text: 'PDF' },
+        { value: 'svg', label: t('export.svg'), text: 'SVG' },
+        { value: 'pptx', label: t('export.pptx'), text: 'PPTX' },
+        { value: 'gif', label: t('export.gif'), text: 'GIF' },
+        { value: 'mp4', label: t('export.mp4'), text: 'MP4' },
+        { value: 'webm', label: t('export.webm'), text: 'WebM' },
       ] }),
       h('p', { class: 'hint' }, {
-        png: 'Sharp images for social media and the web.',
-        jpg: 'Smaller files, no transparency.',
+        png: t('export.pngHint'),
+        jpg: t('export.jpgHint'),
         pdf: {
-          vector: 'Sharp at any size, with real text in your fonts that can be selected and searched.',
-          flat: 'Each page as one picture, with text you can still select. Looks the same everywhere.',
-          print: 'For a print shop: 3 mm bleed past the edge, crop marks, and pictures at 300 DPI.',
+          vector: t('export.pdfVectorHint'),
+          flat: t('export.pdfFlatHint'),
+          print: t('export.pdfPrintHint'),
         }[state.pdfKind],
-        pptx: 'Slides for PowerPoint, Keynote or Google Slides. Text stays editable; effects, charts and icons come as pictures.',
-        svg: 'Vector file that stays sharp at any size. Fonts are included.',
-        gif: 'Plays your animations and pages on a loop. Kept small to share.',
-        mp4: 'A video of your animations and pages, with your soundtrack. Plays everywhere.',
-        webm: 'A video of your animations and pages, with your soundtrack. Smaller; plays in browsers.',
+        pptx: t('export.pptxHint'),
+        svg: t('export.svgHint'),
+        gif: t('export.gifHint'),
+        mp4: t('export.mp4Hint'),
+        webm: t('export.webmHint'),
       }[state.format]),
       MOVING.has(state.format) ? h('p', { class: 'hint', 'data-testid': 'export-length' }, motionNote(doc, picked())) : null,
-      (state.format === 'mp4' || state.format === 'webm') && !canMakeVideo() ? h('p', { class: 'hint warn' }, "This browser can't make videos. Try a recent Chrome, Edge, Safari or Firefox, or download a GIF.") : null),
-      state.format === 'pdf' ? section('PDF type', segmented({ label: 'PDF type', value: state.pdfKind, testid: 'export-pdf-kind', onChange: (v) => {
+      (state.format === 'mp4' || state.format === 'webm') && !canMakeVideo() ? h('p', { class: 'hint warn' }, t('export.noVideoGif')) : null),
+      state.format === 'pdf' ? section(t('export.pdfType'), segmented({ label: t('export.pdfType'), value: state.pdfKind, testid: 'export-pdf-kind', onChange: (v) => {
         state.pdfKind = v;
         draw();
       }, options: [
-        { value: 'vector', label: 'PDF (vector)', text: 'Vector' },
-        { value: 'flat', label: 'PDF (flattened)', text: 'Flattened' },
-        { value: 'print', label: 'Print PDF', text: 'Print' },
+        { value: 'vector', label: t('export.pdfVector'), text: t('export.vector') },
+        { value: 'flat', label: t('export.pdfFlat'), text: t('export.flat') },
+        { value: 'print', label: t('export.pdfPrint'), text: t('export.print') },
       ] })) : null,
-      state.format === 'png' || state.format === 'jpg' ? section('Size', segmented({ label: 'Size', value: state.scale, testid: 'export-scale', onChange: (v) => {
+      state.format === 'png' || state.format === 'jpg' ? section(t('common.size'), segmented({ label: t('common.size'), value: state.scale, testid: 'export-scale', onChange: (v) => {
         state.scale = v;
         draw();
-      }, options: [1, 2, 3].map((s) => ({ value: s, label: `${s}x`, text: `${s}x · ${Math.round(doc.width * maxScale(doc, s))} × ${Math.round(doc.height * maxScale(doc, s))}` })) })) : null,
-      state.format === 'png' || state.format === 'svg' ? toggle({ label: 'Transparent background', checked: state.transparent, testid: 'export-transparent', onChange: (v) => (state.transparent = v) }) : null,
-      state.format === 'jpg' ? slider({ label: 'Quality', value: state.quality, min: 40, max: 100, unit: '%', testid: 'export-quality', onChange: (v) => (state.quality = v) }) : null,
-      doc.pages.length > 1 ? section('Pages', h('div', { class: 'page-picks', 'data-testid': 'export-pages' }, doc.pages.map((_, i) => {
+      }, options: [1, 2, 3].map((s) => ({ value: s, label: `${formatNumber(s)}x`, text: ltr(`${formatNumber(s)}x · ${formatNumber(Math.round(doc.width * maxScale(doc, s)))} × ${formatNumber(Math.round(doc.height * maxScale(doc, s)))}`) })) })) : null,
+      state.format === 'png' || state.format === 'svg' ? toggle({ label: t('export.transparent'), checked: state.transparent, testid: 'export-transparent', onChange: (v) => (state.transparent = v) }) : null,
+      state.format === 'jpg' ? slider({ label: t('export.quality'), value: state.quality, min: 40, max: 100, unit: '%', testid: 'export-quality', onChange: (v) => (state.quality = v) }) : null,
+      doc.pages.length > 1 ? section(t('export.pages'), h('div', { class: 'page-picks', 'data-testid': 'export-pages' }, doc.pages.map((_, i) => {
         const cb = h('input', { type: 'checkbox', 'data-testid': `export-page-${i + 1}` });
         cb.checked = state.pages.has(i);
         cb.disabled = !!state.busy;
@@ -232,29 +234,29 @@ export function exportDialog(editor) {
         return h('label', { class: 'toggle' }, cb, h('span', null, pageLabel(p, i)));
       }))) : null,
       h('div', { class: 'export-actions' },
-        h('button', { type: 'button', class: 'btn primary big', 'data-testid': 'export-download', onClick: () => run() }, icon('download'), 'Download'),
+        h('button', { type: 'button', class: 'btn primary big', 'data-testid': 'export-download', onClick: () => run() }, icon('download'), t('common.download')),
         h('button', { type: 'button', class: 'btn', 'data-testid': 'export-copy', onClick: async () => {
           try {
             await copyToClipboard(doc, editor.page);
-            toast('Copied. Paste it anywhere.');
+            toast(t('export.copied'));
           } catch (e) {
             toast(e.message, 'error');
           }
-        } }, icon('copy'), 'Copy image'),
+        } }, icon('copy'), t('export.copy')),
         h('button', { type: 'button', class: 'btn', 'data-testid': 'export-print', onClick: async () => {
           d.close();
           await printDesign(doc, picked());
-        } }, 'Print')),
-      h('p', { class: 'fine' }, 'No watermark. Made on your device; nothing is uploaded.'),
+        } }, t('export.print'))),
+      h('p', { class: 'fine' }, t('export.fine')),
     ].filter(Boolean));
   };
   const run = async () => {
     const pages = picked();
-    if (!pages.length) return toast('Pick at least one page.');
+    if (!pages.length) return toast(t('export.pickPage'));
     const name = safeFilename(doc.name);
     const btn = body.querySelector('[data-testid="export-download"]');
     btn.disabled = true;
-    btn.lastChild.textContent = 'Preparing…';
+    btn.lastChild.textContent = t('export.preparing');
     state.busy = true;
     body.classList.add('busy');
     // Everything waits (Copy and Print too: they'd close the dialog and stop
@@ -265,18 +267,18 @@ export function exportDialog(editor) {
         // Frames take a while: say how far along it is. They're drawn from the
         // design as it was when Download was pressed (later edits don't leak
         // in), and closing the dialog stops it.
-        const onProgress = (p) => (btn.lastChild.textContent = `Making ${state.format.toUpperCase()}… ${Math.round(p * 100)}%`);
+        const onProgress = (p) => (btn.lastChild.textContent = t('export.making', { format: state.format.toUpperCase(), percent: formatNumber(p, { style: 'percent', maximumFractionDigits: 0 }) }));
         const still = versionSnapshot(doc);
         const signal = stopper.signal;
         const notes = []; // everything left out, each said
         let audio = null;
         // (Whether video can be made here is known before the sound is decoded for it.)
-        if (state.format !== 'gif' && !canMakeVideo()) throw new Error("This browser can't make videos. Try a recent Chrome, Edge, Safari or Firefox.");
+        if (state.format !== 'gif' && !canMakeVideo()) throw new Error(t('export.noVideo'));
         if (state.format !== 'gif' && still.audio) {
           // Decoded once the video is known to be possible here.
           audio = async () => {
             const buffer = await soundtrackBuffer(still).catch(() => null);
-            if (!buffer) notes.push("The soundtrack couldn't be read here, so the video is silent.");
+            if (!buffer) notes.push(t('export.silentRead'));
             return buffer;
           };
         }
@@ -288,7 +290,7 @@ export function exportDialog(editor) {
         if (notes.length) toast(notes.join(' '));
       } else if (state.format === 'pdf' || state.format === 'pptx') {
         // Pictures of effects take a moment: say how far along it is.
-        const onProgress = (p) => (btn.lastChild.textContent = `Preparing… ${Math.round(p * 100)}%`);
+        const onProgress = (p) => (btn.lastChild.textContent = t('export.preparingPercent', { percent: formatNumber(p, { style: 'percent', maximumFractionDigits: 0 }) }));
         const signal = stopper.signal;
         // Made from the design as it was when Download was pressed: edits
         // while it's being made (fonts and pictures load in between) don't leak in.
@@ -316,25 +318,25 @@ export function exportDialog(editor) {
         }
       }
       state.busy = false; // done: closing now isn't stopping anything
-      toast('Downloaded');
+      toast(t('export.done'));
       d.close();
     } catch (e) {
       if (stopper.signal.aborted) return; // closed while making it: nothing to say
       state.busy = false;
       body.classList.remove('busy');
       draw(); // everything back as it was, ready to try again
-      toast(e.message || 'Export failed', 'error');
+      toast(e.message || t('export.failed'), 'error');
     }
   };
   draw();
   const stopper = new AbortController();
   // While a download is being made, only Close or Escape stop it (not a
   // stray click beside the dialog), and stopping it says so.
-  const d = dialog('Download', body, {
+  const d = dialog(t('common.download'), body, {
     testid: 'export-dialog',
     steady: () => state.busy,
     onClose: () => {
-      if (state.busy) toast('Download stopped');
+      if (state.busy) toast(t('export.stopped'));
       stopper.abort();
     },
   });

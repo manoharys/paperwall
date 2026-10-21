@@ -11,6 +11,7 @@ import { readModel } from '../model/onnx.js';
 import { runModel } from '../model/onnx-ops.js';
 import { modelInput, maskFromOutput, applyMask } from '../model/cutout.js';
 import { glRunner } from './onnx-gl.js';
+import { t, formatNumber } from './i18n.js';
 
 const FEATURE = 'cutout';
 const MAX_BYTES = 64 * 1024 * 1024; // (no model this feature uses comes near)
@@ -34,7 +35,7 @@ function expectedHash(spec) {
 }
 
 async function sha256(bytes) {
-  if (!globalThis.crypto?.subtle) throw new Error("This browser can't check the download");
+  if (!globalThis.crypto?.subtle) throw new Error(t('cutout.noCrypto'));
   const d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
   return [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
@@ -66,7 +67,7 @@ async function loadModel({ download = false, onProgress, signal } = {}) {
     await Promise.all([del('settings', storeKey(spec.sha256)), del('settings', okKey(spec.sha256))]);
   }
   if (!bytes) {
-    if (!download) throw Object.assign(new Error('The background removal model is not on this device yet'), { missing: true });
+    if (!download) throw Object.assign(new Error(t('cutout.missing')), { missing: true });
     bytes = await fetchModel(spec, { onProgress, signal });
     await put('settings', storeKey(spec.sha256), bytes);
     await put('settings', okKey(spec.sha256), true);
@@ -91,7 +92,7 @@ async function fetchModel(spec, { onProgress, signal }) {
       got += value.length;
       if (got > MAX_BYTES) {
         reader.cancel().catch(() => null);
-        throw new Error('The download is much bigger than expected, so it was stopped');
+        throw new Error(t('cutout.tooBig'));
       }
       parts.push(value);
       onProgress?.(Math.min(1, got / total));
@@ -103,7 +104,7 @@ async function fetchModel(spec, { onProgress, signal }) {
       at += p.length;
     }
   } else bytes = new Uint8Array(await res.arrayBuffer());
-  if ((await sha256(bytes)) !== spec.sha256) throw new Error("The downloaded model isn't the expected file, so it wasn't used");
+  if ((await sha256(bytes)) !== spec.sha256) throw new Error(t('cutout.badHash'));
   return bytes.buffer;
 }
 
@@ -125,7 +126,7 @@ export async function runCutoutModel(model, input, { onProgress, signal, engine 
         if (signal?.aborted || engine === 'gpu') throw e;
         // (Something the graphics card couldn't do: the processor can.)
       }
-    } else if (engine === 'gpu') throw new Error('No graphics card support here');
+    } else if (engine === 'gpu') throw new Error(t('cutout.noGpu'));
   }
   return { out: (await runModel(model, feeds, { onProgress, signal, pause }))[name], engine: 'cpu' };
 }
@@ -191,7 +192,7 @@ export function refineCutout(ed, el, refine) {
     if (!id) return;
     cuts.set(id, { ...cut, refine });
     ed.emit('selection'); // (the panel shows Refine edges for the new picture)
-  }).catch((e) => toast(e?.message || "Those edges couldn't be redone.", 'error'));
+  }).catch((e) => toast(e?.message || t('cutout.redoFailed'), 'error'));
   refining.set(el.id, job);
   job.then(() => refining.get(el.id) === job && refining.delete(el.id));
   return job;
@@ -210,11 +211,11 @@ export async function smartRemoveBackground(ed) {
   const stopper = new AbortController();
   let busy = false;
   const body = h('div', { class: 'stack cutout' });
-  const d = dialog('Remove background (smart)', body, {
+  const d = dialog(t('inspector.removeBgSmart'), body, {
     testid: 'cutout-dialog',
     steady: () => busy,
     onClose: () => {
-      if (busy) toast('Stopped');
+      if (busy) toast(t('common.stopped'));
       stopper.abort();
     },
   });
@@ -226,7 +227,7 @@ export async function smartRemoveBackground(ed) {
   const working = (text) => {
     status.textContent = text;
     progress.removeAttribute('value'); // (moving, until there's a share to show)
-    show(status, progress, h('div', { class: 'row end' }, h('button', { type: 'button', class: 'btn', 'data-testid': 'cutout-stop', onClick: () => d.close() }, 'Stop')));
+    show(status, progress, h('div', { class: 'row end' }, h('button', { type: 'button', class: 'btn', 'data-testid': 'cutout-stop', onClick: () => d.close() }, t('common.stop'))));
   };
   const step = (v) => {
     progress.value = v;
@@ -235,10 +236,10 @@ export async function smartRemoveBackground(ed) {
   const go = async (download) => {
     busy = true;
     try {
-      working(download ? `Downloading the model from ${spec.host}…` : 'Getting the model ready…');
+      working(download ? t('cutout.downloading', { host: spec.host }) : t('cutout.preparing'));
       const model = await loadModel({ download, onProgress: step, signal: stopper.signal });
       if (download) await setOn(FEATURE, true);
-      working('Finding the subject… (on this device)');
+      working(t('cutout.finding'));
       const name = `${asset.name || 'image'} (cut out)`;
       let mask = null;
       const id = await ed.remakeImage(el.id, asset.dataUrl, async (px, w, h) => {
@@ -251,23 +252,23 @@ export async function smartRemoveBackground(ed) {
       if (!id) return; // (the picture was changed meanwhile: nothing to put back)
       cuts.set(id, { source: asset.dataUrl, mask, refine: DEFAULT_REFINE, name });
       ed.emit('selection'); // (shows Refine edges)
-      toast('Background removed. Undo if it took too much.');
+      toast(t('inspector.bgRemoved'));
     } catch (e) {
       busy = false;
       if (stopper.signal.aborted) return;
       if (e?.missing) return offer(); // (gone or damaged here: asked again)
       d.close();
-      toast(e?.message || 'That image could not be processed.', 'error');
+      toast(e?.message || t('inspector.imageBad'), 'error');
     }
   };
 
-  const mb = (spec.bytes / 1e6).toFixed(1);
+  const mb = formatNumber(spec.bytes / 1e6, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const offer = () => show(
-    h('p', null, 'Smart removal finds the subject of a photo (a person, a pet, a product) with a small AI model that runs on this device.'),
-    h('p', null, `It needs the model first, downloaded once: ${spec.name.replace(/ \(.*\)$/, '')}, ${mb} MB from ${spec.host} (${spec.license} license). After that it works offline, and your pictures never leave this device.`),
+    h('p', null, t('cutout.intro')),
+    h('p', null, t('cutout.ask', { name: spec.name.replace(/ \(.*\)$/, ''), mb, host: spec.host, license: spec.license })),
     h('div', { class: 'row end' },
-      h('button', { type: 'button', class: 'btn', onClick: () => d.close() }, 'Not now'),
-      h('button', { type: 'button', class: 'btn primary', 'data-testid': 'cutout-download', onClick: () => go(true) }, `Download (${mb} MB) and turn on`)));
+      h('button', { type: 'button', class: 'btn', onClick: () => d.close() }, t('cutout.notNow')),
+      h('button', { type: 'button', class: 'btn primary', 'data-testid': 'cutout-download', onClick: () => go(true) }, t('cutout.download', { mb }))));
   if (ready) return go(false);
   offer();
 }

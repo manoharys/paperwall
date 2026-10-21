@@ -1,0 +1,323 @@
+// APP-08: the interface in nine languages, right to left included. The
+// browser's own language picks it; the picker (home screen and More menu)
+// changes it, and the choice is kept.
+
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { openApp, newDesign, teardown, waitForEditor, addText, openTab } from './helpers.js';
+import { audit } from './audit.js';
+import { CATALOGS, LANGUAGES } from '../../src/app/i18n.js';
+
+after(teardown);
+
+const say = (code, key) => {
+  const v = CATALOGS[code][key];
+  return typeof v === 'object' ? v.other : v;
+};
+
+/** Text on screen that is a catalog key itself (a word that was never looked up). */
+async function rawKeys(page) {
+  const text = await page.innerText('body');
+  return Object.keys(CATALOGS.en).filter((k) => text.includes(k));
+}
+
+/**
+ * Pick a language from the home screen's picker (or the editor's More menu,
+ * open already) and wait until the screen is drawn again in it.
+ */
+async function pick(page, code, where = 'language-select') {
+  await page.selectOption(`[data-testid="${where}"]`, code);
+  const [sel, words] = where === 'menu-language' ? ['[data-testid="download"]', say(code, 'common.download')] : ['.block h2', say(code, 'home.create')];
+  await page.waitForFunction(([c, s, w]) => document.documentElement.lang === c && document.querySelector(s)?.textContent.trim() === w, [code, sel, words]);
+}
+
+test('[APP-08] the browser\'s language picks the interface', async () => {
+  for (const [locale, code] of [['es-MX', 'es'], ['de-DE', 'de'], ['ja-JP', 'ja'], ['pt-PT', 'pt-BR']]) {
+    const { page, context } = await openApp({ locale });
+    assert.equal(await page.getAttribute('html', 'lang'), code, locale);
+    assert.equal(await page.textContent('.block h2'), say(code, 'home.create'), locale);
+    assert.equal(await page.inputValue('[data-testid="language-select"]'), code);
+    await context.close();
+  }
+  // A language Paperwall doesn't have yet: English.
+  const { page, context } = await openApp({ locale: 'sv-SE' });
+  assert.equal(await page.getAttribute('html', 'lang'), 'en');
+  await context.close();
+});
+
+test('[APP-08] switching language changes the interface at once and is kept after a reload', async () => {
+  const { page, context, errors } = await openApp();
+  assert.match(await page.innerText('main'), /Create a design/);
+  await pick(page, 'de');
+  const home = await page.innerText('main');
+  assert.match(home, new RegExp(say('de', 'home.create')));
+  assert.match(home, new RegExp(say('de', 'home.templates')));
+  assert.ok(!/Create a design/.test(home), 'no English left over');
+  assert.equal(await page.title(), say('de', 'app.title'));
+  await page.reload();
+  await page.waitForSelector('[data-testid="presets"]');
+  assert.equal(await page.getAttribute('html', 'lang'), 'de');
+  assert.match(await page.innerText('main'), new RegExp(say('de', 'home.create')));
+  // The editor speaks it too: buttons, panels, labels, tooltips.
+  await page.click('[data-testid="preset-square"]');
+  await waitForEditor(page);
+  assert.equal((await page.textContent('[data-testid="download"]')).trim(), say('de', 'common.download'));
+  assert.equal(await page.getAttribute('[data-testid="undo"]', 'aria-label'), say('de', 'top.undo').replace('{keys}', 'Ctrl+Z'));
+  assert.equal((await page.textContent('[data-testid="rail-text"]')).trim(), say('de', 'insert.tabText'));
+  await addText(page);
+  assert.equal(await page.textContent('[data-testid="selection-title"]'), say('de', 'type.text'));
+  // Text added now starts in the language too.
+  assert.equal((await page.evaluate(() => window.paperwall.editor.single.text)), say('de', 'newText.heading'));
+  // Switched from the More menu, in the editor: French, kept after a reload.
+  await page.click('[data-testid="main"]');
+  assert.equal(await page.inputValue('[data-testid="menu-language"]'), 'de');
+  await pick(page, 'fr', 'menu-language');
+  await waitForEditor(page);
+  // Focus is back on the More button, in the editor drawn again.
+  await page.waitForFunction(() => document.activeElement?.dataset.testid === 'main');
+  // The text added is saved before the reload. (Switching language no longer
+  // reopens the design, which used to save it; saves otherwise wait 400 ms.)
+  await page.evaluate(() => window.paperwall.editor.flush());
+  await page.reload();
+  await waitForEditor(page);
+  assert.equal(await page.getAttribute('html', 'lang'), 'fr');
+  assert.equal((await page.textContent('[data-testid="download"]')).trim(), say('fr', 'common.download'));
+  assert.deepEqual(await rawKeys(page), []);
+  // The design's own text isn't translated: it stays as written.
+  assert.equal(await page.evaluate(() => window.paperwall.editor.doc.pages[0].elements[0].text), say('de', 'newText.heading'));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('[APP-08] switching language while a design is opening leaves one editor', async () => {
+  const { page, context, errors } = await openApp();
+  const cdp = await context.newCDPSession(page);
+  const keyListeners = async () => {
+    const { result } = await cdp.send('Runtime.evaluate', { expression: 'document' });
+    return (await cdp.send('DOMDebugger.getEventListeners', { objectId: result.objectId })).listeners.filter((l) => l.type === 'keydown').length;
+  };
+  // The language changes just as the design starts opening.
+  await page.evaluate(async () => {
+    const opening = new Promise((ok) => window.addEventListener('hashchange', ok, { once: true }));
+    document.querySelector('[data-testid="preset-square"]').click();
+    await opening;
+    const pickLang = document.querySelector('[data-testid="language-select"]');
+    pickLang.value = 'de';
+    pickLang.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await waitForEditor(page);
+  await page.waitForFunction((w) => document.querySelector('[data-testid="download"]')?.textContent.trim() === w, say('de', 'common.download'));
+  await page.waitForTimeout(500); // (a second editor would be bound by now)
+  const switched = await keyListeners();
+  assert.equal(await page.locator('[data-testid="stage"]').count(), 1);
+  // Delete takes away the one element selected, once.
+  await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    const shape = (id, x) => ({ id, type: 'shape', shape: 'rect', x, y: 100, w: 100, h: 100, rotation: 0, opacity: 1, fill: '#336699' });
+    ed.change(() => ed.pageData.elements.push(shape('one', 100), shape('two', 300)));
+    ed.select(['two']);
+  });
+  await page.focus('[data-testid="stage"]');
+  await page.keyboard.press('Delete');
+  assert.deepEqual(await page.evaluate(() => window.paperwall.editor.pageData.elements.map((el) => el.id)), ['one']);
+  // As many key listeners as the same design opened the usual way.
+  await page.evaluate(() => window.paperwall.editor.flush());
+  await page.reload();
+  await waitForEditor(page);
+  await page.waitForTimeout(500);
+  assert.equal(switched, await keyListeners(), 'one editor listening to keys');
+  assert.deepEqual(await page.evaluate(() => window.paperwall.editor.pageData.elements.map((el) => el.id)), ['one']);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('[APP-08] templates are found by the words the language uses', async () => {
+  const { page, context, errors } = await openApp();
+  await pick(page, 'de');
+  // The words the "no match" hint suggests, in German, each finds templates.
+  await page.fill('[data-testid="home-template-search"]', 'zzzz');
+  await page.waitForSelector('[data-testid="home-templates"] .empty-note');
+  const hint = await page.textContent('[data-testid="home-templates"] .empty-note');
+  const words = [...hint.matchAll(/„([^“]+)“/g)].map((m) => m[1]);
+  assert.deepEqual(words, ['Sale', 'Einladung', 'Lebenslauf', 'Speisekarte']);
+  for (const word of [...words, 'Visitenkarte', 'Hochzeit', 'Geburtstag']) {
+    await page.fill('[data-testid="home-template-search"]', word);
+    await page.waitForFunction(() => !document.querySelector('[data-testid="home-templates"] .empty-note'));
+    assert.ok(await page.evaluate(() => document.querySelector('[data-testid="home-templates"]').children.length > 0), word);
+  }
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('[APP-08] a new document and whiteboard start in the language', async () => {
+  const { page, context, errors } = await openApp();
+  await pick(page, 'es');
+  await page.click('[data-testid="preset-doc"]');
+  await waitForEditor(page);
+  const texts = () => page.evaluate(() => window.paperwall.editor.doc.pages[0].elements.map((el) => el.text));
+  assert.deepEqual(await texts(), [say('es', 'common.untitledDoc'), say('es', 'newText.docBody')]);
+  await page.click('[data-testid="home-link"]');
+  await page.waitForSelector('[data-testid="presets"]');
+  await page.click('[data-testid="preset-whiteboard"]');
+  await page.waitForFunction(() => window.paperwall?.editor?.doc.board);
+  assert.deepEqual(await texts(), [say('es', 'newText.boardNote')]);
+  assert.equal(await page.evaluate(() => window.paperwall.editor.doc.name), say('es', 'common.untitledBoard'));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('[APP-08] switching language in the editor keeps the design as it is: undo, selection, page and view', async () => {
+  const { page, context, errors } = await newDesign('square');
+  await page.evaluate(() => window.paperwall.editor.addPage());
+  const el = await addText(page);
+  // Zoomed in and scrolled, the Shapes panel and the Layers tab open.
+  await openTab(page, 'shapes');
+  await page.click('[data-testid="tab-layers"]');
+  await page.evaluate(() => window.paperwall.editor.setZoom(1.7));
+  await page.evaluate(() => {
+    const stage = document.querySelector('[data-testid="stage"]');
+    stage.scrollLeft = 150;
+    stage.scrollTop = 120;
+  });
+  const view = () => page.evaluate(() => {
+    const stage = document.querySelector('[data-testid="stage"]');
+    return {
+      zoom: window.paperwall.editor.zoom,
+      left: Math.round(stage.scrollLeft),
+      top: Math.round(stage.scrollTop),
+      rail: document.querySelector('.rail [aria-current="true"]')?.dataset.tab,
+      collapsed: !!document.querySelector('.insert.collapsed'),
+      tab: document.querySelector('[role="tab"][aria-selected="true"]')?.dataset.tab,
+    };
+  });
+  const looked = await view();
+  assert.deepEqual([looked.zoom, looked.rail, looked.tab], [1.7, 'shapes', 'layers']);
+  assert.ok(looked.left > 0 && looked.top > 0, 'scrolled');
+  // Listeners on the window, the page and the editor: as many after as before (the old screen's go with it).
+  const cdp = await context.newCDPSession(page);
+  const listening = async () => {
+    const count = async (expression) => {
+      const { result } = await cdp.send('Runtime.evaluate', { expression });
+      return (await cdp.send('DOMDebugger.getEventListeners', { objectId: result.objectId })).listeners.length;
+    };
+    return { window: await count('window'), document: await count('document'), editor: await page.evaluate(() => window.paperwall.editor.listeners.size) };
+  };
+  const listeners = await listening();
+  const was = await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    window.editorBefore = ed;
+    return { page: ed.page, selection: ed.selection, versions: ed.versionAt };
+  });
+  assert.equal(was.page, 1);
+  await page.click('[data-testid="main"]');
+  await pick(page, 'es', 'menu-language');
+  await page.waitForFunction(() => document.activeElement?.dataset.testid === 'main');
+  const now = await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    return { same: ed === window.editorBefore, page: ed.page, selection: ed.selection, versions: ed.versionAt, canUndo: ed.history.canUndo };
+  });
+  assert.deepEqual(now, { ...was, same: true, canUndo: true });
+  assert.equal((await page.textContent('[data-testid="rail-text"]')).trim(), say('es', 'insert.tabText'));
+  assert.equal(await page.locator('[data-testid="page-thumb"]').count(), 2);
+  assert.deepEqual(await listening(), listeners);
+  assert.deepEqual(await view(), looked, 'zoom, scroll and open panels as they were');
+  // Undo still takes back the text just added, on the same page.
+  await page.click('[data-testid="undo"]');
+  assert.deepEqual(await page.evaluate((id) => {
+    const ed = window.paperwall.editor;
+    return [ed.page, !!ed.find(id)];
+  }, el.id), [1, false]);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('[APP-08] Arabic lays the interface out right to left; the page itself stays as designed', async () => {
+  const { page, context, errors } = await openApp();
+  await pick(page, 'ar');
+  assert.equal(await page.getAttribute('html', 'dir'), 'rtl');
+  assert.equal(await page.getAttribute('html', 'lang'), 'ar');
+  assert.match(await page.innerText('main'), new RegExp(say('ar', 'home.create')));
+  await page.click('[data-testid="preset-square"]');
+  await waitForEditor(page);
+  const box = (sel) => page.evaluate((s) => document.querySelector(s).getBoundingClientRect().toJSON(), sel);
+  const [rail, stage, inspector, name, download] = await Promise.all(['.rail', '[data-testid="stage"]', '[data-testid="inspector"]', '[data-testid="doc-name"]', '[data-testid="download"]'].map(box));
+  // Mirrored: the add rail on the right, properties on the left, Download at the left end of the top bar.
+  assert.ok(rail.left > stage.right - 1, 'the rail is right of the canvas');
+  assert.ok(inspector.right < stage.left + 1, 'the properties are left of the canvas');
+  assert.ok(download.right < name.left, 'Download comes after the name, reading right to left');
+  // The canvas and its rulers keep left to right: designs aren't mirrored.
+  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('[data-testid="stage"]')).direction), 'ltr');
+  // Text being edited reads whichever way it's written.
+  await addText(page);
+  assert.equal(await page.textContent('[data-testid="selection-title"]'), say('ar', 'type.text'));
+  assert.deepEqual(await audit(page), []);
+  assert.deepEqual(await rawKeys(page), []);
+  // Page numbers are written as Arabic writes numbers: the strip's badges and the presenter's count.
+  const ar = (n) => new Intl.NumberFormat('ar', { useGrouping: false }).format(n);
+  await page.evaluate(() => window.paperwall.editor.addPage());
+  await page.waitForFunction((two) => [...document.querySelectorAll('.page-no')].map((n) => n.textContent).join() === two, `${ar(1)},${ar(2)}`);
+  await page.click('[data-testid="present"]');
+  await page.waitForSelector('.slide-count');
+  const count = (await page.textContent('.slide-count')).replace(/[⁦-⁩]/g, '');
+  assert.ok([`${ar(1)} / ${ar(2)}`, `${ar(2)} / ${ar(2)}`].includes(count), count);
+  await page.keyboard.press('Escape');
+  // Back to English: left to right again.
+  await page.click('[data-testid="main"]');
+  await pick(page, 'en', 'menu-language');
+  await waitForEditor(page);
+  assert.equal(await page.getAttribute('html', 'dir'), 'ltr');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('[APP-08] numbers, dates and counts are written the local way', async () => {
+  const { page, context } = await openApp();
+  await pick(page, 'de');
+  // A thousands separator where German uses one.
+  await page.click('[data-testid="preset-square"]');
+  await waitForEditor(page);
+  await openTab(page, 'graphics');
+  assert.match(await page.getAttribute('[data-testid="insert-search"]', 'placeholder'), /\d\.\d{3} Symbole/);
+  // Plural forms: one page, two pages.
+  await page.click('[data-testid="page-grid-btn"]');
+  assert.match(await page.textContent('[data-testid="page-grid-dialog"] h2'), /\(1\)/);
+  await page.keyboard.press('Escape');
+  // A date in the version history, and "now" on the home screen.
+  await page.click('[data-testid="history-btn"]');
+  await page.waitForSelector('[data-testid="version"]');
+  assert.match(await page.textContent('[data-testid="version"] b'), /^Heute, \d{1,2}:\d{2}$/);
+  assert.ok((await page.textContent('[data-testid="version"] small')).includes(CATALOGS.de['common.pages'].one.replace('{n}', '1')));
+  await page.keyboard.press('Escape');
+  await page.click('[data-testid="home-link"]');
+  await page.waitForSelector('[data-testid="design-card"]');
+  assert.match(await page.textContent('[data-testid="design-card"] small'), /jetzt|vor \d+ Sek\./);
+  // Japanese has no plural: the same word for any number.
+  await pick(page, 'ja');
+  assert.match(await page.textContent('[data-testid="home-template-count"]'), /^\d+ 個のテンプレート$/);
+  await context.close();
+});
+
+test('[APP-08] every language covers the whole interface', async () => {
+  const { page, context, errors } = await openApp();
+  for (const { code } of LANGUAGES) {
+    await pick(page, code);
+    const main = await page.innerText('main');
+    for (const key of ['home.create', 'home.templates', 'home.yours']) assert.ok(main.includes(say(code, key)), `${code}: ${key}`);
+    assert.equal(await page.getAttribute('html', 'dir'), code === 'ar' ? 'rtl' : 'ltr');
+    assert.deepEqual(await rawKeys(page), [], code);
+  }
+  // And in the editor, each language's own words on every panel.
+  await pick(page, 'kn');
+  await page.click('[data-testid="preset-square"]');
+  await waitForEditor(page);
+  for (const tab of ['templates', 'text', 'shapes', 'graphics', 'uploads', 'charts', 'qr', 'brand']) {
+    await openTab(page, tab);
+    assert.equal((await page.textContent(`[data-testid="rail-${tab}"]`)).trim(), say('kn', `insert.tab${tab === 'qr' ? 'Qr' : tab[0].toUpperCase() + tab.slice(1)}`));
+    assert.deepEqual(await rawKeys(page), [], tab);
+  }
+  await page.click('[data-testid="shortcuts-btn"]');
+  assert.match(await page.innerText('[data-testid="shortcuts"]'), new RegExp(say('kn', 'shortcut.undo')));
+  await page.keyboard.press('Escape');
+  assert.deepEqual(errors, []);
+  await context.close();
+});

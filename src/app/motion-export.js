@@ -4,20 +4,23 @@
 // (WebCodecs) into files we put together ourselves.
 
 import { renderFrame } from '../model/render.js';
-import { timeline, frameAt, soundFade, animationsEnd, hasLoop, videosIn } from '../model/motion.js';
+import { timeline, frameAt, soundFade, animationsEnd, hasLoop, videosIn, animationOf } from '../model/motion.js';
+import { hasDefaultFilters } from '../model/doc.js';
+import { maskPath } from '../model/shapes.js';
 import { GifEncoder } from '../model/gif.js';
 import { buildWebmParts } from '../model/webm.js';
 import { buildMp4Parts } from '../model/mp4.js';
 import { measure, fontCssFor } from './fonts.js';
 import { loadImage } from './ui.js';
-import { VideoFrames, videosOn } from './media.js';
+import { VideoFrames, videosOn, shrinkPictures, pictureShares } from './media.js';
+import { t } from './i18n.js';
 
 /** A copy of what an encoder hands over as bytes (an ArrayBuffer or a view of one). */
 function bytesOf(d) {
   return ArrayBuffer.isView(d) ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength).slice() : new Uint8Array(d.slice(0));
 }
 
-const NO_AVC_DESCRIPTION = "This browser's MP4 encoder left out what players need. Try WebM instead.";
+const NO_AVC_DESCRIPTION = 'motion.noAvc';
 
 /** Frames per second for each kind of download. */
 export const FPS = { gif: 15, video: 30 };
@@ -38,7 +41,7 @@ export function frameSize(doc, kind, wanted = null) {
  */
 async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, readBack = false }, each) {
   const tl = timeline(doc0, pages);
-  if (!tl.parts.length) throw new Error('Pick at least one page.');
+  if (!tl.parts.length) throw new Error(t('export.pickPage'));
   // Big photos made only as big as the frames can show, once, rather than
   // decoded at full size for every frame.
   const doc = await fittedPictures(doc0, pages, width);
@@ -55,43 +58,90 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
   const videos = videosOn(doc, pages).length ? new VideoFrames(doc) : null;
   let last = null; // the last frame's picture, as SVG: a still moment isn't drawn again
   let lastIndex = -1; // the page the last frame showed, settled (nothing on it can change), or -1
-  const settleAt = new Map(); // page index → when it's settled (Infinity if it never is)
-  const settledAt = (index) => {
-    if (!settleAt.has(index)) {
+  // Page index → { still: when its animations are over, settled: when
+  // nothing on it moves, videos included } (Infinity if never).
+  const timesOf = new Map();
+  const pageTimes = (index) => {
+    if (!timesOf.has(index)) {
       // Never with a loop; with videos that play once, when the last has ended.
       const page = doc.pages[index];
-      let at = hasLoop(page) ? Infinity : animationsEnd(page);
+      const still = hasLoop(page) ? Infinity : animationsEnd(page);
+      let settled = still;
       for (const el of videosIn(page, doc.assets)) {
         const length = doc.assets[el.assetId].duration || 0;
-        at = Math.max(at, el.loop === false && length > 0 ? Math.max(0, length - (el.trim?.start || 0)) + 0.1 : Infinity);
+        settled = Math.max(settled, el.loop === false && length > 0 ? Math.max(0, length - (el.trim?.start || 0)) + 0.1 : Infinity);
       }
-      settleAt.set(index, at);
+      timesOf.set(index, { still, settled });
     }
-    return settleAt.get(index);
+    return timesOf.get(index);
   };
   const onPage = new Map(); // page index → its videos (worked out once)
   const videosOf = (index) => {
     if (!onPage.has(index)) onPage.set(index, videosOn(doc, [index]));
     return onPage.get(index);
   };
+  // Once only its videos move, a page is drawn from layers: what's between
+  // its videos, drawn once, and each video's picture straight from its player.
+  const layered = new Map(); // page index → its layers, or null (drawn whole each frame)
+  // A page's layers go once frames move past it (pages come one after another).
+  const release = (keep = -1) => {
+    for (const [index, layers] of layered) {
+      if (index === keep) continue;
+      for (const layer of layers?.list || []) {
+        if (layer.canvas) layer.canvas.width = layer.canvas.height = 0;
+      }
+      layered.delete(index);
+    }
+  };
+  const layersOf = async (frame) => {
+    release(frame.index);
+    if (frame.from || frame.local < pageTimes(frame.index).still) return null;
+    // (Drawn at the first such moment: the same at any later one.)
+    if (!layered.has(frame.index)) layered.set(frame.index, await stillLayers(doc, frame, { fontCss, width, height }));
+    return layered.get(frame.index);
+  };
   try {
     for (let i = 0; i < count; i++) {
       if (signal?.aborted) throw new Error('Stopped');
-      const t = i / fps;
-      const frame = frameAt(doc, tl, t);
+      const time = i / fps;
+      const frame = frameAt(doc, tl, time);
       // A settled page shown again: the same picture, without drawing it.
-      const settled = !frame.from && frame.local >= settledAt(frame.index);
+      const settled = !frame.from && frame.local >= pageTimes(frame.index).settled;
       if (settled && lastIndex === frame.index) {
-        await each(canvas, ctx, i, t, true);
+        await each(canvas, ctx, i, time, true);
         onProgress?.((i + 1) / count);
         continue;
+      }
+      const layers = videos ? await layersOf(frame) : null;
+      let ready = null; // video id → whether its player is at this frame already (tried for the layers)
+      if (layers) {
+        const players = await Promise.all(layers.videos.map((el) => videos.at(el, frame.local)));
+        ready = new Map(layers.videos.map((el, k) => [el.id, !!players[k]]));
+        // (A video that can't be followed here shows its still: the whole frame drawn, below.)
+        if (players.every(Boolean)) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, width, height);
+          let k = 0;
+          for (const layer of layers.list) {
+            if (layer.el) drawVideo(ctx, players[k++], layer.el, width / doc.width, height / doc.height);
+            else ctx.drawImage(layer.canvas, 0, 0, width, height);
+          }
+          last = null;
+          lastIndex = settled ? frame.index : -1;
+          await each(canvas, ctx, i, time, false);
+          onProgress?.((i + 1) / count);
+          continue;
+        }
       }
       const pictures = new Map();
       if (videos) {
         // Each video has its own player: they all seek at once.
         const wanted = [[frame.index, frame.local], ...(frame.from ? [[frame.from.index, frame.from.local]] : [])]
           .flatMap(([index, local]) => videosOf(index).map((el) => [el, local]));
-        const got = await Promise.all(wanted.map(([el, local]) => videos.seek(el, local, width / doc.width)));
+        // (Not sent there again when it was just tried: there already, or stuck and showing its poster.)
+        const got = await Promise.all(wanted.map(([el, local]) => (ready?.has(el.id) && local === frame.local
+          ? (ready.get(el.id) ? videos.picture(el, width / doc.width) : null)
+          : videos.seek(el, local, width / doc.width))));
         wanted.forEach(([el], k) => pictures.set(el.id, got[k]));
       }
       // Drawn at the frame's own size, not the design's (a print-size page needn't be rasterized big).
@@ -100,10 +150,11 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
       if (!same) await drawFrame(svg, { ctx, width, height });
       last = svg;
       lastIndex = settled ? frame.index : -1;
-      await each(canvas, ctx, i, t, same);
+      await each(canvas, ctx, i, time, same);
       onProgress?.((i + 1) / count);
     }
   } finally {
+    release();
     videos?.dispose();
   }
   return { count, total: tl.total, stuck: !!videos?.stuck };
@@ -116,70 +167,100 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
  * keeps its pictures.
  */
 async function fittedPictures(doc, pages, width) {
-  const scale = width / doc.width;
-  // How big each picture shows, as a share of its own size (its biggest use).
-  const share = new Map();
-  const use = (id, w, h) => {
-    const a = doc.assets[id];
-    if (!a?.width || !a?.height) return share.set(id, Infinity);
-    share.set(id, Math.max(share.get(id) || 0, (w * scale) / a.width, (h * scale) / a.height));
-  };
-  const walk = (els) => {
-    for (const el of els) {
-      if (el.type === 'image' && el.assetId) use(el.assetId, el.w / (el.crop?.w || 1), el.h / (el.crop?.h || 1));
-      if (el.type === 'video' && el.still) use(el.still, el.w / (el.crop?.w || 1), el.h / (el.crop?.h || 1));
-      if (el.type === 'group') walk(el.children);
-    }
-  };
-  for (const i of pages) {
-    const page = doc.pages[i];
-    walk(page.elements);
-    if (page.background?.type === 'image') use(page.background.assetId, doc.width, doc.height);
-  }
-  const assets = { ...doc.assets };
-  // (Two at a time: quicker than one by one, without every big photo
-  // decoded at full size at once.)
-  const queue = [...share];
-  const next = async () => {
-    for (let item = queue.shift(); item; item = queue.shift()) await shrink(item);
-  };
-  const shrink = async ([id, part]) => {
-    const a = doc.assets[id];
-    const s = part * 1.25;
-    if (!(s < 0.9) || typeof a?.dataUrl !== 'string' || a.dataUrl.startsWith('data:image/svg')) return;
-    try {
-      const img = await loadImage(a.dataUrl);
-      const c = document.createElement('canvas');
-      c.width = Math.max(1, Math.round(img.naturalWidth * s));
-      c.height = Math.max(1, Math.round(img.naturalHeight * s));
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      // (Pictures that may be see-through stay PNG.)
-      const clear = !/^data:image\/jpe?g/.test(a.dataUrl); // (only JPEGs are never see-through)
-      assets[id] = { ...a, dataUrl: c.toDataURL(clear ? 'image/png' : 'image/jpeg', 0.92), width: c.width, height: c.height };
-    } catch {
-      /* kept as it is */
-    }
-  };
-  await Promise.all([next(), next()]);
-  return { ...doc, assets };
+  const shares = pictureShares(doc, pages, width / doc.width);
+  // (A little bigger than it shows, for smooth scaling.)
+  return shrinkPictures(doc, new Map([...shares].map(([id, share]) => [id, share * 1.25])));
 }
 
-/** One frame (the page(s) at their moment, as SVG) into the canvas. */
-async function drawFrame(svg, { ctx, width, height }) {
+/** One frame (the page(s) at their moment, as SVG) into the canvas (on white, unless `clear`). */
+async function drawFrame(svg, { ctx, width, height, clear = false }) {
   const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
   try {
     const img = await loadImage(url);
     if (img.decode) await img.decode().catch(() => null);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, width, height);
+    if (!clear) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+    }
     ctx.drawImage(img, 0, 0, width, height);
   } finally {
     URL.revokeObjectURL(url);
   }
 }
 
+/** Whether a video is drawn just as a picture is: no filters, shadow or animation of its own (those need the whole frame drawn). */
+function plainVideo(page, el) {
+  return hasDefaultFilters(el) && !el.shadow && !animationOf(page, el);
+}
+
+/**
+ * A page at a moment when only its videos move (its animations are over,
+ * and none loop), as layers: what's below, between and above its videos,
+ * each drawn once, with its videos in between. { videos, list: [{ canvas }
+ * | { el }] }, or null when it can't be drawn so (a video in a group, or
+ * with filters).
+ */
+async function stillLayers(doc, frame, { fontCss, width, height }) {
+  const page = doc.pages[frame.index];
+  const videos = page.elements.filter((el) => el.type === 'video' && !el.hidden && doc.assets[el.assetId]);
+  if (!videos.length || videosIn(page, doc.assets).length !== videos.length || !videos.every((el) => plainVideo(page, el))) return null;
+  const list = [];
+  let run = [];
+  const flush = async () => {
+    if (!run.length) return;
+    const shown = new Set(run.map((el) => el.id));
+    const skip = new Set(page.elements.filter((el) => !shown.has(el.id)).map((el) => el.id));
+    const svg = renderFrame(doc, frame, { measure, fontCss, scale: width / doc.width, idPrefix: `ly${list.length}`, skip, transparent: list.length > 0 });
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    await drawFrame(svg, { ctx: canvas.getContext('2d'), width, height, clear: true });
+    list.push({ canvas });
+    run = [];
+  };
+  for (const el of page.elements) {
+    if (!videos.includes(el)) run.push(el);
+    else {
+      await flush();
+      // (The white and the page's background always come first.)
+      if (!list.length) list.push({ canvas: await backdrop(doc, frame, { fontCss, width, height }) });
+      list.push({ el });
+    }
+  }
+  await flush();
+  return { videos, list };
+}
+
+/** Just the white and the page's background. */
+async function backdrop(doc, frame, { fontCss, width, height }) {
+  const page = doc.pages[frame.index];
+  const svg = renderFrame(doc, frame, { measure, fontCss, scale: width / doc.width, idPrefix: 'lyb', skip: new Set(page.elements.map((el) => el.id)) });
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  await drawFrame(svg, { ctx: canvas.getContext('2d'), width, height });
+  return canvas;
+}
+
+/** A video's picture straight onto the frame: placed, turned, cropped and clipped to its shape as the renderer does. `kx`, `ky`: frame px per page px across and down (the frame is rounded to even sizes, as the layers are stretched to). */
+function drawVideo(ctx, v, el, kx, ky) {
+  const crop = el.crop || { x: 0, y: 0, w: 1, h: 1 };
+  const iw = el.w / crop.w;
+  const ih = el.h / crop.h;
+  ctx.save();
+  ctx.scale(kx, ky);
+  ctx.translate(el.x + el.w / 2, el.y + el.h / 2);
+  if (el.rotation) ctx.rotate((el.rotation * Math.PI) / 180);
+  ctx.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
+  ctx.translate(-el.w / 2, -el.h / 2);
+  ctx.globalAlpha = el.opacity ?? 1;
+  ctx.clip(new Path2D(maskPath(el)));
+  ctx.drawImage(v, -crop.x * iw, -crop.y * ih, iw, ih);
+  ctx.restore();
+}
+
 /** The design as an animated GIF. */
-const STUCK = "A video couldn't be followed frame by frame in this browser: from where it stopped, its still picture shows.";
+const STUCK = 'motion.stuck';
 
 export async function exportGif(doc, pages, { size = null, onProgress, onNote, signal } = {}) {
   const { width, height } = frameSize(doc, 'gif', size);
@@ -188,11 +269,11 @@ export async function exportGif(doc, pages, { size = null, onProgress, onNote, s
   // GIF delays are whole hundredths of a second: each frame gets its share of
   // the clock, rounded, so the whole GIF keeps time (no drift).
   const at = (i) => Math.round((i * 100) / fps) * 10;
-  const { stuck } = await eachFrame(doc, pages, { fps, width, height, onProgress, signal, readBack: true }, (canvas, ctx, i, t, same) => {
+  const { stuck } = await eachFrame(doc, pages, { fps, width, height, onProgress, signal, readBack: true }, (canvas, ctx, i, time, same) => {
     if (same && i > 0) return gif.hold(at(i + 1) - at(i));
     gif.add(ctx.getImageData(0, 0, width, height).data, at(i + 1) - at(i));
   });
-  if (stuck) onNote?.(STUCK);
+  if (stuck) onNote?.(t(STUCK));
   return new Blob([gif.finish()], { type: 'image/gif' });
 }
 
@@ -238,10 +319,10 @@ async function pickVideoCodec(container, width, height) {
  * anything left out (a soundtrack this browser can't encode).
  */
 export async function exportVideo(doc, pages, { container = 'mp4', size = null, audio = null, volume = 1, onProgress, onNote, signal } = {}) {
-  if (!canMakeVideo()) throw new Error("This browser can't make videos. Try a recent Chrome, Edge, Safari or Firefox.");
+  if (!canMakeVideo()) throw new Error(t('export.noVideo'));
   const { width, height } = frameSize(doc, 'video', size);
   const pick = await pickVideoCodec(container, width, height);
-  if (!pick) throw new Error(`This browser can't make ${container.toUpperCase()} videos. Try ${container === 'mp4' ? 'WebM' : 'MP4'} instead.`);
+  if (!pick) throw new Error(t('motion.noFormat', { format: container.toUpperCase(), other: container === 'mp4' ? 'WebM' : 'MP4' }));
   // The soundtrack is decoded only now that the video can be made.
   if (typeof audio === 'function') audio = await audio();
   const fps = FPS.video;
@@ -270,7 +351,7 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
       await drain(encoder, 4);
       // H.264 for MP4 needs the encoder's description, which comes with its
       // first output: without it, say so now rather than after every frame.
-      if (pick.codec === 'avc' && chunks.length && !description) throw new Error(NO_AVC_DESCRIPTION);
+      if (pick.codec === 'avc' && chunks.length && !description) throw new Error(t(NO_AVC_DESCRIPTION));
     }));
     // (An encoder that failed at the very end has closed: its own error says why.)
     if (failure) throw failure;
@@ -282,8 +363,8 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
     if (encoder.state !== 'closed') encoder.close();
   }
   if (failure) throw failure;
-  if (pick.codec === 'avc' && !description) throw new Error(NO_AVC_DESCRIPTION);
-  if (stuck) onNote?.(STUCK);
+  if (pick.codec === 'avc' && !description) throw new Error(t(NO_AVC_DESCRIPTION));
+  if (stuck) onNote?.(t(STUCK));
   let sound = null;
   if (audio) {
     // The pictures are done: a sound that won't encode leaves a silent video, not nothing.
@@ -291,7 +372,7 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
       if (signal?.aborted) throw e;
       return null;
     });
-    if (!sound) onNote?.("The soundtrack couldn't be encoded here, so the video is silent.");
+    if (!sound) onNote?.(t('motion.silent'));
   }
   const video = { codec: pick.codec, codecString: pick.codecString, width, height, description, chunks };
   const parts = container === 'mp4' ? buildMp4Parts({ video, audio: sound, duration: total }) : buildWebmParts({ video, audio: sound, duration: total });

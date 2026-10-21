@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createDesign, createDesignFromPreset, createText, createShape, createImage, createGroup, PRESETS,
-  toPx, fromPx, addAsset, keptAssets, validateDesign, clone,
+  toPx, fromPx, addAsset, keptAssets, validateDesign, clone, hasDefaultFilters, DEFAULT_FILTERS,
 } from '../../src/model/doc.js';
 import {
   addElement, moveElements, deleteElements, duplicateElements, copyElements, pasteElements, reorder,
@@ -56,6 +56,15 @@ test('[DOC-09] a saved design survives a round trip through JSON', () => {
   assert.equal(back.pages[0].elements[0].text, 'Hello');
   assert.throws(() => validateDesign({ version: 99 }), /Unsupported/);
   assert.throws(() => validateDesign(null), /not a Paperwall design/);
+  // A file that doesn't say when it was made or changed: now, then.
+  const bare = JSON.parse(JSON.stringify(doc));
+  delete bare.updatedAt;
+  bare.createdAt = 'yesterday';
+  const t0 = Date.now();
+  const fixed = validateDesign(bare);
+  assert.ok(fixed.updatedAt >= t0 && fixed.createdAt === fixed.updatedAt);
+  const kept = validateDesign(JSON.parse(JSON.stringify(doc)));
+  assert.deepEqual([kept.createdAt, kept.updatedAt], [doc.createdAt, doc.updatedAt]);
 });
 
 test('[SEL-05] moving skips locked elements', () => {
@@ -661,4 +670,25 @@ test('[DOC-09] opening a file, a repeated element id gets a new one and its conn
   assert.notEqual(renamedId, 'same');
   assert.equal(doc.pages[0].elements[0].id, 'same');
   assert.equal(doc.pages[1].elements[1].start.id, renamedId);
+});
+
+test('a blank design takes its name (and a document its title) in other words', () => {
+  const doc = createDesignFromPreset('doc', { name: 'Unbenanntes Dokument', title: 'Unbenanntes Dokument', body: 'Hier schreiben.' });
+  assert.equal(doc.name, 'Unbenanntes Dokument');
+  assert.deepEqual(doc.pages[0].elements.map((el) => el.text), ['Unbenanntes Dokument', 'Hier schreiben.']);
+  const board = createDesignFromPreset('whiteboard', { name: 'Tableau', note: 'Les idées vont ici' });
+  assert.deepEqual([board.name, board.pages[0].elements[0].text], ['Tableau', 'Les idées vont ici']);
+  assert.equal(createDesignFromPreset('whiteboard').pages[0].elements[0].text, 'Ideas go here');
+  assert.equal(createDesignFromPreset('square', { name: 'Sin título' }).name, 'Sin título');
+  // Without: English, as before.
+  assert.equal(createDesignFromPreset('doc').pages[0].elements[0].text, 'Untitled document');
+  assert.equal(createDesignFromPreset('square').name, 'Untitled design');
+});
+
+test('hasDefaultFilters: none set, or each at its default', () => {
+  assert.ok(hasDefaultFilters({}));
+  assert.ok(hasDefaultFilters({ filters: { ...DEFAULT_FILTERS } }));
+  assert.ok(hasDefaultFilters({ filters: { brightness: 100, duotone: undefined } }));
+  assert.ok(!hasDefaultFilters({ filters: { ...DEFAULT_FILTERS, blur: 2 } }));
+  assert.ok(!hasDefaultFilters({ filters: { duotone: { dark: '#000000', light: '#ffffff' } } }));
 });

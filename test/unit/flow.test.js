@@ -162,3 +162,48 @@ test('[DW-04] a whiteboard grows for a thing turned out past its edge', () => {
   const moved = growBoard(doc);
   assert.ok(moved?.dy > 0, 'grew on top');
 });
+
+test('[APP-07] a 300-block document reflows after a one-block edit by measuring just that block', () => {
+  const doc = createDesignFromPreset('doc');
+  const page = doc.pages[0];
+  page.elements = Array.from({ length: 300 }, (_, i) => createText({ ...DOC_STYLES.body, text: `Paragraph ${i}. ${'Words that wrap over a few lines. '.repeat(6)}`, y: i }));
+  let calls = 0;
+  const counted = (text, el) => {
+    calls++;
+    return approxMeasure(text, el);
+  };
+  flowDocument(doc, counted);
+  const all = calls;
+  // What one block takes to measure, on its own.
+  const one = page.elements[150];
+  calls = 0;
+  layoutText({ ...one, text: `${one.text} and more` }, counted);
+  const single = calls;
+  // Its words change: just that block is measured again, and the rest move down.
+  const below = page.elements[151].y;
+  one.text += ' and more';
+  calls = 0;
+  flowDocument(doc, counted);
+  assert.ok(calls <= single, `${calls} measures for the edit (${single} for one block, ${all} for all 300)`);
+  assert.ok(all > single * 250);
+  assert.ok(page.elements[151].y >= below);
+  // A new size for the first block: just that one again.
+  page.elements[0].size = 30;
+  calls = 0;
+  flowDocument(doc, counted);
+  assert.ok(calls > 0 && calls <= single * 2, `${calls} measures after a new size`);
+  // Nothing changed: nothing measured.
+  calls = 0;
+  flowDocument(doc, counted);
+  assert.equal(calls, 0);
+  // Laid out just as it would be from scratch.
+  const fresh = JSON.parse(JSON.stringify(doc));
+  flowDocument(fresh, approxMeasure);
+  assert.deepEqual(fresh.pages[0].elements.map((e) => [e.x, e.y, e.w, e.h]), page.elements.map((e) => [e.x, e.y, e.w, e.h]));
+  assert.equal(fresh.height, doc.height);
+  // A new width: every block again.
+  doc.width = 1000;
+  calls = 0;
+  flowDocument(doc, counted);
+  assert.ok(calls >= all * 0.9, `${calls} measures for a new width`);
+});

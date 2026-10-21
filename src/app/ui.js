@@ -1,5 +1,7 @@
 // Small DOM helpers and the app's own interface icons.
 
+import { t } from './i18n.js';
+
 export function h(tag, attrs, ...children) {
   const el = document.createElement(tag);
   if (attrs) {
@@ -110,6 +112,7 @@ const UI_ICONS = {
   dup: '<rect x="4" y="4" width="11" height="11" rx="1.5"/><path d="M9 20h10a1 1 0 0 0 1-1V9"/>',
   more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
   search: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/>',
+  globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c-2.6 2.4-3.6 5.3-3.6 8.5s1 6.1 3.6 8.5M12 3.5c2.6 2.4 3.6 5.3 3.6 8.5s-1 6.1-3.6 8.5"/>',
   chart: '<path d="M4 20V4M4 20h16"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/>',
 };
 
@@ -154,6 +157,11 @@ export function debounce(fn, ms) {
     t = null;
     return fn();
   };
+  /** Drop a call that's waiting. */
+  wrapped.cancel = () => {
+    clearTimeout(t);
+    t = null;
+  };
   /** Run now only if a call is waiting. */
   wrapped.flushPending = () => {
     if (t === null) return Promise.resolve();
@@ -164,37 +172,94 @@ export function debounce(fn, ms) {
 
 // ---------- toasts and dialogs ----------
 
-export function toast(message, kind = 'info') {
+/**
+ * The page's live regions, made at start so screen readers are listening
+ * before anything is said: toasts, and quieter notes (what's selected).
+ */
+export function liveRegions() {
   let host = document.getElementById('toasts');
   if (!host) {
     host = h('div', { id: 'toasts', role: 'status', 'aria-live': 'polite' });
     document.body.append(host);
   }
-  const t = h('div', { class: `toast ${kind}` }, message);
-  host.append(t);
-  setTimeout(() => t.classList.add('out'), 2600);
-  setTimeout(() => t.remove(), 3000);
+  let note = document.getElementById('announcer');
+  if (!note) {
+    note = h('div', { id: 'announcer', class: 'sr-only', role: 'status', 'aria-live': 'polite', 'data-testid': 'announcer' });
+    document.body.append(note);
+  }
+  return { host, note };
+}
+
+export function toast(message, kind = 'info') {
+  const { host } = liveRegions();
+  // (An error is said at once, over whatever else is being read.)
+  const item = h('div', { class: `toast ${kind}`, role: kind === 'error' ? 'alert' : null }, message);
+  host.append(item);
+  setTimeout(() => item.classList.add('out'), 2600);
+  setTimeout(() => item.remove(), 3000);
+}
+
+/** Tell screen reader users about a change away from where they are. */
+export function announce(message) {
+  const { note } = liveRegions();
+  // (The same words twice are still said twice: emptied first.)
+  note.textContent = '';
+  setTimeout(() => (note.textContent = message), 30);
+}
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** What Tab can reach inside `root`, in order (shown ones only). */
+export function focusables(root) {
+  return [...root.querySelectorAll(FOCUSABLE)].filter((el) => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden');
 }
 
 /**
  * A modal dialog. Returns { el, close }. `steady()`: while it says so, a
  * click beside the dialog doesn't close it (Close and Escape still do).
+ * Tab stays inside it, and closing it puts focus back where it was.
  */
+// The button of a menu that just closed from inside (focus is on the page
+// then): a dialog opened from that menu gives focus back to it. Forgotten
+// once focus goes anywhere.
+let menuOpener = null;
+export function menuClosed(btn) {
+  menuOpener = btn;
+  document.addEventListener('focusin', () => (menuOpener = null), { once: true });
+}
+
 export function dialog(title, body, { onClose, wide = false, testid, steady = null } = {}) {
+  const active = document.activeElement;
+  const opener = active && active !== document.body ? active : menuOpener;
   const backdrop = h('div', { class: 'backdrop' });
+  let closed = false;
   const close = () => {
+    if (closed) return;
+    closed = true;
     backdrop.remove();
     document.removeEventListener('keydown', onKey, true);
     onClose?.();
+    // Back to what opened it, if it's still there and nothing else took focus.
+    const now = document.activeElement;
+    if (opener?.isConnected && opener !== document.body && (!now || now === document.body)) opener.focus();
   };
   const onKey = (e) => {
+    // Only the dialog on top listens (another may have opened over this one).
+    if ([...document.querySelectorAll('.backdrop')].at(-1) !== backdrop) return;
     if (e.key === 'Escape') {
       e.stopPropagation();
       close();
+    } else if (e.key === 'Tab') {
+      const items = focusables(box);
+      if (!items.length) return;
+      const at = items.indexOf(document.activeElement);
+      const next = e.shiftKey ? (at <= 0 ? items.length - 1 : at - 1) : (at < 0 || at === items.length - 1 ? 0 : at + 1);
+      e.preventDefault();
+      items[next].focus();
     }
   };
   const box = h('div', { class: `dialog${wide ? ' wide' : ''}`, role: 'dialog', 'aria-modal': 'true', 'aria-label': title, 'data-testid': testid },
-    h('header', null, h('h2', null, title), iconButton('close', 'Close', close)),
+    h('header', null, h('h2', null, title), iconButton('close', t('common.close'), close)),
     h('div', { class: 'dialog-body' }, body));
   backdrop.append(box);
   backdrop.addEventListener('pointerdown', (e) => {
@@ -202,7 +267,7 @@ export function dialog(title, body, { onClose, wide = false, testid, steady = nu
   });
   document.addEventListener('keydown', onKey, true);
   document.body.append(backdrop);
-  const first = box.querySelector('input, select, button:not(.icon-btn)');
+  const first = box.querySelector('input, select, button:not(.icon-btn)') || box.querySelector('button');
   first?.focus();
   return { el: box, close };
 }
@@ -258,7 +323,7 @@ export function loadImage(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('That image could not be opened'));
+    img.onerror = () => reject(new Error(t('error.imageOpen')));
     img.src = src;
   });
 }
@@ -275,7 +340,7 @@ export function canvasScale(w, h, wanted) {
 }
 
 export function toBlob(canvas, type, quality) {
-  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Export failed: the image is too large for this browser'))), type, quality));
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error(t('export.tooLarge')))), type, quality));
 }
 
 export async function blobBytes(blob) {
@@ -332,10 +397,10 @@ export function lazily(el, fn) {
   observer.observe(el);
 }
 
-/** Stop waiting on everything inside root, before it is thrown away. */
+/** Stop waiting on root and everything inside it, before it is thrown away. */
 export function forget(root) {
   if (!observer) return;
-  for (const el of root.querySelectorAll('[data-lazy]')) {
+  for (const el of [root, ...root.querySelectorAll('[data-lazy]')]) {
     observer.unobserve(el);
     pending.delete(el);
   }

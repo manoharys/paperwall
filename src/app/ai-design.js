@@ -9,14 +9,16 @@ import { DESIGN_SIZES, designPrompt, parseJsonReply, designSpecs, specFonts, des
 import { presetById } from '../model/doc.js';
 import { renderPage } from '../model/render.js';
 import { ensureFont, measure } from './fonts.js';
+import { t } from './i18n.js';
+import { presetName } from './names.js';
 
 /** The "Describe a design" block for the home screen. `newDesign(doc, opts)` opens a design. */
 export function aiDesignBlock({ newDesign }) {
-  const text = h('textarea', { rows: '2', maxlength: '1000', placeholder: 'For example: a poster for a bake sale on Saturday, in pastel colors', 'aria-label': 'Describe a design', 'data-testid': 'ai-design-prompt' });
-  const size = h('select', { 'aria-label': 'Size', 'data-testid': 'ai-design-size' }, DESIGN_SIZES.map((p) => h('option', { value: p.id }, p.name)));
+  const text = h('textarea', { rows: '2', maxlength: '1000', placeholder: t('aiDesign.placeholder'), 'aria-label': t('aiDesign.title'), 'data-testid': 'ai-design-prompt' });
+  const size = h('select', { 'aria-label': t('common.size'), 'data-testid': 'ai-design-size' }, DESIGN_SIZES.map((p) => h('option', { value: p.id }, presetName(p))));
   size.value = 'portrait';
-  const count = h('select', { 'aria-label': 'How many', 'data-testid': 'ai-design-count' }, h('option', { value: '1' }, 'One design'), h('option', { value: '3' }, 'Three to pick from'));
-  const go = h('button', { type: 'submit', class: 'btn primary', 'data-testid': 'ai-design-go' }, 'Make it');
+  const count = h('select', { 'aria-label': t('aiDesign.howMany'), 'data-testid': 'ai-design-count' }, h('option', { value: '1' }, t('aiDesign.one')), h('option', { value: '3' }, t('aiDesign.three')));
+  const go = h('button', { type: 'submit', class: 'btn primary', 'data-testid': 'ai-design-go' }, t('aiDesign.go'));
   const status = h('div', { class: 'ai-status', 'data-testid': 'ai-design-status' });
   let controller = null;
 
@@ -38,8 +40,8 @@ export function aiDesignBlock({ newDesign }) {
     go.disabled = true;
     say(h('div', { class: 'ai-progress', role: 'status', 'data-testid': 'ai-design-progress' },
       h('span', { class: 'ai-spinner', 'aria-hidden': 'true' }),
-      h('span', null, `Designing with ${PROVIDERS[providerId].name}…`),
-      h('button', { type: 'button', class: 'btn small', 'data-testid': 'ai-design-cancel', onClick: () => job.abort() }, 'Cancel')));
+      h('span', null, t('aiDesign.working', { name: PROVIDERS[providerId].name })),
+      h('button', { type: 'button', class: 'btn small', 'data-testid': 'ai-design-cancel', onClick: () => job.abort() }, t('common.cancel'))));
     try {
       const { system, prompt } = designPrompt(description, { width: preset.w, height: preset.h, count: n });
       const answer = await complete({ feature: 'design', system, prompt, json: true, maxTokens: n > 1 ? 8000 : 4000, signal: job.signal });
@@ -49,9 +51,9 @@ export function aiDesignBlock({ newDesign }) {
       if (job.signal.aborted) throw new DOMException('Stopped', 'AbortError');
       const docs = designsFromReply(answer, { preset: preset.id, measure, description });
       if (docs.length === 1) return newDesign(docs[0], { fit: true });
-      say(h('p', { class: 'hint' }, 'Pick one to open. Everything in it can be changed.'),
+      say(h('p', { class: 'hint' }, t('aiDesign.pick')),
         h('div', { class: 'ai-choices', 'data-testid': 'ai-design-choices' }, docs.map((doc, i) => h('button', {
-          type: 'button', class: 'ai-choice', 'aria-label': `Open design ${i + 1}: ${doc.name}`, 'data-testid': 'ai-design-choice',
+          type: 'button', class: 'ai-choice', 'aria-label': t('aiDesign.open', { n: i + 1, name: doc.name }), 'data-testid': 'ai-design-choice',
           onClick: () => newDesign(doc, { fit: true }),
         }, h('span', { class: 'ai-choice-img', style: { aspectRatio: `${doc.width} / ${doc.height}` }, html: renderPage(doc, 0, { measure, noSize: true, idPrefix: `ai${i}-` }) }), h('small', null, doc.name)))));
     } catch (e) {
@@ -65,15 +67,15 @@ export function aiDesignBlock({ newDesign }) {
   };
 
   return h('section', { class: 'block', 'data-testid': 'ai-design' },
-    h('div', { class: 'block-head' }, h('h2', null, 'Describe a design'),
+    h('div', { class: 'block-head' }, h('h2', null, t('aiDesign.title')),
       h('button', { type: 'button', class: 'link-btn', 'data-testid': 'ai-design-settings', onClick: () => {
         controller?.abort(); // (a design on its way stops first: its Cancel is about to go)
         say(aiSetup('design', { onDone: () => say(), onCancel: () => say() }));
-      } }, 'AI setup')),
+      } }, t('ai.setup'))),
     h('form', { class: 'ai-design-form', onSubmit: (e) => {
       e.preventDefault();
       if (!controller) make();
     } }, text, h('div', { class: 'row' }, size, count, go)),
-    h('p', { class: 'fine' }, 'An online extra: your description goes to the AI provider you pick, with your own key. You get an ordinary design to edit.'),
+    h('p', { class: 'fine' }, t('aiDesign.fine')),
     status);
 }

@@ -4,32 +4,48 @@ import { h, icon, iconButton, clear, debounce, dialog, toast, lazily, forget, pr
 import { renderPage, renderFrame } from '../model/render.js';
 import { animationsEnd, keepsMoving, hasLoop, soundFade, pageDuration, pageFrame, transitionOf, timeline } from '../model/motion.js';
 import { VideoFrames, videosOn, blobUrlFor } from './media.js';
-import { measure, fontCssFor } from './fonts.js';
-import { visiblePages, pageName, pageLabel, soundtrackOf } from '../model/doc.js';
+import { measure, measureVersion, fontCssFor } from './fonts.js';
+import { visiblePages, soundtrackOf, hasDefaultFilters } from '../model/doc.js';
+import { boundsOf, rectsIntersect } from '../model/geometry.js';
+import { t, formatNumber, ltr } from './i18n.js';
+import { pageName, pageLabel } from './names.js';
 
 export class PageStrip {
   constructor(editor, canvas) {
     this.ed = editor;
     this.canvas = canvas;
     this.list = h('ol', { class: 'page-list', 'data-testid': 'page-strip' });
-    this.zoomLabel = h('button', { type: 'button', class: 'zoom-label', title: 'Zoom to fit', 'data-testid': 'zoom-label', onClick: () => canvas.zoomToFit() }, '100%');
+    this.zoomLabel = h('button', { type: 'button', class: 'zoom-label', title: t('zoom.fit'), 'data-testid': 'zoom-label', onClick: () => canvas.zoomToFit() }, '100%');
     this.el = h('footer', { class: 'pages-bar' },
       this.list,
-      iconButton('plus', 'Add page', () => editor.addPage(), { 'data-testid': 'strip-add-page' }),
-      iconButton('grid', 'All pages in a grid', () => pageGrid(editor, canvas), { 'data-testid': 'page-grid-btn' }),
+      iconButton('plus', t('pages.add'), () => editor.addPage(), { 'data-testid': 'strip-add-page' }),
+      iconButton('grid', t('pages.grid'), () => pageGrid(editor, canvas), { 'data-testid': 'page-grid-btn' }),
       h('div', { class: 'zoom' },
-        iconButton('minus', 'Zoom out', () => canvas.zoomBy(1 / 1.25), { 'data-testid': 'zoom-out' }),
+        iconButton('minus', t('zoom.out'), () => canvas.zoomBy(1 / 1.25), { 'data-testid': 'zoom-out' }),
         this.zoomLabel,
-        iconButton('plus', 'Zoom in', () => canvas.zoomBy(1.25), { 'data-testid': 'zoom-in' }),
-        iconButton('fit', 'Zoom to fit', () => canvas.zoomToFit(), { 'data-testid': 'zoom-fit' })));
+        iconButton('plus', t('zoom.in'), () => canvas.zoomBy(1.25), { 'data-testid': 'zoom-in' }),
+        iconButton('fit', t('zoom.fit'), () => canvas.zoomToFit(), { 'data-testid': 'zoom-fit' })));
+    this.images = new Map(); // page id → { looks, img }: each page's picture as last drawn
+    this.loose = []; // pictures not kept (a page sharing another's id), let go of at the next redraw
+    this.contents = new WeakMap(); // page → { at, json }: its contents as of the editor's last change
+    this.drawnCount = 0;
     this.redraw = debounce(() => this.render(), 250);
-    editor.on((what) => {
-      if (what === 'view') this.zoomLabel.textContent = `${Math.round(editor.zoom * 100)}%`;
+    this.unlisten = editor.on((what) => {
+      if (what === 'view') this.zoomLabel.textContent = zoomText(editor.zoom);
       else if (what === 'page') this.redraw.flush(); // now, and once (a 'doc' redraw may be waiting too)
       else if (what === 'doc') this.redraw();
       else if (what === 'strip') this.relabel();
     });
     this.render();
+  }
+
+  /** Let go of the editor, and of pages still to draw (the editor's screen is being taken down). */
+  destroy() {
+    this.unlisten();
+    this.redraw.cancel(); // (no redraw waiting to run on a strip that's gone)
+    forget(this.el);
+    for (const { img } of this.images.values()) forget(img);
+    for (const img of this.loose.splice(0)) forget(img);
   }
 
   /** Titles changed: update the labels, without drawing every page again. */
@@ -49,22 +65,66 @@ export class PageStrip {
     });
   }
 
+  /**
+   * A page's picture for the strip: the one already drawn if the page looks
+   * the same, else a new one, drawn once it scrolls into view. (A change to
+   * one page of a long design draws just that page again.)
+   */
+  pageImage(p, i, keep) {
+    const ed = this.ed;
+    // (Its contents are written out again only after a change, not on every redraw.)
+    let seen = this.contents.get(p);
+    if (!seen || seen.at !== ed.looks) this.contents.set(p, (seen = { at: ed.looks, json: JSON.stringify(p) }));
+    const looks = `${ed.doc.width}x${ed.doc.height}|${measureVersion()}|${this.canvas.hrefsChanged || 0}|${seen.json}`;
+    const kept = keep ? this.images.get(p.id) : null;
+    if (kept?.looks === looks) return kept.img;
+    if (kept) forget(kept.img);
+    const img = h('span', { class: 'page-img', style: { aspectRatio: `${ed.doc.width} / ${ed.doc.height}` } });
+    // (Ids in each picture are its own, wherever the page moves to.)
+    const prefix = `ps${++this.drawnCount}`;
+    lazily(img, () => {
+      // The page as it is now, wherever it is (undo brings back copies of pages).
+      const pages = this.ed.doc.pages;
+      const at = pages[i]?.id === p.id ? i : pages.findIndex((q) => q.id === p.id);
+      if (at >= 0) img.innerHTML = renderPage(this.ed.doc, at, { measure, noSize: true, placeholders: true, idPrefix: prefix, assetHref: this.canvas.assetHref });
+    });
+    if (keep) this.images.set(p.id, { looks, img });
+    else this.loose.push(img);
+    return img;
+  }
+
   render() {
     const ed = this.ed;
     clear(this.list);
+    for (const img of this.loose.splice(0)) forget(img);
+    // Pictures of pages no longer in the design go.
+    const ids = new Set(ed.doc.pages.map((p) => p.id));
+    for (const [id, kept] of this.images) {
+      if (ids.has(id)) continue;
+      forget(kept.img);
+      this.images.delete(id);
+    }
+    const seen = new Set(); // (two pages with one id, from an odd file: the second's picture isn't kept)
     ed.doc.pages.forEach((p, i) => {
       const label = pageLabel(p, i);
+      const keep = !seen.has(p.id);
+      seen.add(p.id);
       const item = h('li', { class: `${i === ed.page ? 'on' : ''}${p.hidden ? ' hidden-page' : ''}`, draggable: 'true', 'data-testid': 'page-thumb' },
         pressable({ class: 'page-thumb', title: label, 'aria-label': label, 'aria-current': String(i === ed.page) }, () => ed.setPage(i),
-          h('span', { class: 'page-img', style: { aspectRatio: `${ed.doc.width} / ${ed.doc.height}` }, html: renderPage(ed.doc, i, { measure, noSize: true, placeholders: true, idPrefix: `ps${i}`, assetHref: this.canvas.assetHref }) }),
-          h('span', { class: 'page-no' }, String(i + 1)),
+          this.pageImage(p, i, keep),
+          h('span', { class: 'page-no' }, formatNumber(i + 1)),
           p.hidden ? h('span', { class: 'page-hidden-mark', 'aria-hidden': 'true' }, icon('eyeOff', 14)) : null),
         p.title ? h('span', { class: 'page-title', 'data-testid': 'page-title-label' }, p.title) : null);
       pageDrag(item, i, (from) => ed.movePage(from, i));
       this.list.append(item);
     });
-    this.zoomLabel.textContent = `${Math.round(ed.zoom * 100)}%`;
+    this.zoomLabel.textContent = zoomText(ed.zoom);
   }
+}
+
+/** The zoom as a percentage, as this language writes one. */
+function zoomText(z) {
+  return formatNumber(Math.round(z * 100) / 100, { style: 'percent' }).replace(/\s/g, '');
 }
 
 /** Let a page's thumbnail be dragged onto another to move it there. */
@@ -91,15 +151,15 @@ export function pageGrid(editor, canvas) {
       const img = h('span', { class: 'page-img', style: { aspectRatio: `${editor.doc.width} / ${editor.doc.height}` } });
       lazily(img, () => (img.innerHTML = renderPage(editor.doc, i, { measure, noSize: true, placeholders: true, idPrefix: `pg${i}`, assetHref: canvas.assetHref })));
       const card = h('li', { class: `pg-card${i === editor.page ? ' on' : ''}${p.hidden ? ' hidden-page' : ''}`, draggable: 'true', 'data-testid': 'page-grid-card' },
-        pressable({ class: 'pg-open', 'aria-label': `Open ${pageName(p, i)}` }, () => {
+        pressable({ class: 'pg-open', 'aria-label': t('pages.open', { name: pageName(p, i) }) }, () => {
           editor.setPage(i);
           d.close();
         }, img),
         h('div', { class: 'pg-meta' },
-          h('b', null, String(i + 1)),
+          h('b', null, formatNumber(i + 1)),
           h('span', null, p.title || ''),
-          p.hidden ? h('small', null, 'Hidden') : null,
-          iconButton(p.hidden ? 'eye' : 'eyeOff', p.hidden ? 'Show page' : 'Hide page', () => {
+          p.hidden ? h('small', null, t('pages.hidden')) : null,
+          iconButton(p.hidden ? 'eye' : 'eyeOff', p.hidden ? t('pages.show') : t('pages.hide'), () => {
             editor.setPageHidden(i, !p.hidden);
             fill();
           }, { 'data-testid': 'page-grid-hide' })));
@@ -111,7 +171,7 @@ export function pageGrid(editor, canvas) {
     });
   };
   fill();
-  const d = dialog(`All pages (${editor.doc.pages.length})`, grid, { wide: true, testid: 'page-grid-dialog', onClose: () => forget(grid) });
+  const d = dialog(t('pages.all', { n: editor.doc.pages.length }), grid, { wide: true, testid: 'page-grid-dialog', onClose: () => forget(grid) });
   return d;
 }
 
@@ -132,7 +192,7 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
   const unraf = (id) => host.cancelAnimationFrame(id);
   const doc = editor.doc;
   const shown = only ? [editor.page] : visiblePages(doc);
-  if (!shown.length) return toast('Every page is hidden. Show a page to present it.');
+  if (!shown.length) return toast(t('present.allHidden'));
   // Start on the page in view, or the next visible one after it (the last
   // visible one if none come after).
   const next = shown.findIndex((k) => k >= editor.page);
@@ -140,7 +200,7 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
   const slide = h('div', { class: 'slide', 'data-testid': 'slide' });
   const counter = h('div', { class: 'slide-count' });
   const root = h('div', { class: 'presenter', 'data-testid': 'presenter', tabindex: '-1' }, slide, counter,
-    h('button', { type: 'button', class: 'presenter-close', 'aria-label': 'Stop presenting', onClick: () => close() }, icon('close')));
+    h('button', { type: 'button', class: 'presenter-close', 'aria-label': t('present.stop'), onClick: () => close() }, icon('close')));
   // Videos play along, and with Play the soundtrack too.
   const videos = new VideoFrames(doc);
   const tl = timeline(doc, shown);
@@ -173,6 +233,22 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
   let wait = 0; // a still page's timer, when playing
   let fading = 0; // when playing the last page: the soundtrack's fade-out, as downloads end
   let live = false; // the page's videos are playing in place: nothing to redraw
+  // Safari: live videos laid over the slide, each in a box of its own (see shownPlainly).
+  const overlays = [];
+  const placeOverlays = () => {
+    const svg = slide.querySelector('svg');
+    if (!svg || !overlays.length) return;
+    const r = svg.getBoundingClientRect();
+    const s = slide.getBoundingClientRect();
+    const k = r.width / doc.width;
+    for (const { el, box, v } of overlays) {
+      const crop = el.crop || { x: 0, y: 0, w: 1, h: 1 };
+      const iw = (el.w / crop.w) * k;
+      const ih = (el.h / crop.h) * k;
+      Object.assign(box.style, { left: `${r.left - s.left + el.x * k}px`, top: `${r.top - s.top + el.y * k}px`, width: `${el.w * k}px`, height: `${el.h * k}px`, borderRadius: `${(el.radius || 0) * k}px`, opacity: String(el.opacity ?? 1) });
+      Object.assign(v.style, { left: `${-crop.x * iw}px`, top: `${-crop.y * ih}px`, width: `${iw}px`, height: `${ih}px` });
+    }
+  };
   const draw = (now) => {
     frame = 0;
     const i = shown[at];
@@ -181,18 +257,24 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
     const tr = transitionOf(page);
     // Once only videos or looping animations move, 30 frames a second is plenty.
     const settled = local >= Math.max(info.end, from !== null ? tr.duration : 0);
-    if (LIVE_VIDEO && settled && info.keeps && !info.loops && !live) {
+    if ((LIVE_VIDEO || info.plain) && settled && info.keeps && !info.loops && !live) {
       // Only videos move now: drawn once more, with each live video in its
       // own place in the slide (layered and clipped as designed), so no
-      // picture is taken of them frame by frame.
+      // picture is taken of them frame by frame. (In Safari, over the slide.)
       live = true;
       slide.innerHTML = renderFrame(doc, pageFrame(doc, i, local, null), { ...opts, idPrefix: `pr${i}`, videoSlots: true });
+      overlays.length = 0;
       for (const box of slide.querySelectorAll('foreignObject[data-video]')) {
         const v = videos.videoOf({ id: box.dataset.video });
         if (!v) continue;
         v.className = 'slide-video';
         const playing = !v.paused;
-        box.append(v);
+        if (LIVE_VIDEO) box.append(v);
+        else {
+          const over = h('div', { class: 'slide-video-box', 'data-testid': 'slide-video-box' }, v);
+          slide.append(over);
+          overlays.push({ el: info.videos.find((el) => el.id === box.dataset.video), box: over, v });
+        }
         if (playing && v.paused) v.play().catch(() => null); // (moved to another window, a video can stop)
         // The picture under it goes once the video shows (it'd show through
         // a see-through video).
@@ -204,6 +286,7 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
           else v.addEventListener('playing', () => under.remove(), { once: true });
         }
       }
+      placeOverlays();
     } else if (live) {
       // Nothing to draw: the videos play themselves.
     } else if ((settled && info.keeps) || info.videos.length ? now - drawn < 33 && drawn : false) {
@@ -262,6 +345,7 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
     taken.clear(); // a page's videos start afresh: no picture from an earlier visit
     const page = doc.pages[shown[at]];
     info = { end: animationsEnd(page), keeps: keepsMoving(page, doc.assets), loops: hasLoop(page), videos: videosOn(doc, [shown[at]]) };
+    info.plain = !LIVE_VIDEO && shownPlainly(doc, page, info.videos);
     videos.pauseAll();
     videos.start(info.videos, started);
     // Back before the page Play started on: the sound starts over from there
@@ -276,7 +360,7 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
       fading = setTimeout(() => sound.fadeOut(Math.max(0.05, (end - performance.now()) / 1000)), Math.max(0, end - fade * 1000 - performance.now()));
     }
     slide.style.aspectRatio = `${doc.width} / ${doc.height}`;
-    counter.textContent = `${at + 1} / ${shown.length}`;
+    counter.textContent = ltr(`${formatNumber(at + 1)} / ${formatNumber(shown.length)}`);
     onPage?.(shown[at], shown);
     draw(started);
   };
@@ -298,6 +382,7 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
     sound?.stop();
     hostDoc.removeEventListener('keydown', onKey, true);
     hostDoc.removeEventListener('fullscreenchange', onFullscreen);
+    host.removeEventListener('resize', placeOverlays);
     window.removeEventListener('hashchange', close);
     if (hostDoc.fullscreenElement) hostDoc.exitFullscreen().catch(() => null);
     root.remove();
@@ -318,6 +403,7 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
   });
   hostDoc.addEventListener('keydown', onKey, true);
   hostDoc.addEventListener('fullscreenchange', onFullscreen);
+  host.addEventListener('resize', placeOverlays);
   // Leaving the editor (Back, say) ends presenting too.
   window.addEventListener('hashchange', close);
   hostDoc.body.append(root);
@@ -354,16 +440,16 @@ const SLIDES_WINDOW = `paperwall-slides-${Math.random().toString(36).slice(2, 8)
  */
 export function presenterView(editor, canvas) {
   const doc = editor.doc;
-  if (!visiblePages(doc).length) return toast('Every page is hidden. Show a page to present it.');
+  if (!visiblePages(doc).length) return toast(t('present.allHidden'));
   // Opened first, while the click still counts (pop-up blockers allow that).
   const audience = window.open('', SLIDES_WINDOW, 'popup,width=960,height=600');
   if (!audience) {
-    toast('Allow pop-ups for this page to show the slides in their own window. Presenting here instead.', 'error');
+    toast(t('present.popups'), 'error');
     return present(editor, canvas);
   }
   // The slides' window: this page's look, and the design's fonts.
   const adoc = audience.document;
-  adoc.title = `${doc.name} (slides)`;
+  adoc.title = t('present.slidesTitle', { name: doc.name });
   adoc.head.replaceChildren(...[...document.querySelectorAll('style, link[rel="stylesheet"]')].map((n) => n.cloneNode(true)));
   adoc.body.replaceChildren();
   adoc.body.style.margin = '0';
@@ -382,24 +468,24 @@ export function presenterView(editor, canvas) {
   const view = h('div', { class: 'presenter-view', 'data-testid': 'presenter-view', tabindex: '-1' },
     h('header', null,
       clock,
-      h('button', { type: 'button', class: 'btn small', 'data-testid': 'pv-reset', onClick: () => (begun = performance.now()) }, 'Restart timer'),
+      h('button', { type: 'button', class: 'btn small', 'data-testid': 'pv-reset', onClick: () => (begun = performance.now()) }, t('present.restartTimer')),
       count,
-      h('button', { type: 'button', class: 'btn small', 'data-testid': 'pv-end', onClick: () => ctl?.close() }, 'End')),
+      h('button', { type: 'button', class: 'btn small', 'data-testid': 'pv-end', onClick: () => ctl?.close() }, t('present.end'))),
     h('div', { class: 'pv-main' },
       current,
-      h('aside', null, h('h3', null, 'Next'), upcoming, h('h3', null, 'Notes'), notes)),
+      h('aside', null, h('h3', null, t('common.next')), upcoming, h('h3', null, t('inspector.notes')), notes)),
     h('footer', null,
-      h('button', { type: 'button', class: 'btn', 'data-testid': 'pv-prev', onClick: () => move(-1) }, 'Previous'),
-      h('button', { type: 'button', class: 'btn primary', 'data-testid': 'pv-next-btn', onClick: () => move(1) }, 'Next')));
+      h('button', { type: 'button', class: 'btn', 'data-testid': 'pv-prev', onClick: () => move(-1) }, t('common.previous')),
+      h('button', { type: 'button', class: 'btn primary', 'data-testid': 'pv-next-btn', onClick: () => move(1) }, t('common.next'))));
   const render = (i) => renderPage(doc, i, { measure, noSize: true, assetHref: canvas.assetHref, idPrefix: `pv${i}` });
   const show = (i, list) => {
     const k = list.indexOf(i);
     current.innerHTML = render(i);
     if (k + 1 < list.length) upcoming.innerHTML = render(list[k + 1]);
-    else upcoming.replaceChildren(h('p', { class: 'pv-end' }, 'The end'));
-    notes.textContent = doc.pages[i].notes || 'No notes for this page.';
+    else upcoming.replaceChildren(h('p', { class: 'pv-end' }, t('present.theEnd')));
+    notes.textContent = doc.pages[i].notes || t('present.noNotes');
     notes.classList.toggle('empty', !doc.pages[i].notes);
-    count.textContent = `${k + 1} / ${list.length}`;
+    count.textContent = ltr(`${formatNumber(k + 1)} / ${formatNumber(list.length)}`);
   };
   // The time since the start (minutes:seconds); and if the slides' window
   // is closed, presenting ends.
@@ -445,9 +531,26 @@ export function presenterView(editor, canvas) {
 }
 
 // Safari draws HTML inside SVG (the live video's place) without the page's
-// moves, turns and clipping, so there videos are shown as pictures throughout.
+// moves, turns and clipping, so there videos play over the slide when they
+// can (see shownPlainly), else are shown as pictures throughout.
 // (Every browser on iPhones and iPads is Safari inside: any WebKit that isn't Chrome's Blink.)
 const LIVE_VIDEO = typeof navigator === 'undefined' || !(/AppleWebKit/.test(navigator.userAgent) && !/Chrome\/|Chromium\//.test(navigator.userAgent));
+
+/**
+ * Whether a page's videos can play over its slide, as they look on it: each
+ * on the page itself (not in a group) and wholly inside it (nothing clips
+ * what's laid over the slide), not turned, flipped, clipped to a shape,
+ * filtered or shadowed, and with nothing over it.
+ */
+function shownPlainly(doc, page, videos) {
+  return videos.length > 0 && videos.every((el) => {
+    const at = page.elements.indexOf(el);
+    if (at < 0 || el.rotation % 360 || el.flipX || el.flipY || (el.mask && el.mask !== 'none') || el.shadow) return false;
+    if (el.x < 0 || el.y < 0 || el.x + el.w > doc.width || el.y + el.h > doc.height) return false;
+    if (!hasDefaultFilters(el)) return false;
+    return page.elements.slice(at + 1).every((o) => o.hidden || !rectsIntersect(boundsOf(o), boundsOf(el)));
+  });
+}
 
 /** The design's soundtrack as something to play from a point, or null if it has none. */
 function soundtrackPlayer(doc) {

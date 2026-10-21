@@ -278,7 +278,10 @@
         { "id": "APP-03", "title": "Works on a phone: tap, drag and resize with touch" },
         { "id": "APP-04", "title": "No account, no sign-in" },
         { "id": "APP-05", "title": "Makes no network requests after loading, enforced by the browser" },
-        { "id": "APP-06", "title": "Works offline after the first visit" }
+        { "id": "APP-06", "title": "Works offline after the first visit" },
+        { "id": "APP-07", "title": "Stays quick with 50+ pages, long documents and large photos" },
+        { "id": "APP-08", "title": "Interface in 7+ languages, right-to-left included" },
+        { "id": "APP-09", "title": "Works with a keyboard alone and with screen readers" }
       ]
     }
   ]

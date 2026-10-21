@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.8.0 (unreleased): Everyone
+
+- The interface in nine languages: English, Spanish, French, German,
+  Portuguese (Brazil), Hindi, Arabic, Japanese and Kannada. It follows the
+  browser's language; a picker on the home screen and in the More menu
+  changes it at once, and the choice is kept. Every button, label, tooltip,
+  message and dialog is translated (by hand, checked key by key in a unit
+  test); numbers, dates, plurals and "3 minutes ago" are written the local
+  way. New text boxes start in your language; what you write and the
+  templates stay as they are.
+- Arabic reads right to left: the panels, top bar and page strip are
+  mirrored, while the page you design keeps its own layout.
+- Works with a keyboard alone: a "skip to the canvas" link; on the canvas,
+  N and Shift+N pick elements one at a time (Tab moves on, as anywhere
+  else), the arrow keys move them
+  and Alt with the arrow keys resizes them; Enter and Space press the
+  focused button; the color picker opens on its hex code; the Layers list is
+  a list of buttons.
+- Works with screen readers: every control has a name, dialogs are labelled
+  and keep focus inside until closed (then give it back), and what's
+  selected, the page you're on and every message are announced.
+- Easier to see: visible focus rings everywhere, and accent text and buttons
+  at WCAG AA contrast in light and dark modes. With "reduce motion" set,
+  the interface stops animating.
+- Stays quick with 50+ pages, long documents and large photos: only what
+  changed is redrawn, page thumbnails are drawn as they scroll into view,
+  previews come from smaller copies of photos, and GIF and video downloads
+  draw still layers once and video frames straight to the canvas. In
+  Safari, plain videos play live when presenting.
+
 ## 0.7.0 (unreleased): Pro export
 
 - Vector PDF, now the default PDF: shapes, lines, gradients and photos stay

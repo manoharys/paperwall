@@ -73,10 +73,12 @@ picked. No ads, accounts or paid tiers.
 
 ## v0.8 Everyone
 
-- [ ] Interface in 6+ languages
-- [ ] Accessibility pass (screen reader, keyboard-only)
-- [ ] Performance with 50+ pages and large photos
-- [ ] Carried over from v0.5: motion downloads draw still layers once and video frames straight to the canvas; live videos when presenting in Safari
+- [x] Interface in 6+ languages: English, Spanish, French, German,
+      Portuguese (Brazil), Hindi, Arabic (right to left), Japanese and
+      Kannada (APP-08)
+- [x] Accessibility pass: screen reader and keyboard only (APP-09)
+- [x] Performance with 50+ pages and large photos (APP-07)
+- [x] Carried over from v0.5: motion downloads draw still layers once and video frames straight to the canvas; live videos when presenting in Safari
 
 ## Out of scope (by decision)
 

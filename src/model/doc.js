@@ -38,16 +38,6 @@ export function presetById(id) {
   return PRESETS.find((p) => p.id === id) || null;
 }
 
-/** How a page is named in lists: its number, and its title if it has one. */
-export function pageName(page, i) {
-  return page.title ? `Page ${i + 1}: ${page.title}` : `Page ${i + 1}`;
-}
-
-/** Its name, saying so when it's hidden. */
-export function pageLabel(page, i) {
-  return page.hidden ? `${pageName(page, i)} (hidden)` : pageName(page, i);
-}
-
 /** Page px in one mm or inch (or 1 for px), unrounded. */
 export function pxPerUnit(unit, dpi = DPI) {
   return unit === 'mm' ? dpi / 25.4 : unit === 'in' ? dpi : 1;
@@ -96,12 +86,16 @@ export function createDesign({ width = 1080, height = 1080, name = 'Untitled des
   };
 }
 
-export function createDesignFromPreset(presetId) {
+/**
+ * A blank design of a preset's size. Its words in the person's language,
+ * else English: `name`; a document's `title` and `body`; a whiteboard's `note`.
+ */
+export function createDesignFromPreset(presetId, { name, title, body, note } = {}) {
   const p = presetById(presetId);
   if (!p) throw new Error(`Unknown size preset: ${presetId}`);
-  const doc = createDesign({ width: p.w, height: p.h, unit: p.unit || 'px' });
-  if (p.id === 'doc') makeDocument(doc);
-  if (p.id === 'whiteboard') makeBoard(doc);
+  const doc = createDesign({ width: p.w, height: p.h, unit: p.unit || 'px', ...(name ? { name } : {}) });
+  if (p.id === 'doc') makeDocument(doc, { name, title, body });
+  if (p.id === 'whiteboard') makeBoard(doc, { name, note });
   return doc;
 }
 
@@ -123,11 +117,11 @@ export const DOC_STYLES = {
 };
 
 /** A design that flows as a document (see flow.js), started with a title and a paragraph. */
-export function makeDocument(doc) {
+export function makeDocument(doc, { name = 'Untitled document', title = DOC_STYLES.title.text, body = DOC_STYLES.body.text } = {}) {
   const { margin, gap, dpi } = DOCUMENT;
   doc.document = { pageHeight: doc.height, margin, gap, dpi };
-  doc.name = 'Untitled document';
-  doc.pages[0].elements.push(createText({ ...DOC_STYLES.title, y: 0 }), createText({ ...DOC_STYLES.body, y: 1 }));
+  doc.name = name;
+  doc.pages[0].elements.push(createText({ ...DOC_STYLES.title, text: title, y: 0 }), createText({ ...DOC_STYLES.body, text: body, y: 1 }));
   // (Laid out as text is measured once open; roughly right till then.)
   const m = doc.document.margin;
   let y = m;
@@ -139,11 +133,11 @@ export function makeDocument(doc) {
 }
 
 /** A design that's a whiteboard: a canvas that grows (see flow.js), with a first sticky note. */
-export function makeBoard(doc) {
+export function makeBoard(doc, { name = 'Untitled whiteboard', note = 'Ideas go here' } = {}) {
   doc.board = true;
-  doc.name = 'Untitled whiteboard';
+  doc.name = name;
   doc.pages[0].background = { type: 'color', color: '#f6f6f2' };
-  doc.pages[0].elements.push(createSticky(NOTE_COLORS[0], { x: 600, y: 600, text: 'Ideas go here' }));
+  doc.pages[0].elements.push(createSticky(NOTE_COLORS[0], { x: 600, y: 600, text: note }));
   return doc;
 }
 
@@ -245,6 +239,11 @@ export function createLine(props = {}) {
 }
 
 export const DEFAULT_FILTERS = { brightness: 100, contrast: 100, saturation: 100, grayscale: 0, sepia: 0, blur: 0, warmth: 0, tint: 0, hue: 0, vignette: 0, duotone: null };
+
+/** Whether a picture's or video's filters are all as they start (each unset or at its default). */
+export function hasDefaultFilters(el) {
+  return Object.entries(el.filters || {}).every(([k, v]) => (v ?? null) === (DEFAULT_FILTERS[k] ?? null));
+}
 
 export function createImage(assetId, props = {}) {
   return base('image', {
@@ -497,6 +496,9 @@ export function validateDesign(doc) {
   doc.width = Number(doc.width);
   doc.height = Number(doc.height);
   if (typeof doc.name !== 'string') doc.name = 'Untitled design';
+  // (A file made elsewhere may not say when: now, then.)
+  if (!Number.isFinite(doc.updatedAt)) doc.updatedAt = Date.now();
+  if (!Number.isFinite(doc.createdAt)) doc.createdAt = doc.updatedAt;
   if (doc.version !== FORMAT_VERSION) throw new Error(`Unsupported design version: ${doc.version}`);
   if (!(doc.width > 0 && doc.height > 0)) throw new Error('This design has no size');
   if (!Array.isArray(doc.pages) || !doc.pages.length) throw new Error('This design has no pages');

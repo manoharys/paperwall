@@ -4,14 +4,15 @@
 import { h, dialog, toast } from './ui.js';
 import { toggle } from './widgets.js';
 import { findText, replaceText, countMatches } from '../model/find.js';
+import { t } from './i18n.js';
 
 export function findDialog(editor) {
   const opts = { matchCase: false, wholeWord: false };
   let hits = []; // places: { page, id, count }
   let matches = []; // every match, one by one: { page, id, nth }
   let at = -1; // which match is shown
-  const find = h('input', { type: 'search', placeholder: 'Find', 'aria-label': 'Find', 'data-testid': 'find-input' });
-  const repl = h('input', { type: 'text', placeholder: 'Replace with', 'aria-label': 'Replace with', 'data-testid': 'replace-input' });
+  const find = h('input', { type: 'search', placeholder: t('find.find'), 'aria-label': t('find.find'), 'data-testid': 'find-input' });
+  const repl = h('input', { type: 'text', placeholder: t('find.replaceWith'), 'aria-label': t('find.replaceWith'), 'data-testid': 'replace-input' });
   const status = h('p', { class: 'hint', 'data-testid': 'find-status', 'aria-live': 'polite' });
   const total = () => hits.reduce((s, x) => s + x.count, 0);
   const refresh = () => {
@@ -23,9 +24,9 @@ export function findDialog(editor) {
   // Just the status line, from the matches already found.
   const say = () => {
     const n = total();
-    status.textContent = !find.value ? 'Searches text on every page, in tables and chart labels too.'
-      : n ? `${n} match${n === 1 ? '' : 'es'} in ${hits.length} place${hits.length === 1 ? '' : 's'}${at >= 0 ? ` · showing ${at + 1} of ${n}` : ''}`
-        : 'No matches.';
+    status.textContent = !find.value ? t('find.hint')
+      : n ? t('find.status', { matches: t('find.matches', { n }), places: t('find.places', { n: hits.length }) }) + (at >= 0 ? t('find.showing', { at: at + 1, n }) : '')
+        : t('find.none');
   };
   const show = (i) => {
     if (!matches.length) return;
@@ -68,7 +69,7 @@ export function findDialog(editor) {
       return res;
     }, { unchanged: (res) => !res.count });
     refresh();
-    toast(count ? `Replaced ${count} time${count === 1 ? '' : 's'}. Undo to put it back.` : 'Nothing to replace.');
+    toast(count ? t('find.replaced', { n: count }) : t('find.nothing'));
   };
   find.addEventListener('input', () => {
     at = -1;
@@ -78,17 +79,17 @@ export function findDialog(editor) {
     if (e.key === 'Enter') show(e.shiftKey ? at - 1 : at + 1);
   });
   refresh();
-  return dialog('Find and replace', h('div', { class: 'stack find' },
+  return dialog(t('find.title'), h('div', { class: 'stack find' },
     find,
     h('div', { class: 'row' },
-      toggle({ label: 'Match case', checked: false, testid: 'find-case', onChange: (v) => { opts.matchCase = v; at = -1; refresh(); } }),
-      toggle({ label: 'Whole words', checked: false, testid: 'find-word', onChange: (v) => { opts.wholeWord = v; at = -1; refresh(); } })),
+      toggle({ label: t('find.matchCase'), checked: false, testid: 'find-case', onChange: (v) => { opts.matchCase = v; at = -1; refresh(); } }),
+      toggle({ label: t('find.wholeWords'), checked: false, testid: 'find-word', onChange: (v) => { opts.wholeWord = v; at = -1; refresh(); } })),
     status,
     h('div', { class: 'row' },
-      h('button', { type: 'button', class: 'btn small', 'data-testid': 'find-prev', onClick: () => show(at - 1) }, 'Previous'),
-      h('button', { type: 'button', class: 'btn small', 'data-testid': 'find-next', onClick: () => show(at + 1) }, 'Next')),
+      h('button', { type: 'button', class: 'btn small', 'data-testid': 'find-prev', onClick: () => show(at - 1) }, t('common.previous')),
+      h('button', { type: 'button', class: 'btn small', 'data-testid': 'find-next', onClick: () => show(at + 1) }, t('common.next'))),
     repl,
     h('div', { class: 'row' },
-      h('button', { type: 'button', class: 'btn small', 'data-testid': 'replace-one', onClick: replaceOne }, 'Replace'),
-      h('button', { type: 'button', class: 'btn small primary', 'data-testid': 'replace-all', onClick: replaceAll }, 'Replace all'))), { testid: 'find-dialog' });
+      h('button', { type: 'button', class: 'btn small', 'data-testid': 'replace-one', onClick: replaceOne }, t('find.replace')),
+      h('button', { type: 'button', class: 'btn small primary', 'data-testid': 'replace-all', onClick: replaceAll }, t('find.replaceAll')))), { testid: 'find-dialog' });
 }

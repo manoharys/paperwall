@@ -18,7 +18,7 @@ So the honest answer to "do we have parity with Canva?" is:
   Some of that is on the roadmap; some of it (the cloud) is left out on
   purpose.
 
-Below, 32 capability areas, compared at the level of what a person can do.
+Below, 35 capability areas, compared at the level of what a person can do.
 Canva's side is described from its public product pages in general terms;
 check them for current details. "Partial" means Paperwall does the job in a
 smaller way.
@@ -27,7 +27,7 @@ smaller way.
 
 | | Areas |
 | --- | --- |
-| Paperwall does it | 20 |
+| Paperwall does it | 23 |
 | Partly | 7 |
 | Not yet | 5 |
 
@@ -65,6 +65,9 @@ smaller way.
 | Your files never leave your device | ✅ | enforced by the browser's security policy |
 | Phone and tablet | ✅ | installable web app, touch editing |
 | Open source and free forever | ✅ | MIT |
+| Interface in your language | ✅ | nine languages, Arabic right to left; numbers and dates written the local way |
+| Keyboard only and screen readers | ✅ | every control named, dialogs keep focus, N picks elements on the canvas and the arrows move and resize them, changes are announced |
+| Stays quick with long designs | ✅ | 50+ pages, long documents and large photos |
 
 ## Smaller than Canva
 
