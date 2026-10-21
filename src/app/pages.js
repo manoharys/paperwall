@@ -26,6 +26,7 @@ export class PageStrip {
         iconButton('plus', t('zoom.in'), () => canvas.zoomBy(1.25), { 'data-testid': 'zoom-in' }),
         iconButton('fit', t('zoom.fit'), () => canvas.zoomToFit(), { 'data-testid': 'zoom-fit' })));
     this.images = new Map(); // page id → { looks, img }: each page's picture as last drawn
+    this.loose = []; // pictures not kept (a page sharing another's id), let go of at the next redraw
     this.contents = new WeakMap(); // page → { at, json }: its contents as of the editor's last change
     this.drawnCount = 0;
     this.redraw = debounce(() => this.render(), 250);
@@ -44,6 +45,7 @@ export class PageStrip {
     this.redraw.cancel(); // (no redraw waiting to run on a strip that's gone)
     forget(this.el);
     for (const { img } of this.images.values()) forget(img);
+    for (const img of this.loose.splice(0)) forget(img);
   }
 
   /** Titles changed: update the labels, without drawing every page again. */
@@ -87,12 +89,14 @@ export class PageStrip {
       if (at >= 0) img.innerHTML = renderPage(this.ed.doc, at, { measure, noSize: true, placeholders: true, idPrefix: prefix, assetHref: this.canvas.assetHref });
     });
     if (keep) this.images.set(p.id, { looks, img });
+    else this.loose.push(img);
     return img;
   }
 
   render() {
     const ed = this.ed;
     clear(this.list);
+    for (const img of this.loose.splice(0)) forget(img);
     // Pictures of pages no longer in the design go.
     const ids = new Set(ed.doc.pages.map((p) => p.id));
     for (const [id, kept] of this.images) {
