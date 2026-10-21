@@ -142,8 +142,15 @@ export async function saveDesign(doc, thumb) {
   if (thumb !== undefined) await put('settings', thumbKey(doc.id), thumb);
   else {
     thumb = await get('settings', thumbKey(doc.id));
-    // Saved before previews were kept apart: read once from the design.
-    if (thumb === undefined) thumb = (await get('designs', doc.id))?.thumb ?? null;
+    // Saved before previews were kept apart: read once from the design, and
+    // kept apart from now on.
+    if (thumb === undefined) {
+      thumb = (await get('designs', doc.id))?.thumb ?? null;
+      // (Unless a new preview came meanwhile: it wins.)
+      const newer = await get('settings', thumbKey(doc.id));
+      if (newer === undefined) await put('settings', thumbKey(doc.id), thumb);
+      else thumb = newer;
+    }
   }
   // Without files nothing uses any more (a deleted video, a replaced soundtrack).
   await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: doc.height, pages: doc.pages.length, thumb: thumb ?? null, doc: keptAssets(doc) });

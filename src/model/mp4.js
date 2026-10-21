@@ -101,8 +101,16 @@ function trak(t, id, offsets, duration) {
   // CodecDelay): the edit list starts the track after it, in time with the
   // pictures.
   const skip = !video && t.codec === 'opus' ? Math.round((opusPreSkip(t.codecPrivate || t.description) / 48000) * t.timescale) : 0;
-  const start = lead + skip;
-  const edts = start ? box('edts', full('elst', 0, 0, u32(1), u32(Math.round(duration * 1000)), u32(start), u16(1), u16(0))) : null;
+  // The track's media begins at its first decode time; frames show at their
+  // own times, less any pre-skip. Where that's later than the media allows,
+  // an empty stretch comes first (a track starting after 0).
+  const into = lead - (dts[0] || 0) + skip;
+  const span = Math.round(duration * 1000);
+  const empty = into < 0 ? Math.round((-into / t.timescale) * 1000) : 0;
+  const edits = [];
+  if (empty) edits.push(concat([u32(empty), u32(0xffffffff), u16(1), u16(0)]));
+  if (into || empty) edits.push(concat([u32(Math.max(0, span - empty)), u32(Math.max(0, into)), u16(1), u16(0)]));
+  const edts = edits.length ? box('edts', full('elst', 0, 0, u32(edits.length), ...edits)) : null;
   const keys = t.chunks.map((c, i) => (c.key ? i + 1 : 0)).filter(Boolean);
   const stss = video ? full('stss', 0, 0, u32(keys.length), ...keys.map(u32)) : null;
   const stsc = full('stsc', 0, 0, u32(1), u32(1), u32(1), u32(1)); // a chunk per sample

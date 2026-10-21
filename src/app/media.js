@@ -190,9 +190,15 @@ export class VideoFrames {
     const v = p.video;
     const t = videoTime(el, local, this.lengthOf(el, v));
     if (Math.abs(v.currentTime - t) > 0.001) {
-      const seeked = once(v, 'seeked', 'error', 5000).catch(() => null);
+      const seeked = once(v, 'seeked', 'error', 5000).then(() => true, () => false);
       v.currentTime = t;
-      await seeked;
+      // A video that won't seek here shows its poster from now on, rather
+      // than holding up every frame for the wait.
+      if (!(await seeked)) {
+        p.failed = true;
+        p.ready = Promise.resolve(false);
+        return null;
+      }
     }
     return this.grab(p, el, scale);
   }
