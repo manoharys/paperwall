@@ -88,8 +88,8 @@ export async function providerFetch(id, url, init = {}) {
         return '';
       }
     }, () => '');
-    // (The status rides along, so callers needn't read the words.)
-    throw Object.assign(new Error(detail ? t('online.answeredDetail', { name: p.name, status: String(res.status), detail: String(detail).slice(0, 200) }) : t('online.answered', { name: p.name, status: String(res.status) })), { status: res.status });
+    // (The status and the provider's own words ride along, so callers needn't read the translated message.)
+    throw Object.assign(new Error(detail ? t('online.answeredDetail', { name: p.name, status: String(res.status), detail: String(detail).slice(0, 200) }) : t('online.answered', { name: p.name, status: String(res.status) })), { status: res.status, detail: detail ? String(detail) : '' });
   }
   return res;
 }

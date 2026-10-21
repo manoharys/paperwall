@@ -54,7 +54,7 @@ export async function complete({ feature, system, prompt, json = false, maxToken
   } catch (e) {
     if (signal?.aborted) throw aborted();
     // (A wrong model name: no such model, or the provider says it's the model.)
-    if (e.status === 404 || (e.status === 400 && /model/i.test(e.message))) throw new Error(`${e.message} ${t('ai.checkModel', { model: await modelFor(id) })}`);
+    if (e.status === 404 || (e.status === 400 && /model/i.test(e.detail || ''))) throw new Error(`${e.message} ${t('ai.checkModel', { model: await modelFor(id) })}`);
     if (e instanceof SyntaxError) throw new Error(t('ai.unreadable', { name: PROVIDERS[id].name }));
     throw e;
   }
