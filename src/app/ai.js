@@ -51,8 +51,8 @@ export async function complete({ feature, system, prompt, json = false, maxToken
     data = await res.json();
   } catch (e) {
     if (signal?.aborted) throw aborted();
-    // (A wrong model name is the usual reason for these.)
-    if (/answered (400|404)\b/.test(e.message)) throw new Error(`${e.message} Check the model name (${await modelFor(id)}) in the AI setup.`);
+    // (A wrong model name: no such model, or the provider says it's the model.)
+    if (/answered 404\b/.test(e.message) || (/answered 400\b/.test(e.message) && /model/i.test(e.message))) throw new Error(`${e.message} Check the model name (${await modelFor(id)}) in the AI setup.`);
     if (e instanceof SyntaxError) throw new Error(`${PROVIDERS[id].name} sent an answer that couldn't be read.`);
     throw e;
   }
@@ -106,7 +106,7 @@ export function aiSetup(feature, { onDone, onCancel } = {}) {
         // (A request to this computer: only once the feature is turned on.)
         if (!on.checked) return show(`Turn on ${FEATURES[feature].name} first.`);
         try {
-          await setOn(feature, true);
+          // (Not saved as turned on until Save: Cancel leaves it as it was.)
           const names = await ollamaModels();
           clear(list).append(...names.map((m) => h('option', { value: m })));
           if (names.length && !names.includes(modelInput.value)) modelInput.value = names[0];

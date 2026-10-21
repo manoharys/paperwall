@@ -163,6 +163,11 @@ export async function findSubject(model, rgba, w, h, opts) {
 // What each cut-out picture was made from, this session, so its edges can be refined.
 const cuts = new Map(); // new asset id → { source (data URL), mask, refine, name }
 
+/** Let go of every cut kept for refining (the editor is closing). */
+export function forgetCuts() {
+  cuts.clear();
+}
+
 /** The cut made for a picture (for "Refine edges"), or null. */
 export function cutoutOf(assetId) {
   return cuts.get(assetId) || null;
@@ -182,8 +187,10 @@ export function refineCutout(ed, el, refine) {
     const now = ed.find(el.id);
     const cut = now && cuts.get(now.assetId);
     if (!cut) return;
-    const id = await ed.remakeImage(el.id, cut.source, (px, w, h) => void applyMask(px, w, h, cut.mask, { refine }), { key: `cutout-refine:${el.id}`, name: cut.name });
-    if (id) cuts.set(id, { ...cut, refine });
+    const id = await ed.remakeImage(el.id, cut.source, (px, w, h) => void applyMask(px, w, h, cut.mask, { refine }), { key: `cutout-refine:${el.id}`, name: cut.name, from: now.assetId });
+    if (!id) return;
+    cuts.set(id, { ...cut, refine });
+    ed.emit('selection'); // (the panel shows Refine edges for the new picture)
   }).catch(() => null);
   refining.set(el.id, job);
   job.then(() => refining.get(el.id) === job && refining.delete(el.id));
@@ -238,7 +245,7 @@ export async function smartRemoveBackground(ed) {
         mask = await findSubject(model, px, w, h, { onProgress: step, signal: stopper.signal });
         if (stopper.signal.aborted) throw stopper.signal.reason;
         applyMask(px, w, h, mask, { refine: DEFAULT_REFINE });
-      }, { name });
+      }, { name, from: el.assetId }); // (the picture asked about, even if it changed during the download)
       busy = false;
       d.close();
       if (!id) return; // (the picture was changed meanwhile: nothing to put back)

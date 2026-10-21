@@ -128,17 +128,18 @@ export function photosView(ed, state) {
       if (!query) return;
       if (page === 1) {
         forgetPreviews();
-        Object.assign(state, { query, results: [], page: 0, more: false });
+        Object.assign(state, { query, results: [], page: 0, more: false, search: (state.search || 0) + 1 });
         grid.replaceChildren();
       }
       status.textContent = 'Searching…';
       more.disabled = true;
       try {
+        const mine = state.search; // (more of an earlier search, answering late, isn't mixed in)
         const key = p.key ? await keyFor(provider) : '';
         const res = await providerFetch(provider, searchUrl(provider, query, page), { headers: authHeaders(provider, key) });
         const { photos, more: hasMore } = readResults(provider, await res.json(), page);
         // (A later search may have started meanwhile.)
-        if (state.query !== query || state.provider !== provider) return;
+        if (state.query !== query || state.provider !== provider || state.search !== mine) return;
         const seen = new Set(state.results.map((r) => r.id));
         Object.assign(state, { results: [...state.results, ...photos.filter((r) => !seen.has(r.id))], page, more: hasMore, error: '' });
       } catch (e) {

@@ -856,8 +856,9 @@ export class Editor {
    * asset's id, or null if the element was changed or removed meanwhile.
    */
 
-  async remakeImage(elId, dataUrl, make, { key = null, name = 'image' } = {}) {
-    const before = locate(this.doc, elId)?.el?.assetId;
+  async remakeImage(elId, dataUrl, make, { key = null, name = 'image', from = null } = {}) {
+    // (`from`: the picture it was asked for, when that was a while ago: a download, say.)
+    const before = from ?? locate(this.doc, elId)?.el?.assetId;
     const img = await loadImage(dataUrl);
     const canvas = document.createElement('canvas');
     canvas.width = img.naturalWidth;

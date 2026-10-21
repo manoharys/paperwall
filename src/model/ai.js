@@ -143,7 +143,8 @@ export function cleanWriting(answer, original = '') {
   s = s.replace(/^<text>\s*/i, '').replace(/\s*<\/text>$/i, '').trim();
   // "Here's a shorter version:" and the like.
   const lines = s.split('\n');
-  if (lines.length > 1 && /^(here|sure|okay|ok|certainly)\b[^\n]*:$/i.test(lines[0].trim())) s = lines.slice(1).join('\n').trim();
+  // (Unless the text itself starts that way: "Here is the menu:".)
+  if (lines.length > 1 && /^(here|sure|okay|ok|certainly)\b[^\n]*:$/i.test(lines[0].trim()) && !String(original).trim().startsWith(lines[0].trim())) s = lines.slice(1).join('\n').trim();
   const pairs = [['"', '"'], ['“', '”'], ["'", "'"], ['«', '»']];
   for (const [a, b] of pairs) {
     // (Only quotes around all of it: not two quoted words at either end.)
