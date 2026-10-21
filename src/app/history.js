@@ -2,7 +2,7 @@
 
 import { h, dialog, clear, toast, lazily, forget } from './ui.js';
 import { renderPage } from '../model/render.js';
-import { measure, ensureDesignFonts } from './fonts.js';
+import { measure, ensureDesignFonts, onPaper } from './fonts.js';
 import * as store from './store.js';
 import { t, formatDate } from './i18n.js';
 import { versionLabel, sizeLabel } from './names.js';
@@ -38,8 +38,10 @@ export function historyDialog(editor) {
       // The saved thumbnail if there is one; otherwise drawn from the version
       // as it scrolls into view.
       if (v.thumb) img.append(h('img', { src: v.thumb, alt: '' }));
-      else lazily(img, () => store.versionDoc(v).then(async (doc) => {
-        await ensureDesignFonts(doc);
+      else lazily(img, () => store.versionDoc(v).then(async (whole) => {
+        await ensureDesignFonts(whole);
+        // (A document's first sheet, as its box is one sheet tall: not the whole long page.)
+        const [doc] = await onPaper(whole, [0]);
         img.innerHTML = renderPage(doc, 0, { measure, noSize: true, placeholders: true, idPrefix: `v${v.key.replace(/\W/g, '')}` });
       }).catch(() => img.classList.add('broken')));
       list.append(h('li', { class: 'version', 'data-testid': 'version' },
