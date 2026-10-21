@@ -2,6 +2,8 @@
 
 import { h, icon, iconButton } from './ui.js';
 import { mixHex, sortedStops, normalizeHex } from '../model/color.js';
+import { t, LANGUAGES, language } from './i18n.js';
+import { paletteName, gradientName, fontKind } from './names.js';
 
 export const PALETTES = [
   { name: 'Ink', colors: ['#16161d', '#3d3d4e', '#8a8a9e', '#d9d9e3', '#ffffff'] },
@@ -82,10 +84,10 @@ export function colorButton({ label, value, onChange, getContext = () => ({}), t
       if (document.activeElement !== hexInput) hexInput.value = hex;
       onChange(hex, live);
     };
-    const native = h('input', { type: 'color', value: current, 'aria-label': `${label}: color wheel` });
+    const native = h('input', { type: 'color', value: current, 'aria-label': t('color.wheel', { label }) });
     native.addEventListener('input', () => set(native.value, true));
     native.addEventListener('change', () => set(native.value));
-    const hexInput = h('input', { type: 'text', class: 'hex', value: current, maxlength: '7', spellcheck: 'false', 'aria-label': `${label}: hex code`, 'data-testid': 'hex-input' });
+    const hexInput = h('input', { type: 'text', class: 'hex', value: current, maxlength: '7', spellcheck: 'false', 'aria-label': t('color.hex', { label }), 'data-testid': 'hex-input' });
     hexInput.addEventListener('change', () => set(hexInput.value));
     hexInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') set(hexInput.value);
@@ -94,7 +96,7 @@ export function colorButton({ label, value, onChange, getContext = () => ({}), t
       ? h('div', { class: 'swatch-group' }, h('p', null, title), h('div', { class: 'swatches' }, colors.map((c) => h('button', { type: 'button', class: 'swatch', style: { '--swatch': c }, title: c, 'aria-label': c, onClick: () => set(c) }))))
       : null;
     const dropper = 'EyeDropper' in window
-      ? iconButton('dropper', 'Pick a color from the screen', async () => {
+      ? iconButton('dropper', t('color.dropper'), async () => {
         try {
           const res = await new window.EyeDropper().open();
           set(res.sRGBHex);
@@ -105,9 +107,9 @@ export function colorButton({ label, value, onChange, getContext = () => ({}), t
       : null;
     const pop = h('div', { class: 'popover color-pop', 'data-for': label, 'data-testid': 'color-popover' },
       h('div', { class: 'color-top' }, native, hexInput, dropper),
-      row('In this design', ctx.used),
-      row('Brand kit', ctx.brand),
-      PALETTES.map((p) => row(p.name, p.colors)));
+      row(t('color.inDesign'), ctx.used),
+      row(t('common.brandKit'), ctx.brand),
+      PALETTES.map((p) => row(paletteName(p.name), p.colors)));
     showPopover(pop, btn, { alignRight: true });
   });
   return btn;
@@ -116,7 +118,7 @@ export function colorButton({ label, value, onChange, getContext = () => ({}), t
 /** A slider with a number box next to it. onChange(value, live). */
 export function slider({ label, value, min, max, step = 1, onChange, unit = '', testid }) {
   const range = h('input', { type: 'range', min, max, step, value, 'aria-label': label, 'data-testid': testid });
-  const num = h('input', { type: 'number', min, max, step, value: round(value), 'aria-label': `${label} value` });
+  const num = h('input', { type: 'number', min, max, step, value: round(value), 'aria-label': t('slider.value', { label }) });
   range.addEventListener('input', () => {
     num.value = round(+range.value);
     onChange(+range.value, true);
@@ -200,14 +202,14 @@ function clamp(v, a, b) {
  * A font chooser: a button showing the current font, opening a searchable
  * list where every name is drawn in its own font (loaded as it scrolls by).
  */
-export function fontPicker({ label = 'Font', value, fonts, kinds, onChange, testid, extra = [] }) {
+export function fontPicker({ label = t('font.label'), value, fonts, kinds, onChange, testid, extra = [] }) {
   const btn = h('button', { type: 'button', class: 'font-btn', 'aria-label': `${label}: ${value}`, 'data-testid': testid, style: { fontFamily: `"${value}"` } }, value, icon('down', 16));
   btn.addEventListener('click', () => {
     if (openPopover?.dataset.for === label) return closePopover();
     closePopover();
     let kind = 'All';
     const list = h('div', { class: 'font-list', role: 'listbox', 'aria-label': label });
-    const search = h('input', { type: 'search', placeholder: `Search ${fonts.length + extra.length} fonts`, 'aria-label': 'Search fonts', 'data-testid': 'font-search' });
+    const search = h('input', { type: 'search', placeholder: t('font.searchCount', { n: fonts.length + extra.length }), 'aria-label': t('font.search'), 'data-testid': 'font-search' });
     const seen = new IntersectionObserver((entries) => {
       for (const e of entries) {
         if (!e.isIntersecting) continue;
@@ -226,18 +228,18 @@ export function fontPicker({ label = 'Font', value, fonts, kinds, onChange, test
           btn.style.fontFamily = `"${f.name}"`;
           closePopover();
           onChange(f.name);
-        } }, f.name, h('small', null, f.kind));
+        } }, f.name, h('small', null, fontKind(f.kind)));
         list.append(item);
         seen.observe(item);
       }
-      if (!list.children.length) list.append(h('p', { class: 'empty-note' }, 'No fonts match.'));
+      if (!list.children.length) list.append(h('p', { class: 'empty-note' }, t('font.none')));
     };
     search.addEventListener('input', fill);
     const chips = h('div', { class: 'chips small' }, ['All', ...kinds].map((k) => h('button', { type: 'button', class: k === kind ? 'chip on' : 'chip', onClick: (e) => {
       kind = k;
       for (const c of chips.children) c.classList.toggle('on', c === e.currentTarget);
       fill();
-    } }, k)));
+    } }, fontKind(k))));
     const pop = h('div', { class: 'popover font-pop', 'data-for': label, 'data-testid': 'font-popover' }, search, chips, list);
     pop.cleanup = () => seen.disconnect();
     fill();
@@ -303,14 +305,14 @@ export function gradientEditor({ label, value, onChange, getContext, testid, cur
   return h('div', { class: 'grad-editor', 'data-testid': testid },
     h('div', { class: 'grad-bar', style: { background: cssGradient(g) } }),
     stops.map((s, i) => h('div', { class: 'grad-stop', 'data-testid': 'grad-stop' },
-      colorButton({ label: `${label} color ${i + 1}`, value: s.color, getContext, testid: `grad-color-${i}`, onChange: (c, l) => setStop(i, { color: c }, l) }),
-      h('input', { type: 'range', min: 0, max: 100, value: Math.round(s.offset * 100), 'aria-label': `${label} color ${i + 1} position`, 'data-testid': `grad-pos-${i}`, onInput: (e) => setStop(i, { offset: +e.target.value / 100 }, true), onChange: (e) => setStop(i, { offset: +e.target.value / 100 }) }),
-      stops.length > 2 ? iconButton('close', `Remove color ${i + 1}`, () => emit({ stops: nowStops().filter((_, k) => k !== order[i]) }), { 'data-testid': `grad-remove-${i}` }) : h('span', { class: 'grad-spacer' }))),
-    stops.length < 8 ? h('button', { type: 'button', class: 'link-btn', 'data-testid': 'grad-add', onClick: addStop }, '+ Add a color') : null,
-    segmented({ label: 'Gradient style', value: g.type, onChange: (type) => emit({ type }), options: [{ value: 'linear', label: 'Linear', text: 'Linear' }, { value: 'radial', label: 'Radial', text: 'Radial' }] }),
-    g.type === 'linear' ? slider({ label: 'Angle', value: g.angle ?? 180, min: 0, max: 360, unit: '°', testid: 'grad-angle', onChange: (v, l) => emit({ angle: v }, l) }) : null,
-    h('div', { class: 'grad-presets', role: 'group', 'aria-label': 'Ready-made gradients' }, GRADIENT_PRESETS.map((p) => h('button', {
-      type: 'button', class: 'grad-preset', title: p.name, 'aria-label': p.name, 'data-testid': `grad-preset-${p.name}`, style: { background: cssGradient(p, 135) },
+      colorButton({ label: t('gradient.stopColor', { label, n: i + 1 }), value: s.color, getContext, testid: `grad-color-${i}`, onChange: (c, l) => setStop(i, { color: c }, l) }),
+      h('input', { type: 'range', min: 0, max: 100, value: Math.round(s.offset * 100), 'aria-label': t('gradient.stopPosition', { label, n: i + 1 }), 'data-testid': `grad-pos-${i}`, onInput: (e) => setStop(i, { offset: +e.target.value / 100 }, true), onChange: (e) => setStop(i, { offset: +e.target.value / 100 }) }),
+      stops.length > 2 ? iconButton('close', t('gradient.removeStop', { n: i + 1 }), () => emit({ stops: nowStops().filter((_, k) => k !== order[i]) }), { 'data-testid': `grad-remove-${i}` }) : h('span', { class: 'grad-spacer' }))),
+    stops.length < 8 ? h('button', { type: 'button', class: 'link-btn', 'data-testid': 'grad-add', onClick: addStop }, t('gradient.addStop')) : null,
+    segmented({ label: t('gradient.style'), value: g.type, onChange: (type) => emit({ type }), options: [{ value: 'linear', label: t('gradient.linear'), text: t('gradient.linear') }, { value: 'radial', label: t('gradient.radial'), text: t('gradient.radial') }] }),
+    g.type === 'linear' ? slider({ label: t('gradient.angle'), value: g.angle ?? 180, min: 0, max: 360, unit: '°', testid: 'grad-angle', onChange: (v, l) => emit({ angle: v }, l) }) : null,
+    h('div', { class: 'grad-presets', role: 'group', 'aria-label': t('gradient.presets') }, GRADIENT_PRESETS.map((p) => h('button', {
+      type: 'button', class: 'grad-preset', title: gradientName(p.name), 'aria-label': gradientName(p.name), 'data-testid': `grad-preset-${p.name}`, style: { background: cssGradient(p, 135) },
       onClick: () => emit({ stops: p.stops.map((s) => ({ ...s })) }),
     }))));
 }
@@ -327,4 +329,13 @@ export function menuButton({ iconName, label, testid, content }) {
     showPopover(pop, btn, { alignRight: true });
   }, { 'data-testid': testid, class: 'icon-btn menu-btn' });
   return btn;
+}
+
+/** The interface's language: each named in itself. onChange(code). */
+export function languagePicker({ testid, onChange }) {
+  const sel = h('select', { class: 'lang-select', 'aria-label': t('common.language'), 'data-testid': testid },
+    LANGUAGES.map((l) => h('option', { value: l.code, lang: l.code, dir: l.rtl ? 'rtl' : 'ltr' }, l.name)));
+  sel.value = language();
+  sel.addEventListener('change', () => onChange(sel.value));
+  return sel;
 }

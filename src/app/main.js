@@ -14,12 +14,13 @@ import { loadFonts, registerDesignFonts, ensureDesignFonts, clearMeasureCache } 
 import * as store from './store.js';
 import { validateDesign, versionSnapshot } from '../model/doc.js';
 import { fontsUsed } from '../model/fonts.js';
-import { menuButton, toggle, segmented, closePopover } from './widgets.js';
+import { menuButton, toggle, segmented, closePopover, languagePicker } from './widgets.js';
 import { findDialog } from './find.js';
 import { historyDialog } from './history.js';
 import { openOnlineSettings } from './online-settings.js';
 import { api as cutoutApi, forgetCuts } from './cutout.js';
 import { withSmallPictures } from './media.js';
+import { t, setLanguage, pickLanguage } from './i18n.js';
 
 const root = document.getElementById('app');
 let current = null; // { editor, unbind }
@@ -59,12 +60,50 @@ async function toggleTheme() {
   await store.setSetting('theme', next);
 }
 
+// ---------- language ----------
+
+function quickLanguage(value) {
+  // A synchronous copy, as for the theme.
+  try {
+    if (value === undefined) return localStorage.getItem('paperwall-language');
+    localStorage.setItem('paperwall-language', value);
+  } catch {
+    /* storage can be blocked; IndexedDB still has it */
+  }
+  return null;
+}
+
+/** The words that live in the page itself, in the interface's language. */
+function relabelPage() {
+  document.querySelector('meta[name="description"]')?.setAttribute('content', t('app.description'));
+  const loading = document.querySelector('.boot');
+  if (loading) loading.textContent = t('app.loading');
+}
+
+/** The language picked before, or else the browser's own. */
+async function applyLanguage() {
+  const saved = quickLanguage() || (await store.getSetting('language', null).catch(() => null));
+  setLanguage(saved || pickLanguage(navigator.languages?.length ? navigator.languages : [navigator.language]));
+  relabelPage();
+}
+
+/** Switch the interface's language, keep the choice, and draw everything again in it. */
+async function changeLanguage(code, { focus } = {}) {
+  closePopover();
+  setLanguage(code);
+  quickLanguage(code);
+  relabelPage();
+  await store.setSetting('language', code).catch(() => null);
+  await route();
+  // Back where the person was (the screen was drawn again under them).
+  document.querySelector(`[data-testid="${focus}"]`)?.focus();
+}
+
 // ---------- routing ----------
 
 function route() {
   const m = location.hash.match(/^#\/d\/([\w-]+)/);
-  if (m) openEditor(m[1]);
-  else showHome();
+  return m ? openEditor(m[1]) : showHome();
 }
 
 async function closeEditor() {
@@ -89,7 +128,7 @@ async function closeEditor() {
 
 async function showHome() {
   await closeEditor();
-  document.title = 'Paperwall: design without the paywall';
+  document.title = t('app.title');
   renderHome(root, {
     openDesign: (id) => (location.hash = `#/d/${id}`),
     newDesign: async (doc, opts) => {
@@ -99,6 +138,7 @@ async function showHome() {
       location.hash = `#/d/${doc.id}`;
     },
     toggleTheme,
+    changeLanguage: (code) => changeLanguage(code, { focus: 'language-select' }),
     installPrompt: () => deferredInstall,
   });
 }
@@ -109,7 +149,7 @@ async function openEditor(id) {
   await closeEditor();
   let doc = await store.loadDesign(id);
   if (!doc) {
-    toast("That design isn't on this device.", 'error');
+    toast(t('editor.missingDesign'), 'error');
     location.hash = '#/';
     return;
   }
@@ -147,35 +187,35 @@ async function openEditor(id) {
   const inspector = new Inspector(editor, canvas, { onResizeDesign: () => resizeDialog(editor), onPlay: (how) => present(editor, canvas, { autoplay: true, ...how }) });
   const insert = new InsertPanel(editor);
   const strip = new PageStrip(editor, canvas);
-  const nameInput = h('input', { class: 'doc-name', value: doc.name, 'aria-label': 'Design name', 'data-testid': 'doc-name', maxlength: '120' });
+  const nameInput = h('input', { class: 'doc-name', value: doc.name, 'aria-label': t('top.designName'), 'data-testid': 'doc-name', maxlength: '120' });
   nameInput.addEventListener('change', () => editor.rename(nameInput.value));
   nameInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') nameInput.blur();
   });
-  const undoBtn = iconButton('undo', `Undo (${mod}+Z)`, () => editor.undo(), { 'data-testid': 'undo' });
-  const redoBtn = iconButton('redo', `Redo (${mod}+Shift+Z)`, () => editor.redo(), { 'data-testid': 'redo' });
+  const undoBtn = iconButton('undo', t('top.undo', { keys: `${mod}+Z` }), () => editor.undo(), { 'data-testid': 'undo' });
+  const redoBtn = iconButton('redo', t('top.redo', { keys: `${mod}+Shift+Z` }), () => editor.redo(), { 'data-testid': 'redo' });
   const syncTop = () => {
     undoBtn.disabled = !editor.history.canUndo;
     redoBtn.disabled = !editor.history.canRedo;
     if (document.activeElement !== nameInput) nameInput.value = editor.doc.name;
-    document.title = `${editor.doc.name} · Paperwall`;
+    document.title = t('app.editorTitle', { name: editor.doc.name });
   };
   const top = h('header', { class: 'topbar' },
-    h('a', { class: 'brand small', href: '#/', title: 'All designs', 'data-testid': 'home-link' }, h('span', { class: 'logo', 'aria-hidden': 'true' }), h('span', { class: 'brand-word' }, 'Paperwall')),
+    h('a', { class: 'brand small', href: '#/', title: t('top.allDesigns'), 'data-testid': 'home-link' }, h('span', { class: 'logo', 'aria-hidden': 'true' }), h('span', { class: 'brand-word' }, 'Paperwall')),
     nameInput,
     h('div', { class: 'top-group' }, undoBtn, redoBtn),
     h('div', { class: 'top-group right' },
-      iconButton('play', 'Play (animations and page timing)', () => present(editor, canvas, { autoplay: true }), { 'data-testid': 'play' }),
-      iconButton('present', 'Present', () => present(editor, canvas), { 'data-testid': 'present' }),
-      iconButton('speaker', 'Presenter view: your notes, the next page and a timer, with the slides in their own window', () => presenterView(editor, canvas), { 'data-testid': 'presenter-view-btn' }),
-      iconButton('save', 'Save to file', () => saveProjectFile(editor.doc), { 'data-testid': 'save-file' }),
-      iconButton('search', 'Find and replace (Ctrl+F)', () => findDialog(editor), { 'data-testid': 'find-btn' }),
-      iconButton('history', 'Version history', () => historyDialog(editor), { 'data-testid': 'history-btn' }),
-      menuButton({ iconName: 'ruler', label: 'View: rulers, guides, grid', testid: 'view', content: () => viewMenu(editor) }),
-      iconButton('keyboard', 'Keyboard shortcuts (?)', () => cheatSheet(), { 'data-testid': 'shortcuts-btn' }),
-      menuButton({ iconName: 'more', label: 'More', testid: 'main', content: mainMenu }),
-      iconButton('moon', 'Dark mode', toggleTheme, { 'data-testid': 'theme-toggle' }),
-      h('button', { type: 'button', class: 'btn primary', 'data-testid': 'download', onClick: () => exportDialog(editor) }, icon('download'), h('span', null, 'Download'))));
+      iconButton('play', t('top.play'), () => present(editor, canvas, { autoplay: true }), { 'data-testid': 'play' }),
+      iconButton('present', t('top.present'), () => present(editor, canvas), { 'data-testid': 'present' }),
+      iconButton('speaker', t('top.presenterView'), () => presenterView(editor, canvas), { 'data-testid': 'presenter-view-btn' }),
+      iconButton('save', t('top.saveFile'), () => saveProjectFile(editor.doc), { 'data-testid': 'save-file' }),
+      iconButton('search', t('top.find'), () => findDialog(editor), { 'data-testid': 'find-btn' }),
+      iconButton('history', t('top.history'), () => historyDialog(editor), { 'data-testid': 'history-btn' }),
+      menuButton({ iconName: 'ruler', label: t('top.view'), testid: 'view', content: () => viewMenu(editor) }),
+      iconButton('keyboard', t('top.shortcuts'), () => cheatSheet(), { 'data-testid': 'shortcuts-btn' }),
+      menuButton({ iconName: 'more', label: t('top.more'), testid: 'main', content: mainMenu }),
+      iconButton('moon', t('common.darkMode'), toggleTheme, { 'data-testid': 'theme-toggle' }),
+      h('button', { type: 'button', class: 'btn primary', 'data-testid': 'download', onClick: () => exportDialog(editor) }, icon('download'), h('span', null, t('common.download')))));
 
   // On small screens one sheet shows at a time: "insert" (add things) or "edit" (properties).
   const workspace = h('div', { class: 'workspace', 'data-sheet': 'none' }, insert.el, canvas.el, inspector.el);
@@ -191,7 +231,7 @@ async function openEditor(id) {
   editor.on((what) => {
     if (what === 'selection' && editor.selection.length) setSheet('edit');
   });
-  const closeSheet = iconButton('down', 'Hide panel', () => setSheet('none'), { class: 'icon-btn sheet-close', 'data-testid': 'sheet-close' });
+  const closeSheet = iconButton('down', t('top.hidePanel'), () => setSheet('none'), { class: 'icon-btn sheet-close', 'data-testid': 'sheet-close' });
   inspector.el.prepend(closeSheet);
   insert.el.querySelector('.insert-panel').prepend(closeSheet.cloneNode(true));
   insert.el.querySelector('.insert-panel .sheet-close').addEventListener('click', () => setSheet('none'));
@@ -238,8 +278,8 @@ async function openEditor(id) {
 }
 
 window.addEventListener('hashchange', route);
-window.addEventListener('paperwall:storage-outdated', () => toast('Paperwall was updated in another tab. Reload this tab to keep saving your work.', 'error'));
-window.addEventListener('paperwall:storage-blocked', () => toast('Paperwall is updating its storage. Close any other Paperwall tabs to finish.', 'error'));
+window.addEventListener('paperwall:storage-outdated', () => toast(t('storage.outdated'), 'error'));
+window.addEventListener('paperwall:storage-blocked', () => toast(t('storage.blocked'), 'error'));
 window.addEventListener('beforeunload', () => current?.editor.flush());
 // Hidden comes before a tab is closed or reloaded (beforeunload may not
 // come at all), so that's when work since the last version is kept too.
@@ -254,6 +294,7 @@ document.addEventListener('visibilitychange', () => {
 
 async function boot() {
   await applyTheme();
+  await applyLanguage();
   await loadFonts();
   route();
   if ('serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:' && globalThis.PAPERWALL_SW) {
@@ -271,7 +312,9 @@ function mainMenu() {
     run();
   } }, label);
   return h('div', { class: 'stack' },
-    item('Online extras…', 'menu-online', () => openOnlineSettings()));
+    item(t('menu.online'), 'menu-online', () => openOnlineSettings()),
+    h('label', { class: 'field' }, h('span', null, t('common.language')),
+      languagePicker({ testid: 'menu-language', onChange: (code) => changeLanguage(code, { focus: 'main' }) })));
 }
 
 /** Rulers, guides, grid, margins and bleed: how the page is shown, not part of the design. */
@@ -284,15 +327,15 @@ function viewMenu(editor) {
     pop?.replaceChildren(viewMenu(editor));
   };
   return h('div', { class: 'stack' },
-    toggle({ label: 'Rulers (Shift+R)', checked: v.rulers, testid: 'view-rulers', onChange: (rulers) => set({ rulers }) }),
-    h('p', { class: 'hint' }, 'Drag from a ruler to add a guide. Drag a guide off the page to remove it.'),
-    h('button', { type: 'button', class: 'btn small', 'data-testid': 'view-clear-guides', onClick: () => editor.clearGuides() }, 'Clear guides on this page'),
-    toggle({ label: 'Grid', checked: v.grid, testid: 'view-grid', onChange: (grid) => set({ grid }) }),
-    v.grid ? segmented({ label: 'Grid size', value: v.gridSize, testid: 'view-grid-size', onChange: (gridSize) => set({ gridSize }), options: [
-      { value: 'small', label: 'Small grid', text: 'Small' }, { value: 'medium', label: 'Medium grid', text: 'Medium' }, { value: 'large', label: 'Large grid', text: 'Large' },
+    toggle({ label: t('view.rulers'), checked: v.rulers, testid: 'view-rulers', onChange: (rulers) => set({ rulers }) }),
+    h('p', { class: 'hint' }, t('view.rulersHint')),
+    h('button', { type: 'button', class: 'btn small', 'data-testid': 'view-clear-guides', onClick: () => editor.clearGuides() }, t('view.clearGuides')),
+    toggle({ label: t('view.grid'), checked: v.grid, testid: 'view-grid', onChange: (grid) => set({ grid }) }),
+    v.grid ? segmented({ label: t('view.gridSize'), value: v.gridSize, testid: 'view-grid-size', onChange: (gridSize) => set({ gridSize }), options: [
+      { value: 'small', label: t('view.gridSmall'), text: t('view.small') }, { value: 'medium', label: t('view.gridMedium'), text: t('view.medium') }, { value: 'large', label: t('view.gridLarge'), text: t('view.large') },
     ] }) : null,
-    v.grid ? toggle({ label: 'Snap to grid', checked: v.snapGrid, testid: 'view-snap-grid', onChange: (snapGrid) => set({ snapGrid }) }) : null,
-    toggle({ label: 'Safe margins', checked: v.margins, testid: 'view-margins', onChange: (margins) => set({ margins }) }),
-    toggle({ label: 'Print bleed (3 mm)', checked: v.bleed, testid: 'view-bleed', onChange: (bleed) => set({ bleed }) }),
-    v.bleed ? h('p', { class: 'hint' }, 'Anything past the dashed red line may be trimmed when printed; let backgrounds run to the edge.') : null);
+    v.grid ? toggle({ label: t('view.snapGrid'), checked: v.snapGrid, testid: 'view-snap-grid', onChange: (snapGrid) => set({ snapGrid }) }) : null,
+    toggle({ label: t('view.margins'), checked: v.margins, testid: 'view-margins', onChange: (margins) => set({ margins }) }),
+    toggle({ label: t('view.bleed'), checked: v.bleed, testid: 'view-bleed', onChange: (bleed) => set({ bleed }) }),
+    v.bleed ? h('p', { class: 'hint' }, t('view.bleedHint')) : null);
 }

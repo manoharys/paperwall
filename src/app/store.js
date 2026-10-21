@@ -2,6 +2,7 @@
 // you've added, and your brand kit. Nothing is ever sent anywhere.
 
 import { keptAssets, clone } from '../model/doc.js';
+import { t } from './i18n.js';
 
 const DB_NAME = 'paperwall';
 const DB_VERSION = 3;
@@ -15,12 +16,12 @@ const memory = Object.fromEntries(STORES.map((s) => [s, new Map()]));
 let persistent = true;
 let outdated = false; // a newer Paperwall upgraded storage in another tab
 
-const OUTDATED = 'Paperwall was updated in another tab. Reload this tab to keep using your designs.';
+const OUTDATED = 'storage.outdatedUse';
 
 function open() {
   // Once another tab has upgraded storage, this tab can't use it: every read
   // and write fails (and says why) instead of quietly using an empty memory store.
-  if (outdated) return Promise.reject(new Error(OUTDATED));
+  if (outdated) return Promise.reject(new Error(t(OUTDATED)));
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     let req;
@@ -61,7 +62,7 @@ function open() {
         outdated = true;
         globalThis.dispatchEvent?.(new CustomEvent('paperwall:storage-outdated'));
         dbPromise = null;
-        reject(new Error(OUTDATED));
+        reject(new Error(t(OUTDATED)));
         return;
       }
       persistent = false;
@@ -94,12 +95,12 @@ async function withDb(fn) {
 
 function tx(db, store, mode, fn) {
   return new Promise((resolve, reject) => {
-    const t = db.transaction(store, mode);
-    const s = t.objectStore(store);
+    const txn = db.transaction(store, mode);
+    const s = txn.objectStore(store);
     const req = fn(s);
-    t.oncomplete = () => resolve(req?.result);
-    t.onerror = () => reject(t.error);
-    t.onabort = () => reject(t.error || new Error('Storage is full'));
+    txn.oncomplete = () => resolve(req?.result);
+    txn.onerror = () => reject(txn.error);
+    txn.onabort = () => reject(txn.error || new Error(t('storage.full')));
   });
 }
 
@@ -411,7 +412,7 @@ export async function listVersions(designId) {
 /** A version as a whole design again, images included. */
 export async function versionDoc(version) {
   const doc = await get('versions', version.key.replace('|v|', '|d|'));
-  if (!doc) throw new Error('This version is missing');
+  if (!doc) throw new Error(t('history.missing'));
   // Just the images this version uses, in one read.
   const ids = version.assetIds || [];
   const found = await getMany('versions', ids.map((id) => aKey(version.designId, id)));

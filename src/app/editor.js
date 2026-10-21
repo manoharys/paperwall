@@ -21,6 +21,7 @@ import { mediaKind, checkSize, videoInfo, audioInfo, VideoFrames } from './media
 import { removePlainBackground } from '../model/bgremove.js';
 import { readFileAsDataUrl, loadImage, toast, debounce } from './ui.js';
 import * as store from './store.js';
+import { t } from './i18n.js';
 
 const VIEW_KEY = 'paperwall-view';
 const VERSION_EVERY = 5 * 60 * 1000;
@@ -198,7 +199,7 @@ export class Editor {
       // (Not mid-drag: the design is half-moved then; the next save tries again.)
       this.maybeSaveVersion(VERSION_EVERY);
     } catch (e) {
-      toast(`Couldn't save on this device: ${e.message}`, 'error');
+      toast(t('editor.saveError', { error: e.message }), 'error');
     }
   }
 
@@ -430,7 +431,7 @@ export class Editor {
     const base = TEXT_STYLES[style] || TEXT_STYLES.body;
     const k = Math.max(0.3, this.sizeRef / 1080);
     // (On a whiteboard, as wide as on its first canvas.)
-    const el = createText({ ...base, size: Math.round(base.size * k), w: Math.round(this.fitW * 0.7), ...props });
+    const el = createText({ ...base, text: TEXT_STYLES[style] ? t(`newText.${style}`) : t('newText.body'), size: Math.round(base.size * k), w: Math.round(this.fitW * 0.7), ...props });
     return this.insert(el);
   }
 
@@ -610,18 +611,18 @@ export class Editor {
   async importMediaFile(file) {
     const kind = mediaKind(file);
     if (kind === 'image') return this.importImageFile(file);
-    if (!kind) throw new Error(`${file.name} isn't a picture, video or sound`);
+    if (!kind) throw new Error(t('editor.notMedia', { name: file.name }));
     checkSize(file, kind);
     // Checked first: a file that can't be used isn't read in whole for nothing.
     const info = await (kind === 'video' ? videoInfo(file) : audioInfo(file));
     // A "video" with no picture this browser can show: either a video it
     // can't play (an iPhone's HEVC, say) or music in a video file. There's no
     // telling which, so neither is guessed (a guess could replace the soundtrack).
-    if (info.noPicture) throw new Error(`This browser can't show a picture in ${file.name}. A video plays here as MP4 (H.264) or WebM; a sound as MP3, M4A, OGG or WAV.`);
+    if (info.noPicture) throw new Error(t('editor.noPicture', { name: file.name }));
     const dataUrl = await readFileAsDataUrl(file);
     const upload = { id: uid('u'), name: file.name, mime: file.type, dataUrl, kind, ...info, addedAt: Date.now() };
     // It's used either way; Uploads just can't keep a copy when storage is full.
-    await store.saveUpload(upload).catch(() => toast(`${file.name} couldn't be kept in Uploads: this browser's storage is full.`, 'error'));
+    await store.saveUpload(upload).catch(() => toast(t('editor.uploadsFull', { name: file.name }), 'error'));
     return upload;
   }
 
@@ -630,14 +631,14 @@ export class Editor {
     if (upload.kind === 'video') return this.addVideo(upload, opts);
     if (upload.kind === 'audio') {
       this.setSoundtrack(upload);
-      toast(`${upload.name} is the soundtrack now. It plays when you press Play, and in videos you download.`);
+      toast(t('editor.soundtrackSet', { name: upload.name }));
       return null;
     }
     return this.addImage(upload, opts);
   }
 
   async importImageFile(file) {
-    if (!file.type.startsWith('image/')) throw new Error(`${file.name} isn't an image`);
+    if (!file.type.startsWith('image/')) throw new Error(t('editor.notImage', { name: file.name }));
     const dataUrl = await readFileAsDataUrl(file);
     const img = await loadImage(dataUrl);
     const upload = { id: uid('u'), name: file.name, mime: file.type, dataUrl, width: img.naturalWidth, height: img.naturalHeight, addedAt: Date.now() };
@@ -956,7 +957,7 @@ export class Editor {
     if (!this.selection.length) return;
     const ids = this.selection;
     const removed = this.change(() => cmd.deleteElements(this.doc, this.page, ids));
-    if (removed < ids.length) toast('Locked elements were kept. Unlock them to delete.');
+    if (removed < ids.length) toast(t('editor.lockedKept'));
     // Whatever was locked stays selected, so it can be unlocked right away.
     this.selection = ids.filter((id) => cmd.findElement(this.pageData, id));
     this.emit('selection');
@@ -1010,7 +1011,7 @@ export class Editor {
     const el = this.single;
     if (!el) return;
     styleClipboard = cmd.copyStyle(el);
-    toast('Style copied. Select something and paste the style.');
+    toast(t('editor.styleCopied'));
   }
 
   pasteStyle() {
@@ -1115,7 +1116,7 @@ export class Editor {
 
   deletePage(i = this.page) {
     if (this.doc.pages.length <= 1) {
-      toast('A design needs at least one page.');
+      toast(t('editor.onePage'));
       return;
     }
     const n = this.change(() => cmd.deletePage(this.doc, i));
@@ -1197,7 +1198,7 @@ export class Editor {
   // ---------- whole design ----------
 
   rename(name) {
-    const clean = name.trim().slice(0, 120) || 'Untitled design';
+    const clean = name.trim().slice(0, 120) || t('common.untitled');
     if (clean === this.doc.name) return;
     this.change(() => (this.doc.name = clean), { key: 'rename' });
     this.emit('name');

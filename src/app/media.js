@@ -5,6 +5,7 @@
 import { videoTime, usedAssetIds } from '../model/doc.js';
 import { videosIn } from '../model/motion.js';
 import { dataUrlToBlob, loadImage } from './ui.js';
+import { t, formatNumber } from './i18n.js';
 
 const LIMITS = { video: 60e6, audio: 25e6 };
 
@@ -20,7 +21,7 @@ export function mediaKind(file) {
 /** Refuse files too big to keep inside a design (they're stored with it). */
 export function checkSize(file, kind) {
   const max = LIMITS[kind];
-  if (max && file.size > max) throw new Error(`${file.name} is too big: up to ${max / 1e6} MB for ${kind === 'video' ? 'videos' : 'sounds'}.`);
+  if (max && file.size > max) throw new Error(t(kind === 'video' ? 'media.videoTooBig' : 'media.soundTooBig', { name: file.name, mb: formatNumber(max / 1e6) }));
 }
 
 function once(target, ok, bad = 'error', ms = 15000) {
@@ -32,8 +33,8 @@ function once(target, ok, bad = 'error', ms = 15000) {
       fn(v);
     };
     const onOk = () => done(resolve);
-    const onBad = () => done(reject, new Error("This file can't be played in this browser"));
-    const timer = setTimeout(() => done(reject, new Error('The file took too long to open')), ms);
+    const onBad = () => done(reject, new Error(t('media.cantPlay')));
+    const timer = setTimeout(() => done(reject, new Error(t('media.tooSlow'))), ms);
     target.addEventListener(ok, onOk);
     target.addEventListener(bad, onBad);
   });

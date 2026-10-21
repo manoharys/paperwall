@@ -12,6 +12,7 @@ import { jpegInfo } from '../model/jpeg.js';
 import { deflate } from '../model/deflate.js';
 import { measure, fontCssFor, designFontFiles, ensureDesignFonts } from './fonts.js';
 import { dataUrlToBytes, loadImage } from './ui.js';
+import { t } from './i18n.js';
 
 // Pictures are kept to a size every browser's canvas can hold.
 const MAX_SIDE = 12000;
@@ -51,7 +52,7 @@ async function canvasPixels(canvas) {
 }
 
 function canvasPng(canvas) {
-  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? b.arrayBuffer().then((a) => resolve(new Uint8Array(a)), reject) : reject(new Error('Export failed: the image is too large for this browser'))), 'image/png'));
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? b.arrayBuffer().then((a) => resolve(new Uint8Array(a)), reject) : reject(new Error(t('export.tooLarge')))), 'image/png'));
 }
 
 /** Draw a picture (a data: URL) into a canvas, no bigger than `max` on a side. */

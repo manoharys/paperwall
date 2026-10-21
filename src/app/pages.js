@@ -5,29 +5,31 @@ import { renderPage, renderFrame } from '../model/render.js';
 import { animationsEnd, keepsMoving, hasLoop, soundFade, pageDuration, pageFrame, transitionOf, timeline } from '../model/motion.js';
 import { VideoFrames, videosOn, blobUrlFor } from './media.js';
 import { measure, measureVersion, fontCssFor } from './fonts.js';
-import { visiblePages, pageName, pageLabel, soundtrackOf, DEFAULT_FILTERS } from '../model/doc.js';
+import { visiblePages, soundtrackOf, DEFAULT_FILTERS } from '../model/doc.js';
 import { boundsOf, rectsIntersect } from '../model/geometry.js';
+import { t, formatNumber } from './i18n.js';
+import { pageName, pageLabel } from './names.js';
 
 export class PageStrip {
   constructor(editor, canvas) {
     this.ed = editor;
     this.canvas = canvas;
     this.list = h('ol', { class: 'page-list', 'data-testid': 'page-strip' });
-    this.zoomLabel = h('button', { type: 'button', class: 'zoom-label', title: 'Zoom to fit', 'data-testid': 'zoom-label', onClick: () => canvas.zoomToFit() }, '100%');
+    this.zoomLabel = h('button', { type: 'button', class: 'zoom-label', title: t('zoom.fit'), 'data-testid': 'zoom-label', onClick: () => canvas.zoomToFit() }, '100%');
     this.el = h('footer', { class: 'pages-bar' },
       this.list,
-      iconButton('plus', 'Add page', () => editor.addPage(), { 'data-testid': 'strip-add-page' }),
-      iconButton('grid', 'All pages in a grid', () => pageGrid(editor, canvas), { 'data-testid': 'page-grid-btn' }),
+      iconButton('plus', t('pages.add'), () => editor.addPage(), { 'data-testid': 'strip-add-page' }),
+      iconButton('grid', t('pages.grid'), () => pageGrid(editor, canvas), { 'data-testid': 'page-grid-btn' }),
       h('div', { class: 'zoom' },
-        iconButton('minus', 'Zoom out', () => canvas.zoomBy(1 / 1.25), { 'data-testid': 'zoom-out' }),
+        iconButton('minus', t('zoom.out'), () => canvas.zoomBy(1 / 1.25), { 'data-testid': 'zoom-out' }),
         this.zoomLabel,
-        iconButton('plus', 'Zoom in', () => canvas.zoomBy(1.25), { 'data-testid': 'zoom-in' }),
-        iconButton('fit', 'Zoom to fit', () => canvas.zoomToFit(), { 'data-testid': 'zoom-fit' })));
+        iconButton('plus', t('zoom.in'), () => canvas.zoomBy(1.25), { 'data-testid': 'zoom-in' }),
+        iconButton('fit', t('zoom.fit'), () => canvas.zoomToFit(), { 'data-testid': 'zoom-fit' })));
     this.images = new Map(); // page id → { looks, img }: each page's picture as last drawn
     this.drawnCount = 0;
     this.redraw = debounce(() => this.render(), 250);
     editor.on((what) => {
-      if (what === 'view') this.zoomLabel.textContent = `${Math.round(editor.zoom * 100)}%`;
+      if (what === 'view') this.zoomLabel.textContent = zoomText(editor.zoom);
       else if (what === 'page') this.redraw.flush(); // now, and once (a 'doc' redraw may be waiting too)
       else if (what === 'doc') this.redraw();
       else if (what === 'strip') this.relabel();
@@ -100,8 +102,13 @@ export class PageStrip {
       pageDrag(item, i, (from) => ed.movePage(from, i));
       this.list.append(item);
     });
-    this.zoomLabel.textContent = `${Math.round(ed.zoom * 100)}%`;
+    this.zoomLabel.textContent = zoomText(ed.zoom);
   }
+}
+
+/** The zoom as a percentage, as this language writes one. */
+function zoomText(z) {
+  return formatNumber(Math.round(z * 100) / 100, { style: 'percent' }).replace(/\s/g, '');
 }
 
 /** Let a page's thumbnail be dragged onto another to move it there. */
@@ -128,15 +135,15 @@ export function pageGrid(editor, canvas) {
       const img = h('span', { class: 'page-img', style: { aspectRatio: `${editor.doc.width} / ${editor.doc.height}` } });
       lazily(img, () => (img.innerHTML = renderPage(editor.doc, i, { measure, noSize: true, placeholders: true, idPrefix: `pg${i}`, assetHref: canvas.assetHref })));
       const card = h('li', { class: `pg-card${i === editor.page ? ' on' : ''}${p.hidden ? ' hidden-page' : ''}`, draggable: 'true', 'data-testid': 'page-grid-card' },
-        pressable({ class: 'pg-open', 'aria-label': `Open ${pageName(p, i)}` }, () => {
+        pressable({ class: 'pg-open', 'aria-label': t('pages.open', { name: pageName(p, i) }) }, () => {
           editor.setPage(i);
           d.close();
         }, img),
         h('div', { class: 'pg-meta' },
           h('b', null, String(i + 1)),
           h('span', null, p.title || ''),
-          p.hidden ? h('small', null, 'Hidden') : null,
-          iconButton(p.hidden ? 'eye' : 'eyeOff', p.hidden ? 'Show page' : 'Hide page', () => {
+          p.hidden ? h('small', null, t('pages.hidden')) : null,
+          iconButton(p.hidden ? 'eye' : 'eyeOff', p.hidden ? t('pages.show') : t('pages.hide'), () => {
             editor.setPageHidden(i, !p.hidden);
             fill();
           }, { 'data-testid': 'page-grid-hide' })));
@@ -148,7 +155,7 @@ export function pageGrid(editor, canvas) {
     });
   };
   fill();
-  const d = dialog(`All pages (${editor.doc.pages.length})`, grid, { wide: true, testid: 'page-grid-dialog', onClose: () => forget(grid) });
+  const d = dialog(t('pages.all', { n: editor.doc.pages.length }), grid, { wide: true, testid: 'page-grid-dialog', onClose: () => forget(grid) });
   return d;
 }
 
@@ -169,7 +176,7 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
   const unraf = (id) => host.cancelAnimationFrame(id);
   const doc = editor.doc;
   const shown = only ? [editor.page] : visiblePages(doc);
-  if (!shown.length) return toast('Every page is hidden. Show a page to present it.');
+  if (!shown.length) return toast(t('present.allHidden'));
   // Start on the page in view, or the next visible one after it (the last
   // visible one if none come after).
   const next = shown.findIndex((k) => k >= editor.page);
@@ -177,7 +184,7 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
   const slide = h('div', { class: 'slide', 'data-testid': 'slide' });
   const counter = h('div', { class: 'slide-count' });
   const root = h('div', { class: 'presenter', 'data-testid': 'presenter', tabindex: '-1' }, slide, counter,
-    h('button', { type: 'button', class: 'presenter-close', 'aria-label': 'Stop presenting', onClick: () => close() }, icon('close')));
+    h('button', { type: 'button', class: 'presenter-close', 'aria-label': t('present.stop'), onClick: () => close() }, icon('close')));
   // Videos play along, and with Play the soundtrack too.
   const videos = new VideoFrames(doc);
   const tl = timeline(doc, shown);
@@ -417,16 +424,16 @@ const SLIDES_WINDOW = `paperwall-slides-${Math.random().toString(36).slice(2, 8)
  */
 export function presenterView(editor, canvas) {
   const doc = editor.doc;
-  if (!visiblePages(doc).length) return toast('Every page is hidden. Show a page to present it.');
+  if (!visiblePages(doc).length) return toast(t('present.allHidden'));
   // Opened first, while the click still counts (pop-up blockers allow that).
   const audience = window.open('', SLIDES_WINDOW, 'popup,width=960,height=600');
   if (!audience) {
-    toast('Allow pop-ups for this page to show the slides in their own window. Presenting here instead.', 'error');
+    toast(t('present.popups'), 'error');
     return present(editor, canvas);
   }
   // The slides' window: this page's look, and the design's fonts.
   const adoc = audience.document;
-  adoc.title = `${doc.name} (slides)`;
+  adoc.title = t('present.slidesTitle', { name: doc.name });
   adoc.head.replaceChildren(...[...document.querySelectorAll('style, link[rel="stylesheet"]')].map((n) => n.cloneNode(true)));
   adoc.body.replaceChildren();
   adoc.body.style.margin = '0';
@@ -445,22 +452,22 @@ export function presenterView(editor, canvas) {
   const view = h('div', { class: 'presenter-view', 'data-testid': 'presenter-view', tabindex: '-1' },
     h('header', null,
       clock,
-      h('button', { type: 'button', class: 'btn small', 'data-testid': 'pv-reset', onClick: () => (begun = performance.now()) }, 'Restart timer'),
+      h('button', { type: 'button', class: 'btn small', 'data-testid': 'pv-reset', onClick: () => (begun = performance.now()) }, t('present.restartTimer')),
       count,
-      h('button', { type: 'button', class: 'btn small', 'data-testid': 'pv-end', onClick: () => ctl?.close() }, 'End')),
+      h('button', { type: 'button', class: 'btn small', 'data-testid': 'pv-end', onClick: () => ctl?.close() }, t('present.end'))),
     h('div', { class: 'pv-main' },
       current,
-      h('aside', null, h('h3', null, 'Next'), upcoming, h('h3', null, 'Notes'), notes)),
+      h('aside', null, h('h3', null, t('common.next')), upcoming, h('h3', null, t('inspector.notes')), notes)),
     h('footer', null,
-      h('button', { type: 'button', class: 'btn', 'data-testid': 'pv-prev', onClick: () => move(-1) }, 'Previous'),
-      h('button', { type: 'button', class: 'btn primary', 'data-testid': 'pv-next-btn', onClick: () => move(1) }, 'Next')));
+      h('button', { type: 'button', class: 'btn', 'data-testid': 'pv-prev', onClick: () => move(-1) }, t('common.previous')),
+      h('button', { type: 'button', class: 'btn primary', 'data-testid': 'pv-next-btn', onClick: () => move(1) }, t('common.next'))));
   const render = (i) => renderPage(doc, i, { measure, noSize: true, assetHref: canvas.assetHref, idPrefix: `pv${i}` });
   const show = (i, list) => {
     const k = list.indexOf(i);
     current.innerHTML = render(i);
     if (k + 1 < list.length) upcoming.innerHTML = render(list[k + 1]);
-    else upcoming.replaceChildren(h('p', { class: 'pv-end' }, 'The end'));
-    notes.textContent = doc.pages[i].notes || 'No notes for this page.';
+    else upcoming.replaceChildren(h('p', { class: 'pv-end' }, t('present.theEnd')));
+    notes.textContent = doc.pages[i].notes || t('present.noNotes');
     notes.classList.toggle('empty', !doc.pages[i].notes);
     count.textContent = `${k + 1} / ${list.length}`;
   };

@@ -1,5 +1,7 @@
 // Small DOM helpers and the app's own interface icons.
 
+import { t } from './i18n.js';
+
 export function h(tag, attrs, ...children) {
   const el = document.createElement(tag);
   if (attrs) {
@@ -110,6 +112,7 @@ const UI_ICONS = {
   dup: '<rect x="4" y="4" width="11" height="11" rx="1.5"/><path d="M9 20h10a1 1 0 0 0 1-1V9"/>',
   more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
   search: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/>',
+  globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c-2.6 2.4-3.6 5.3-3.6 8.5s1 6.1 3.6 8.5M12 3.5c2.6 2.4 3.6 5.3 3.6 8.5s-1 6.1-3.6 8.5"/>',
   chart: '<path d="M4 20V4M4 20h16"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/>',
 };
 
@@ -194,7 +197,7 @@ export function dialog(title, body, { onClose, wide = false, testid, steady = nu
     }
   };
   const box = h('div', { class: `dialog${wide ? ' wide' : ''}`, role: 'dialog', 'aria-modal': 'true', 'aria-label': title, 'data-testid': testid },
-    h('header', null, h('h2', null, title), iconButton('close', 'Close', close)),
+    h('header', null, h('h2', null, title), iconButton('close', t('common.close'), close)),
     h('div', { class: 'dialog-body' }, body));
   backdrop.append(box);
   backdrop.addEventListener('pointerdown', (e) => {
@@ -258,7 +261,7 @@ export function loadImage(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('That image could not be opened'));
+    img.onerror = () => reject(new Error(t('error.imageOpen')));
     img.src = src;
   });
 }

@@ -1,44 +1,46 @@
 // Keyboard shortcuts, clipboard handling, and the cheat sheet.
 
 import { h, dialog, mod, toast } from './ui.js';
+import { t } from './i18n.js';
 
+// [what it does (a key in the catalog), the keys], read when shown.
 export const SHORTCUTS = [
-  ['Undo', `${mod}+Z`],
-  ['Redo', `${mod}+Shift+Z`],
-  ['Copy, cut, paste', `${mod}+C, X, V`],
-  ['Duplicate', `${mod}+D`],
-  ['Delete', 'Delete or Backspace'],
-  ['Select everything', `${mod}+A`],
-  ['Deselect', 'Esc'],
-  ['Move 1 px (10 px)', 'Arrows (with Shift)'],
-  ['Group / ungroup', `${mod}+G / ${mod}+Shift+G`],
-  ['Lock / unlock', `${mod}+L`],
-  ['Forward / backward', '] / ['],
-  ['To front / to back', `${mod}+] / ${mod}+[`],
-  ['Copy / paste style', `${mod}+Alt+C / ${mod}+Alt+V`],
-  ['Edit selected text', 'Enter'],
-  ['Add text, rectangle, circle, line', 'T, R, O, L'],
-  ['Zoom in / out / fit', `${mod}+= / ${mod}+- / ${mod}+0`],
-  ['Find and replace', `${mod}+F`],
-  ['Rulers on / off', 'Shift+R'],
-  ['Stop drawing', 'Esc'],
-  ['Zoom with the mouse', `${mod}+scroll`],
-  ['Move around', 'Scroll, or hold Space and drag'],
-  ['Keep proportions while resizing', 'Shift'],
-  ['Rotate in 15° steps', 'Shift while rotating'],
-  ['Move without snapping', 'Alt while dragging'],
-  ['Download', `${mod}+E`],
-  ['This cheat sheet', '?'],
+  ['shortcut.undo', () => `${mod}+Z`],
+  ['shortcut.redo', () => `${mod}+Shift+Z`],
+  ['shortcut.copy', () => `${mod}+C, X, V`],
+  ['shortcut.duplicate', () => `${mod}+D`],
+  ['shortcut.delete', () => t('keys.deleteOrBackspace')],
+  ['shortcut.selectAll', () => `${mod}+A`],
+  ['shortcut.deselect', () => 'Esc'],
+  ['shortcut.nudge', () => t('keys.arrows')],
+  ['shortcut.group', () => `${mod}+G / ${mod}+Shift+G`],
+  ['shortcut.lock', () => `${mod}+L`],
+  ['shortcut.order', () => '] / ['],
+  ['shortcut.frontBack', () => `${mod}+] / ${mod}+[`],
+  ['shortcut.style', () => `${mod}+Alt+C / ${mod}+Alt+V`],
+  ['shortcut.editText', () => 'Enter'],
+  ['shortcut.add', () => 'T, R, O, L'],
+  ['shortcut.zoom', () => `${mod}+= / ${mod}+- / ${mod}+0`],
+  ['shortcut.find', () => `${mod}+F`],
+  ['shortcut.rulers', () => 'Shift+R'],
+  ['shortcut.stopDrawing', () => 'Esc'],
+  ['shortcut.wheelZoom', () => t('keys.modScroll', { mod })],
+  ['shortcut.pan', () => t('keys.pan')],
+  ['shortcut.keepRatio', () => 'Shift'],
+  ['shortcut.rotate', () => t('keys.shiftRotating')],
+  ['shortcut.noSnap', () => t('keys.altDragging')],
+  ['shortcut.download', () => `${mod}+E`],
+  ['shortcut.cheatSheet', () => '?'],
 ];
 
 export function cheatSheet() {
-  return dialog('Keyboard shortcuts', h('table', { class: 'shortcuts', 'data-testid': 'shortcuts' },
-    h('tbody', null, SHORTCUTS.map(([what, keys]) => h('tr', null, h('td', null, what), h('td', null, h('kbd', null, keys)))))));
+  return dialog(t('shortcuts.title'), h('table', { class: 'shortcuts', 'data-testid': 'shortcuts' },
+    h('tbody', null, SHORTCUTS.map(([what, keys]) => h('tr', null, h('td', null, t(what)), h('td', null, h('kbd', null, keys())))))));
 }
 
 function typing(e) {
-  const t = e.target;
-  return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+  const el = e.target;
+  return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
 }
 
 const MARKER = 'paperwall:elements';
@@ -85,7 +87,7 @@ export function bindShortcuts(editor, canvas, actions) {
     if (m && k === 's') {
       done();
       editor.flush();
-      return toast('Saved on this device. Use "Save to file" to keep a copy elsewhere.');
+      return toast(t('shortcuts.saved'));
     }
     if (m) return;
     if (e.key === 'Delete' || e.key === 'Backspace') return done(), editor.deleteSelection();

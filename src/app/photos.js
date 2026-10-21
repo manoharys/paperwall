@@ -10,6 +10,7 @@ import { openOnlineSettings } from './online-settings.js';
 import { searchUrl, authHeaders, readResults, creditLine, creditText } from '../model/photos.js';
 import { uid } from '../model/doc.js';
 import * as store from './store.js';
+import { t, tn } from './i18n.js';
 
 const PICTURE = /^image\/(jpeg|png|webp|gif)\b/;
 
@@ -18,7 +19,7 @@ async function pictureBlob(provider, url) {
   const res = await providerFetch(provider, url);
   const blob = await res.blob();
   const mime = (blob.type || res.headers.get('content-type') || '').toLowerCase().match(PICTURE)?.[0];
-  if (!mime) throw new Error("That photo isn't a kind of picture Paperwall can keep.");
+  if (!mime) throw new Error(t('photos.badKind'));
   return new Blob([blob], { type: mime });
 }
 
@@ -50,34 +51,34 @@ export function photosView(ed, state) {
       forgetPreviews();
       Object.assign(state, { provider, results: [], page: 0, more: false, error: '', search: (state.search || 0) + 1 });
     }
-    const settings = h('button', { type: 'button', class: 'link-btn', 'data-testid': 'photos-settings', onClick: () => openOnlineSettings('photos') }, 'Online extras…');
+    const settings = h('button', { type: 'button', class: 'link-btn', 'data-testid': 'photos-settings', onClick: () => openOnlineSettings('photos') }, t('menu.online'));
     if (!on) {
       wrap.replaceChildren(
-        h('p', { class: 'hint', 'data-testid': 'photos-note' }, `Searching sends your search words to ${p.name}.`),
+        h('p', { class: 'hint', 'data-testid': 'photos-note' }, t('photos.note', { name: p.name })),
         h('div', { class: 'row' },
           h('button', { type: 'button', class: 'btn small primary', 'data-testid': 'photos-turn-on', onClick: async () => {
             await setOn('photos', true);
             fill();
-          } }, 'Turn on'),
+          } }, t('photos.turnOn')),
           settings));
       return;
     }
     if (p.key && !key) {
       wrap.replaceChildren(
-        h('p', { class: 'hint' }, `${p.name} needs your own free key. It stays on this device and goes only to ${p.name}.`),
-        h('button', { type: 'button', class: 'btn small primary', 'data-testid': 'photos-add-key', onClick: () => openOnlineSettings('photos') }, 'Add a key'));
+        h('p', { class: 'hint' }, t('photos.needsKey', { name: p.name })),
+        h('button', { type: 'button', class: 'btn small primary', 'data-testid': 'photos-add-key', onClick: () => openOnlineSettings('photos') }, t('photos.addKey')));
       return;
     }
 
-    const input = h('input', { type: 'search', placeholder: `Search ${p.name}`, value: state.query || '', 'aria-label': `Search photos on ${p.name}`, 'data-testid': 'photos-search', enterkeyhint: 'search' });
+    const input = h('input', { type: 'search', placeholder: t('photos.search', { name: p.name }), value: state.query || '', 'aria-label': t('photos.searchLabel', { name: p.name }), 'data-testid': 'photos-search', enterkeyhint: 'search' });
     const grid = h('div', { class: 'upload-grid photo-grid', 'data-testid': 'photos-grid' });
     const status = h('p', { class: 'hint', 'data-testid': 'photos-status', role: 'status' });
-    const more = h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'photos-more', hidden: true, onClick: () => search(state.page + 1) }, 'More photos');
+    const more = h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'photos-more', hidden: true, onClick: () => search(state.page + 1) }, t('photos.more'));
 
     const tile = (r) => {
       const img = h('img', { alt: '', draggable: 'false' });
-      const label = creditLine(r.credit) || `A photo from ${p.name}`;
-      const el = pressable({ class: 'upload-img photo', title: label, 'aria-label': `Add ${label}`, 'data-testid': 'photo-item', draggable: 'true',
+      const label = creditLine(r.credit) || t('photos.from', { name: p.name });
+      const el = pressable({ class: 'upload-img photo', title: label, 'aria-label': t('insert.addNamed', { name: label }), 'data-testid': 'photo-item', draggable: 'true',
         onDragstart: (e) => {
           // Fetched while it's dragged: the page waits for it when it's dropped.
           r.uploadId ||= uid('u');
@@ -121,7 +122,7 @@ export function photosView(ed, state) {
     const show = () => {
       grid.replaceChildren(...state.results.map(tile));
       more.hidden = !state.more;
-      status.textContent = state.error || (state.page && !state.results.length ? 'No photos found. Try other words.' : '');
+      status.textContent = state.error || (state.page && !state.results.length ? t('photos.none') : '');
     };
 
     const search = async (page) => {
@@ -134,7 +135,7 @@ export function photosView(ed, state) {
         grid.replaceChildren();
       }
       const mine = state.search; // (more of an earlier search, answering late, isn't mixed in)
-      status.textContent = 'Searching…';
+      status.textContent = t('photos.searching');
       more.disabled = true;
       try {
         const key = p.key ? await keyFor(provider) : '';
@@ -164,10 +165,10 @@ export function photosView(ed, state) {
     } }, icon('search', 18), input);
     wrap.replaceChildren(
       form,
-      h('p', { class: 'hint' }, `Photos from ${p.name}. Each keeps its credit, shown with the picture once it's added. `, settings),
+      h('p', { class: 'hint' }, t('photos.hint', { name: p.name }), ' ', settings),
       // (Openverse passes every picture through its own address: the original
       // size when its source still has it, else a preview 600 px wide.)
-      provider === 'openverse' ? h('p', { class: 'hint', 'data-testid': 'photos-size-note' }, 'Openverse photos come at their original size when the source still has it, otherwise about 600 px wide. Check each license before using one commercially.') : null,
+      provider === 'openverse' ? h('p', { class: 'hint', 'data-testid': 'photos-size-note' }, t('photos.openverseSize')) : null,
       status,
       grid,
       more);
@@ -217,14 +218,16 @@ export function photosView(ed, state) {
 /** A stock photo's credit in the image's settings, with a button to copy it. */
 export function creditSection(credit) {
   const link = (text, href) => (href ? h('a', { href, target: '_blank', rel: 'noopener noreferrer' }, text) : text);
+  // (A plain name goes into a sentence as a text node.)
+  const wrap = (x) => (typeof x === 'string' ? document.createTextNode(x) : x);
   const c = credit;
   const words = (c.provider === 'Unsplash' || c.provider === 'Pexels') && c.creator
-    ? ['Photo by ', link(c.creator, c.creatorUrl), ' on ', link(c.provider, c.url)]
-    : [link(c.title ? `"${c.title}"` : 'Photo', c.url), c.creator ? ' by ' : '', c.creator ? link(c.creator, c.creatorUrl) : '', c.license ? ', ' : '', c.license ? link(c.license, c.licenseUrl) : '', c.provider ? ` (via ${c.provider})` : ''];
-  return section('Credit',
+    ? tn('credit.byOn', { creator: wrap(link(c.creator, c.creatorUrl)), provider: wrap(link(c.provider, c.url)) })
+    : [link(c.title ? `"${c.title}"` : t('credit.photo'), c.url), ...(c.creator ? tn('credit.by', { creator: wrap(link(c.creator, c.creatorUrl)) }) : []), c.license ? ', ' : '', c.license ? link(c.license, c.licenseUrl) : '', c.provider ? t('credit.via', { provider: c.provider }) : ''];
+  return section(t('credit.title'),
     h('p', { class: 'credit', 'data-testid': 'image-credit' }, ...words),
-    h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'copy-credit', onClick: () => copyText(creditText(c)) }, icon('copy'), 'Copy credit'),
-    h('p', { class: 'hint' }, 'Put the credit near the design wherever you share it.'));
+    h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'copy-credit', onClick: () => copyText(creditText(c)) }, icon('copy'), t('credit.copy')),
+    h('p', { class: 'hint' }, t('credit.hint')));
 }
 
 async function copyText(text) {
@@ -238,7 +241,7 @@ async function copyText(text) {
     box.select();
     const ok = document.execCommand('copy');
     box.remove();
-    if (!ok) return toast("Couldn't copy. Select the credit and copy it yourself.", 'error');
+    if (!ok) return toast(t('credit.copyFailed'), 'error');
   }
-  toast('Credit copied');
+  toast(t('credit.copied'));
 }

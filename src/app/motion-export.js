@@ -13,13 +13,14 @@ import { buildMp4Parts } from '../model/mp4.js';
 import { measure, fontCssFor } from './fonts.js';
 import { loadImage } from './ui.js';
 import { VideoFrames, videosOn } from './media.js';
+import { t } from './i18n.js';
 
 /** A copy of what an encoder hands over as bytes (an ArrayBuffer or a view of one). */
 function bytesOf(d) {
   return ArrayBuffer.isView(d) ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength).slice() : new Uint8Array(d.slice(0));
 }
 
-const NO_AVC_DESCRIPTION = "This browser's MP4 encoder left out what players need. Try WebM instead.";
+const NO_AVC_DESCRIPTION = 'motion.noAvc';
 
 /** Frames per second for each kind of download. */
 export const FPS = { gif: 15, video: 30 };
@@ -40,7 +41,7 @@ export function frameSize(doc, kind, wanted = null) {
  */
 async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, readBack = false }, each) {
   const tl = timeline(doc0, pages);
-  if (!tl.parts.length) throw new Error('Pick at least one page.');
+  if (!tl.parts.length) throw new Error(t('export.pickPage'));
   // Big photos made only as big as the frames can show, once, rather than
   // decoded at full size for every frame.
   const doc = await fittedPictures(doc0, pages, width);
@@ -285,7 +286,7 @@ function drawVideo(ctx, v, el, k) {
 }
 
 /** The design as an animated GIF. */
-const STUCK = "A video couldn't be followed frame by frame in this browser: from where it stopped, its still picture shows.";
+const STUCK = 'motion.stuck';
 
 export async function exportGif(doc, pages, { size = null, onProgress, onNote, signal } = {}) {
   const { width, height } = frameSize(doc, 'gif', size);
@@ -298,7 +299,7 @@ export async function exportGif(doc, pages, { size = null, onProgress, onNote, s
     if (same && i > 0) return gif.hold(at(i + 1) - at(i));
     gif.add(ctx.getImageData(0, 0, width, height).data, at(i + 1) - at(i));
   });
-  if (stuck) onNote?.(STUCK);
+  if (stuck) onNote?.(t(STUCK));
   return new Blob([gif.finish()], { type: 'image/gif' });
 }
 
@@ -344,10 +345,10 @@ async function pickVideoCodec(container, width, height) {
  * anything left out (a soundtrack this browser can't encode).
  */
 export async function exportVideo(doc, pages, { container = 'mp4', size = null, audio = null, volume = 1, onProgress, onNote, signal } = {}) {
-  if (!canMakeVideo()) throw new Error("This browser can't make videos. Try a recent Chrome, Edge, Safari or Firefox.");
+  if (!canMakeVideo()) throw new Error(t('export.noVideo'));
   const { width, height } = frameSize(doc, 'video', size);
   const pick = await pickVideoCodec(container, width, height);
-  if (!pick) throw new Error(`This browser can't make ${container.toUpperCase()} videos. Try ${container === 'mp4' ? 'WebM' : 'MP4'} instead.`);
+  if (!pick) throw new Error(t('motion.noFormat', { format: container.toUpperCase(), other: container === 'mp4' ? 'WebM' : 'MP4' }));
   // The soundtrack is decoded only now that the video can be made.
   if (typeof audio === 'function') audio = await audio();
   const fps = FPS.video;
@@ -376,7 +377,7 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
       await drain(encoder, 4);
       // H.264 for MP4 needs the encoder's description, which comes with its
       // first output: without it, say so now rather than after every frame.
-      if (pick.codec === 'avc' && chunks.length && !description) throw new Error(NO_AVC_DESCRIPTION);
+      if (pick.codec === 'avc' && chunks.length && !description) throw new Error(t(NO_AVC_DESCRIPTION));
     }));
     // (An encoder that failed at the very end has closed: its own error says why.)
     if (failure) throw failure;
@@ -388,8 +389,8 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
     if (encoder.state !== 'closed') encoder.close();
   }
   if (failure) throw failure;
-  if (pick.codec === 'avc' && !description) throw new Error(NO_AVC_DESCRIPTION);
-  if (stuck) onNote?.(STUCK);
+  if (pick.codec === 'avc' && !description) throw new Error(t(NO_AVC_DESCRIPTION));
+  if (stuck) onNote?.(t(STUCK));
   let sound = null;
   if (audio) {
     // The pictures are done: a sound that won't encode leaves a silent video, not nothing.
@@ -397,7 +398,7 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
       if (signal?.aborted) throw e;
       return null;
     });
-    if (!sound) onNote?.("The soundtrack couldn't be encoded here, so the video is silent.");
+    if (!sound) onNote?.(t('motion.silent'));
   }
   const video = { codec: pick.codec, codecString: pick.codecString, width, height, description, chunks };
   const parts = container === 'mp4' ? buildMp4Parts({ video, audio: sound, duration: total }) : buildWebmParts({ video, audio: sound, duration: total });

@@ -7,6 +7,7 @@
 
 import { applyOp, unsupported, convGeometry, poolGeometry, resizeTarget, workPlan } from '../model/onnx-ops.js';
 import { tensor, DTYPE, isFloat } from '../model/onnx.js';
+import { t } from './i18n.js';
 
 const VERTEX = `#version 300 es
 void main() {
@@ -349,7 +350,7 @@ class GlRunner {
   draw(name, dims, uniforms, rows = 0) {
     const gl = this.gl;
     const L = this.layout(dims);
-    if (!L) throw new Error('Too big for the graphics card');
+    if (!L) throw new Error(t('gpu.tooBig'));
     const out = this.texture(L.w, L.h);
     const p = this.program(name);
     gl.useProgram(p);
@@ -391,14 +392,14 @@ class GlRunner {
       for (;;) {
         const r = gl.clientWaitSync(sync, 0, 0);
         if (r === gl.ALREADY_SIGNALED || r === gl.CONDITION_SATISFIED || r === gl.WAIT_FAILED) break;
-        if (gl.isContextLost()) throw new Error('The graphics card stopped');
+        if (gl.isContextLost()) throw new Error(t('gpu.stopped'));
         await (pause ? pause() : wait(4));
         if (signal?.aborted) throw stopped(signal);
       }
     } finally {
       gl.deleteSync(sync);
     }
-    if (gl.isContextLost()) throw new Error('The graphics card stopped');
+    if (gl.isContextLost()) throw new Error(t('gpu.stopped'));
   }
 
   // ---------- operations ----------
@@ -542,7 +543,7 @@ class GlRunner {
     const absent = graph.inputs.find((i) => !feeds[i.name]);
     if (missing.length || absent) {
       this.destroy(); // (its graphics context goes too: browsers keep only a few)
-      throw new Error(missing.length ? `This model uses operations Paperwall can't run yet: ${missing.join(', ')}` : `The model needs an input called ${absent.name}`);
+      throw new Error(missing.length ? t('gpu.unsupported', { ops: missing.join(', ') }) : t('gpu.noInput', { name: absent.name }));
     }
     const values = new Map(graph.initializers);
     for (const i of graph.inputs) values.set(i.name, feeds[i.name]);
@@ -568,11 +569,11 @@ class GlRunner {
     try {
       for (let i = 0; i < graph.nodes.length; i++) {
         if (signal?.aborted) throw stopped(signal);
-        if (this.gl.isContextLost()) throw new Error('The graphics card stopped');
+        if (this.gl.isContextLost()) throw new Error(t('gpu.stopped'));
         const n = graph.nodes[i];
         const args = n.inputs.map((name) => {
           if (!name) return undefined;
-          if (!values.has(name)) throw new Error(`The model refers to a missing value, ${name}`);
+          if (!values.has(name)) throw new Error(t('gpu.missingValue', { name }));
           return values.get(name);
         });
         // A Relu straight after a Conv (and nothing else using the Conv) is done in the same pass.

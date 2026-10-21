@@ -15,6 +15,7 @@ import { mediaKind, blobUrlFor } from './media.js';
 import { notePad } from '../model/text-layout.js';
 import { h, toast, pickFile } from './ui.js';
 import * as store from './store.js';
+import { t } from './i18n.js';
 
 const PAD = 64;
 const RATIO_LOCKED = new Set([...KEEPS_RATIO, 'group']);
@@ -44,8 +45,8 @@ export class Canvas {
     this.overlay = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     this.overlay.setAttribute('class', 'overlay');
     // Rulers sit just outside the page's top and left edges and scroll with it.
-    this.rulerX = h('div', { class: 'ruler x', 'data-testid': 'ruler-x', title: 'Drag down to add a guide' });
-    this.rulerY = h('div', { class: 'ruler y', 'data-testid': 'ruler-y', title: 'Drag right to add a guide' });
+    this.rulerX = h('div', { class: 'ruler x', 'data-testid': 'ruler-x', title: t('canvas.rulerX') });
+    this.rulerY = h('div', { class: 'ruler y', 'data-testid': 'ruler-y', title: t('canvas.rulerY') });
     this.wrap = h('div', { class: 'page-wrap', 'data-testid': 'page' }, this.svgHost, this.overlay, this.rulerX, this.rulerY);
     this.board = h('div', { class: 'board' }, this.wrap);
     this.el = h('div', { class: 'stage', 'data-testid': 'stage', tabindex: '-1' }, this.board);
@@ -797,7 +798,7 @@ export class Canvas {
     if (uploadId) {
       try {
         const upload = await store.getUpload(uploadId);
-        if (upload && !upload.dataUrl) toast(`${upload.name} is missing. Try uploading it again.`, 'error');
+        if (upload && !upload.dataUrl) toast(t('upload.missing', { name: upload.name }), 'error');
         else if (upload && !this.ed.closed) await place(upload);
       } catch (err) {
         toast(err.message, 'error');
@@ -826,7 +827,7 @@ export class Canvas {
     ed.history.record(ed.doc);
     ed.editingTextId = el.id;
     this.textBefore = el.text;
-    const ta = h('textarea', { class: 'text-editor', 'data-testid': 'text-editor', spellcheck: 'true', 'aria-label': 'Edit text' });
+    const ta = h('textarea', { class: 'text-editor', 'data-testid': 'text-editor', spellcheck: 'true', dir: 'auto', 'aria-label': t('canvas.editText') });
     ta.value = el.text;
     ta.addEventListener('input', () => {
       el.text = ta.value;
