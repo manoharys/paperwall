@@ -2,13 +2,13 @@
   "summary": {
     "date": "2026-10-21",
     "total": 175,
-    "verified": 174,
+    "verified": 175,
     "failing": 0,
-    "todo": 1,
-    "e2eTests": 156,
-    "e2ePassing": 156,
-    "unitTests": 166,
-    "unitPassing": 166
+    "todo": 0,
+    "e2eTests": 159,
+    "e2ePassing": 159,
+    "unitTests": 179,
+    "unitPassing": 179
   },
   "areas": [
     {
@@ -590,7 +590,7 @@
         {
           "id": "IMG-11",
           "title": "Remove an image's background on your device",
-          "status": "todo"
+          "status": "verified"
         },
         {
           "id": "IMG-12",
