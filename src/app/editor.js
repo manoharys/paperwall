@@ -850,6 +850,11 @@ export class Editor {
    * picture at `dataUrl` in place, and may take its time. Returns the new
    * asset's id, or null if the element was changed or removed meanwhile.
    */
+  /** An element of the design by id (this page's first), or null. */
+  find(id) {
+    return locate(this.doc, id, this.pageData.id)?.el || null;
+  }
+
   async remakeImage(elId, dataUrl, make, { key = null, name = 'image' } = {}) {
     const before = locate(this.doc, elId)?.el?.assetId;
     const img = await loadImage(dataUrl);

@@ -82,12 +82,15 @@ export function openOnlineSettings(feature) {
         changed();
         draw();
       } }),
-      h('p', { class: 'hint' }, `Sends ${SENDS[f] || 'what you ask it'} to ${p.name}, and only when you use it.`),
+      // (One that runs on this device downloads its model once, and sends nothing.)
+      h('p', { class: 'hint' }, f === 'cutout'
+        ? `Runs on this device: your pictures never leave it. Its model (${p.name}) is downloaded once from ${p.hosts.join(', ')} the first time you use it.`
+        : `Sends ${SENDS[f] || 'what you ask it'} to ${p.name}, and only when you use it.`),
       key ? h('label', { class: 'field' }, h('span', null, `${p.name} key`), key) : null,
       address ? h('label', { class: 'field' }, h('span', null, 'Ollama address'), address,
         h('small', null, `Paperwall can reach Ollama at ${p.hosts.join(' or ')}.`)) : null,
       h('div', { class: 'row' },
-        test,
+        f === 'cutout' ? null : test,
         p.key && p.keyUrl ? h('a', { href: p.keyUrl, target: '_blank', rel: 'noopener noreferrer', 'data-testid': `online-get-key-${f}` }, 'Get a key') : null,
         !p.key && p.site ? h('a', { href: p.site, target: '_blank', rel: 'noopener noreferrer' }, `About ${p.name}`) : null),
       status);

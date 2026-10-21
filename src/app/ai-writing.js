@@ -28,23 +28,29 @@ function repaint() {
 /** Ask for new text for a box and put it in (one undo step). */
 async function run(ed, id, pageId, action, opts = {}) {
   if (jobs.has(id)) return;
-  if (!(await aiReady('writing'))) {
+  // (Held at once, so a second click meanwhile doesn't send another request.)
+  const controller = new AbortController();
+  jobs.set(id, { controller, label: 'Getting ready…' });
+  if (!(await aiReady('writing').catch(() => false))) {
+    jobs.delete(id);
     setupFor = { id, retry: () => run(ed, id, pageId, action, opts) };
     menuFor = null;
     return repaint();
   }
   const page = ed.doc.pages.find((p) => p.id === pageId);
   const el = page && findElement(page, id);
-  if (!el || el.type !== 'text') return;
-  const { system, prompt } = writingPrompt(action, { ...opts, text: el.text, el });
-  const controller = new AbortController();
-  jobs.set(id, { controller, label: `${DOING[action]} with ${PROVIDERS[await providerFor('writing')].name}…` });
+  if (!el || el.type !== 'text') return void jobs.delete(id);
+  const sent = el.text;
+  const { system, prompt } = writingPrompt(action, { ...opts, text: sent, el });
+  jobs.get(id).label = `${DOING[action]} with ${PROVIDERS[await providerFor('writing')].name}…`;
   errors.delete(id);
   menuFor = null;
   repaint();
   try {
-    const text = cleanWriting(await complete({ feature: 'writing', system, prompt, signal: controller.signal }), el.text);
+    const text = cleanWriting(await complete({ feature: 'writing', system, prompt, signal: controller.signal }), sent);
     if (!text) throw new Error('The answer came back empty. Try again.');
+    // (Typed into meanwhile: what was typed stays.)
+    if (findElement(page, id)?.text !== sent) throw new Error('The text changed while the answer was on its way, so it was left as you wrote it. Try again.');
     if (!ed.closed) ed.update({ text }, null, [id], pageId);
   } catch (e) {
     if (!isAbort(e)) {

@@ -459,7 +459,14 @@ class GlRunner {
    * (then it runs on the processor). Inputs may be on either.
    */
   node(n, args, fuseRelu, rows) {
-    const gpu = (t) => (t?.gpu ? t : t && isFloat(t.dtype) ? this.upload(t) : null);
+    // (A weight used again and again is put on the graphics card once a run.)
+    this.uploaded ||= new WeakMap();
+    const gpu = (t) => {
+      if (t?.gpu) return t;
+      if (!t || !isFloat(t.dtype)) return null;
+      if (!this.uploaded.has(t)) this.uploaded.set(t, this.upload(t));
+      return this.uploaded.get(t);
+    };
     const op = n.opType;
     const a = n.attrs;
     const x = args[0];
@@ -572,7 +579,11 @@ class GlRunner {
         const rows = tall ? Math.max(1, Math.floor(STRIP / (macs / tall))) : 0;
         let outs = this.node(n, args, fuse, rows);
         // On the processor otherwise (fetching anything on the graphics card first).
-        if (!outs) outs = applyOp(n, args.map((t) => (t?.gpu ? this.download(t) : t)));
+        if (!outs) {
+          outs = applyOp(n, args.map((t) => (t?.gpu ? this.download(t) : t)));
+          // (Its Relu too, which the graphics card would have done in the same pass.)
+          if (fuse) outs = applyOp(next, [outs[0]]);
+        }
         n.outputs.forEach((name, k) => {
           if (name && outs[k]) values.set(name, outs[k]);
         });

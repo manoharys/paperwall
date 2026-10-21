@@ -24,13 +24,15 @@ export function aiDesignBlock({ newDesign }) {
   const make = async () => {
     const description = text.value.trim();
     if (!description) return text.focus();
-    if (!(await aiReady('design'))) {
+    if (controller) return;
+    // (Held at once, so a second press meanwhile doesn't send another request.)
+    const job = (controller = new AbortController());
+    if (!(await aiReady('design').catch(() => false))) {
+      controller = null;
       return say(aiSetup('design', { onDone: () => (say(), make()), onCancel: () => say() }));
     }
     const preset = presetById(size.value);
     const n = +count.value;
-    controller = new AbortController();
-    const job = controller;
     go.disabled = true;
     say(h('div', { class: 'ai-progress', role: 'status', 'data-testid': 'ai-design-progress' },
       h('span', { class: 'ai-spinner', 'aria-hidden': 'true' }),

@@ -5,7 +5,7 @@
 // Pictures never leave the device.
 
 import { h, toast, dialog } from './ui.js';
-import { get, put } from './store.js';
+import { get, put, del } from './store.js';
 import { isOn, setOn, providerFor, providerFetch, PROVIDERS } from './online.js';
 import { readModel } from '../model/onnx.js';
 import { runModel } from '../model/onnx-ops.js';
@@ -39,11 +39,16 @@ async function sha256(bytes) {
   return [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** Whether the model is on this device (and the feature turned on). */
+/** Whether the model is on this device (and the feature turned on), without reading it. */
 export async function cutoutReady() {
   const spec = await cutoutModel();
-  return (await isOn(FEATURE)) && !!(await get('settings', storeKey(spec.sha256)));
+  if (!(await isOn(FEATURE))) return false;
+  if (loaded?.sha === spec.sha256) return true;
+  return (await get('settings', okKey(spec.sha256))) === true;
 }
+
+// (A small mark that the model is stored, so checking needn't read 4.6 MB.)
+const okKey = (sha) => `cutout|ok|${sha}`;
 
 let loaded = null; // { sha, model } once read this session
 
@@ -55,12 +60,16 @@ async function loadModel({ download = false, onProgress, signal } = {}) {
   const spec = await cutoutModel();
   if (loaded?.sha === spec.sha256) return loaded.model;
   let bytes = await get('settings', storeKey(spec.sha256));
-  // (Checked again when read back: a damaged copy is fetched again.)
-  if (bytes && (await sha256(bytes)) !== spec.sha256) bytes = null;
+  // (Checked again when read back: a damaged copy goes, and is fetched again.)
+  if (bytes && (await sha256(bytes)) !== spec.sha256) {
+    bytes = null;
+    await Promise.all([del('settings', storeKey(spec.sha256)), del('settings', okKey(spec.sha256))]);
+  }
   if (!bytes) {
-    if (!download) throw new Error('The background removal model is not on this device yet');
+    if (!download) throw Object.assign(new Error('The background removal model is not on this device yet'), { missing: true });
     bytes = await fetchModel(spec, { onProgress, signal });
     await put('settings', storeKey(spec.sha256), bytes);
+    await put('settings', okKey(spec.sha256), true);
   }
   const model = readModel(new Uint8Array(bytes));
   loaded = { sha: spec.sha256, model };
@@ -122,9 +131,31 @@ export async function runCutoutModel(model, input, { onProgress, signal, engine 
 }
 
 /** Find the subject of RGBA pixels: a mask { mask, mw, mh } from 0 (background) to 1. */
+/** RGBA pixels at most `max` on a side (as they are when smaller already). */
+function shrink(rgba, w, h, max) {
+  if (Math.max(w, h) <= max || typeof document === 'undefined') return { rgba, w, h };
+  const s = max / Math.max(w, h);
+  const [sw, sh] = [Math.max(1, Math.round(w * s)), Math.max(1, Math.round(h * s))];
+  const full = document.createElement('canvas');
+  full.width = w;
+  full.height = h;
+  full.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(rgba.buffer, rgba.byteOffset, w * h * 4), w, h), 0, 0);
+  const out = document.createElement('canvas');
+  out.width = sw;
+  out.height = sh;
+  const g = out.getContext('2d', { willReadFrequently: true });
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(full, 0, 0, sw, sh);
+  full.width = full.height = 0;
+  return { rgba: g.getImageData(0, 0, sw, sh).data, w: sw, h: sh };
+}
+
 export async function findSubject(model, rgba, w, h, opts) {
   const size = model.graph.inputs[0].shape?.[2];
-  const input = modelInput(rgba, w, h, Number.isInteger(size) && size > 0 ? size : undefined);
+  const side = Number.isInteger(size) && size > 0 ? size : undefined;
+  // (A big photo is made smaller first: the model sees only a small square.)
+  const small = shrink(rgba, w, h, 2 * (side || 320));
+  const input = modelInput(small.rgba, small.w, small.h, side);
   const { out } = await runCutoutModel(model, input, opts);
   return maskFromOutput(out);
 }
@@ -139,12 +170,24 @@ export function cutoutOf(assetId) {
 
 export const DEFAULT_REFINE = 0.5;
 
-/** Redo a cut-out's edges, crisper or softer (refine 0..1). Slider moves merge into one undo step. */
-export async function refineCutout(ed, el, refine) {
-  const cut = cuts.get(el.assetId);
-  if (!cut) return;
-  const id = await ed.remakeImage(el.id, cut.source, (px, w, h) => void applyMask(px, w, h, cut.mask, { refine }), { key: `cutout-refine:${el.id}`, name: cut.name });
-  if (id) cuts.set(id, { ...cut, refine });
+const refining = new Map(); // element id → its latest refine
+
+/**
+ * Redo a cut-out's edges, crisper or softer (refine 0..1). Slider moves
+ * merge into one undo step, and each waits for the one before (the last
+ * one wins), working from the picture as it is by then.
+ */
+export function refineCutout(ed, el, refine) {
+  const job = (refining.get(el.id) || Promise.resolve()).then(async () => {
+    const now = ed.find(el.id);
+    const cut = now && cuts.get(now.assetId);
+    if (!cut) return;
+    const id = await ed.remakeImage(el.id, cut.source, (px, w, h) => void applyMask(px, w, h, cut.mask, { refine }), { key: `cutout-refine:${el.id}`, name: cut.name });
+    if (id) cuts.set(id, { ...cut, refine });
+  }).catch(() => null);
+  refining.set(el.id, job);
+  job.then(() => refining.get(el.id) === job && refining.delete(el.id));
+  return job;
 }
 
 /**
@@ -205,19 +248,21 @@ export async function smartRemoveBackground(ed) {
     } catch (e) {
       busy = false;
       if (stopper.signal.aborted) return;
+      if (e?.missing) return offer(); // (gone or damaged here: asked again)
       d.close();
       toast(e?.message || 'That image could not be processed.', 'error');
     }
   };
 
-  if (ready) return go(false);
   const mb = (spec.bytes / 1e6).toFixed(1);
-  show(
+  const offer = () => show(
     h('p', null, 'Smart removal finds the subject of a photo (a person, a pet, a product) with a small AI model that runs on this device.'),
     h('p', null, `It needs the model first, downloaded once: ${spec.name.replace(/ \(.*\)$/, '')}, ${mb} MB from ${spec.host} (${spec.license} license). After that it works offline, and your pictures never leave this device.`),
     h('div', { class: 'row end' },
       h('button', { type: 'button', class: 'btn', onClick: () => d.close() }, 'Not now'),
       h('button', { type: 'button', class: 'btn primary', 'data-testid': 'cutout-download', onClick: () => go(true) }, `Download (${mb} MB) and turn on`)));
+  if (ready) return go(false);
+  offer();
 }
 
 /** For tests and power users. */

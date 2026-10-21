@@ -65,7 +65,7 @@ export function readResults(provider, json, page = 1) {
     }));
     more = page < (+json?.total_pages || 0);
   } else if (provider === 'pexels') {
-    photos = (json?.photos || []).filter((p) => p && own(p.src?.medium) && own(p.src?.large2x || p.src?.large)).map((p) => ({
+    photos = (json?.photos || []).filter((p) => p && own(p.src?.medium) && (own(p.src?.large2x) || own(p.src?.large))).map((p) => ({
       id: String(p.id), preview: p.src.medium, full: own(p.src.large2x) ? p.src.large2x : p.src.large,
       credit: cleanCredit({ provider: 'Pexels', title: p.alt, creator: p.photographer, creatorUrl: p.photographer_url, license: 'Pexels License', licenseUrl: 'https://www.pexels.com/license/', url: p.url }),
     }));
