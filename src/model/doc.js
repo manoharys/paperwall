@@ -54,7 +54,9 @@ export function pxPerUnit(unit, dpi = DPI) {
 
 /** The resolution a design prints and exports at: print units at DPI, px designs as screens see them. */
 export function printDpi(doc) {
-  if (doc.dpi > 0) return doc.dpi; // (a document's sheets: as A4 is to its width)
+  // A document's sheets (as A4 is to its width), on screen and on paper.
+  if (doc.document?.dpi > 0) return doc.document.dpi;
+  if (doc.dpi > 0) return doc.dpi;
   return doc.unit === 'mm' || doc.unit === 'in' ? DPI : 96;
 }
 

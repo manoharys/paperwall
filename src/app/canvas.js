@@ -64,8 +64,8 @@ export class Canvas {
     editor.isDragging = () => !!this.drag;
     // The middle of what's in view, on the page (where new things can go on a big canvas).
     editor.viewCenter = () => {
-      const z = this.ed.zoom;
-      return { x: (this.el.scrollLeft + this.el.clientWidth / 2 - this.wrap.offsetLeft) / z, y: (this.el.scrollTop + this.el.clientHeight / 2 - this.wrap.offsetTop) / z };
+      const r = this.el.getBoundingClientRect();
+      return this.toPage({ clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 });
     };
     // A change arrives mid-drag (see Editor.change). Drags that hold no part of
     // the design (marquee, pan, a stroke not yet added) just carry on. One that

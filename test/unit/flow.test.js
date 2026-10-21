@@ -127,3 +127,15 @@ test('[DW-03] a numbered list over two sheets counts on, and a word broken over 
   assert.equal(again.map((e) => e.text).join(''), long);
   assert.ok(again.every((e) => !e.text.includes(' ')), 'no spaces put into the word');
 });
+
+test('[DW-03] a long block starts in the room left on a sheet, not always on a new one', () => {
+  const doc = createDesignFromPreset('doc');
+  const page = doc.pages[0];
+  page.elements[1].text = Array.from({ length: 2500 }, (_, i) => `w${i}`).join(' ');
+  flowDocument(doc, approxMeasure);
+  const paper = paginate(doc, approxMeasure);
+  const first = paper.pages[0].elements;
+  assert.equal(first.length, 2, 'the title and the start of the long paragraph share the first sheet');
+  assert.ok(first[1].y > first[0].y + first[0].h, 'below the title');
+  assert.ok(first[1].y + first[1].h <= DOCUMENT.pageHeight - DOCUMENT.margin + 0.5);
+});

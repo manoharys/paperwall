@@ -8,7 +8,7 @@ import {
   TEXT_STYLES, versionSnapshot, isEmptyFrame,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
-import { flowDocument, growBoard } from '../model/flow.js';
+import { flowDocument, growBoard, DOCUMENT } from '../model/flow.js';
 import { curveGeometry } from '../model/render.js';
 import { unionBounds, pointInBox, toLocal, refitGroup } from '../model/geometry.js';
 import { gridBoxes } from '../model/grids.js';
@@ -1104,9 +1104,17 @@ export class Editor {
   /** Make a resized copy and open it; the original stays as it was. */
   async resizeTo(width, height, name, preset = null) {
     const copy = cmd.resizeDesign(this.doc, width, height);
-    // To a Document or Whiteboard size: one of those, as made from the home screen.
-    if (preset?.id === 'doc' && !copy.document) copy.document = { pageHeight: height, margin: 120, gap: 28, dpi: 150 };
-    if (preset?.id === 'whiteboard') copy.board = true;
+    // To a Document or Whiteboard size: one of those (and only that), as made
+    // from the home screen, its margins in proportion to its width.
+    if (preset?.id === 'doc') {
+      const k = width / 1240;
+      copy.document ||= { pageHeight: height, margin: Math.round(DOCUMENT.margin * k), gap: Math.round(DOCUMENT.gap * k), dpi: 150 };
+      delete copy.board;
+    }
+    if (preset?.id === 'whiteboard') {
+      copy.board = true;
+      delete copy.document;
+    }
     // A document's sheets print at the paper's size: print sizes at 300 dpi, the Document size at 150.
     if (copy.document && preset) copy.document.dpi = preset.unit ? 300 : preset.id === 'doc' ? 150 : copy.document.dpi;
     copy.name = name || `${this.doc.name} (${width} × ${height})`;

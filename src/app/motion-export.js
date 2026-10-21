@@ -127,7 +127,7 @@ async function fittedPictures(doc, pages, width) {
   const walk = (els) => {
     for (const el of els) {
       if (el.type === 'image' && el.assetId) use(el.assetId, el.w / (el.crop?.w || 1), el.h / (el.crop?.h || 1));
-      if (el.type === 'video' && el.still) use(el.still, el.w, el.h);
+      if (el.type === 'video' && el.still) use(el.still, el.w / (el.crop?.w || 1), el.h / (el.crop?.h || 1));
       if (el.type === 'group') walk(el.children);
     }
   };
@@ -137,10 +137,11 @@ async function fittedPictures(doc, pages, width) {
     if (page.background?.type === 'image') use(page.background.assetId, doc.width, doc.height);
   }
   const assets = { ...doc.assets };
-  for (const [id, part] of share) {
+  // (Each made smaller at once: they don't wait for each other.)
+  await Promise.all([...share].map(async ([id, part]) => {
     const a = doc.assets[id];
     const s = part * 1.25;
-    if (!(s < 0.9) || typeof a?.dataUrl !== 'string' || a.dataUrl.startsWith('data:image/svg')) continue;
+    if (!(s < 0.9) || typeof a?.dataUrl !== 'string' || a.dataUrl.startsWith('data:image/svg')) return;
     try {
       const img = await loadImage(a.dataUrl);
       const c = document.createElement('canvas');
@@ -153,7 +154,7 @@ async function fittedPictures(doc, pages, width) {
     } catch {
       /* kept as it is */
     }
-  }
+  }));
   return { ...doc, assets };
 }
 

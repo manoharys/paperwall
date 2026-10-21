@@ -77,6 +77,8 @@ export function paginate(doc, measure = approxMeasure) {
     let sheet = null;
     let top = 0; // where this sheet starts on the long page
     const where = new Map(); // block id → the sheet and its top, for the lines between them
+    const reshaped = new Set(); // blocks split over sheets or made smaller
+    const bottomOf = (sh) => sh.elements.reduce((b, e) => Math.max(b, e.y + e.h), 0);
     const start = (y) => {
       sheet = { ...page, id: `${page.id}-${out.pages.length + 1}`, elements: [] };
       out.pages.push(sheet);
@@ -93,22 +95,33 @@ export function paginate(doc, measure = approxMeasure) {
         place(el);
         continue;
       }
-      // Too tall for a sheet: text goes on over as many sheets as it takes,
-      // anything else is made to fit one. What follows goes just below the
-      // last of it.
-      if (sheet.elements.length) start(el.y);
-      const pieces = el.type === 'text' && !el.curve ? textPieces(el, room, measure) : [fitted(el, room / el.h)];
+      // Too tall for a sheet: text goes on over as many sheets as it takes
+      // (starting in the room left on this one), anything else is made to
+      // fit one. What follows goes just below the last of it. (Lines joined
+      // to it are left out: it's no longer where they meet it.)
+      reshaped.add(el.id);
+      const isText = el.type === 'text' && !el.curve;
+      let at = sheet.elements.length ? bottomOf(sheet) + opts.gap : opts.margin;
+      let first = opts.pageHeight - opts.margin - at;
+      if (!isText || first < el.size * (el.lineHeight || 1.2) * 3) {
+        if (sheet.elements.length) start(el.y);
+        at = opts.margin;
+        first = room;
+      }
+      const pieces = isText ? textPieces(el, room, measure, first) : [fitted(el, room / el.h)];
       pieces.forEach((piece, k) => {
-        if (k > 0) start(0);
-        sheet.elements.push({ ...clone(piece), y: opts.margin });
-        if (k === 0) where.set(el.id, { sheet, top: el.y - opts.margin });
+        if (k > 0) {
+          start(0);
+          at = opts.margin;
+        }
+        sheet.elements.push({ ...clone(piece), y: at });
       });
-      const lastH = pieces[pieces.length - 1].h;
-      top = el.y + el.h - (opts.margin + lastH);
+      top = el.y + el.h - (at + pieces[pieces.length - 1].h);
     }
     // Lines between blocks on the same sheet go on it (one between sheets can't be drawn).
     for (const el of page.elements) {
       if (el.hidden || el.type !== 'connector') continue;
+      if (reshaped.has(el.start?.id) || reshaped.has(el.end?.id)) continue;
       const a = where.get(el.start?.id);
       const b = where.get(el.end?.id);
       const at = a || b;
@@ -127,14 +140,15 @@ function fitted(el, s) {
 }
 
 /** A text block cut into pieces at most `room` tall, in whole lines (a paragraph cut goes on in the next). */
-function textPieces(el, room, measure) {
+function textPieces(el, room, measure, first = room) {
   const { lines, lineHeight } = layoutText(el, measure);
   // (Inside a highlight's padding, or a sticky note's edges.)
   const pad = (el.highlight ? el.highlight.padding ?? 0 : 0) + notePad(el);
-  const per = Math.max(1, Math.floor((room - pad * 2) / lineHeight));
+  const fits = (h) => Math.max(1, Math.floor((h - pad * 2) / lineHeight));
   const pieces = [];
   let items = 0; // list items so far (a numbered list carries on counting)
-  for (let i = 0; i < lines.length; i += per) {
+  // (The first piece takes the room left on its sheet; the rest, whole sheets.)
+  for (let i = 0, per = fits(first); i < lines.length; i += per, per = fits(room)) {
     const chunk = lines.slice(i, i + per);
     // Lines of a paragraph join with a space, a word broken over lines with nothing.
     const text = chunk.reduce((t, l, k) => (k === 0 ? l.text : `${t}${l.start ? '\n' : l.glue ? '' : ' '}${l.text}`), '');
@@ -142,7 +156,7 @@ function textPieces(el, room, measure) {
     const piece = { ...el, id: `${el.id}-${pieces.length + 1}`, text, listStart: items + 1, continues: !chunk[0].start };
     // (An item it goes on with was counted with the piece before.)
     items += chunk.filter((l, k) => l.start && l.text.trim() && !(k === 0 && piece.continues)).length;
-    piece.h = Math.min(room, Math.ceil(Math.min(per, chunk.length) * lineHeight + pad * 2));
+    piece.h = Math.min(pieces.length ? room : first, Math.ceil(chunk.length * lineHeight + pad * 2));
     pieces.push(piece);
   }
   return pieces;
