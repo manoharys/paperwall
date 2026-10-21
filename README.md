@@ -45,13 +45,13 @@ end-to-end test in a real browser** or listed as **not done yet**. This table
 is generated from the test run, never written by hand.
 
 <!-- scoreboard:start -->
-**162 of 163 features verified** by browser tests · 1 not done yet · [full scoreboard](SCOREBOARD.md)
+**164 of 165 features verified** by browser tests · 1 not done yet · [full scoreboard](SCOREBOARD.md)
 
 | Area | Verified |
 | --- | --- |
 | Designs | 12 / 12 |
 | Pages | 11 / 11 |
-| Viewing | 7 / 7 |
+| Viewing | 9 / 9 |
 | Selecting and moving | 13 / 13 |
 | Editing | 20 / 20 |
 | Text | 23 / 23 |

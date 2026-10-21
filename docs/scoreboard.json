@@ -1,12 +1,12 @@
 {
   "summary": {
     "date": "2026-10-21",
-    "total": 163,
-    "verified": 162,
+    "total": 165,
+    "verified": 164,
     "failing": 0,
     "todo": 1,
-    "e2eTests": 144,
-    "e2ePassing": 144,
+    "e2eTests": 145,
+    "e2ePassing": 145,
     "unitTests": 143,
     "unitPassing": 143
   },
@@ -175,6 +175,16 @@
         {
           "id": "VIEW-07",
           "title": "Grid with snapping, safe margins and print bleed",
+          "status": "verified"
+        },
+        {
+          "id": "VIEW-08",
+          "title": "Speaker notes for each page",
+          "status": "verified"
+        },
+        {
+          "id": "VIEW-09",
+          "title": "Presenter view: notes, the next page and a timer, with the slides in their own window",
           "status": "verified"
         }
       ]

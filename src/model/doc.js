@@ -471,6 +471,7 @@ export function validateDesign(doc) {
       relink(p.elements);
     }
     if (p.title !== undefined) p.title = typeof p.title === 'string' ? p.title.slice(0, 120) : undefined;
+    if (p.notes !== undefined) p.notes = typeof p.notes === 'string' && p.notes.trim() ? p.notes.slice(0, 10000) : undefined;
     if (p.hidden !== undefined) p.hidden = p.hidden === true || undefined;
     if (p.guides !== undefined) p.guides = (Array.isArray(p.guides) ? p.guides : []).filter((g) => g && (g.axis === 'x' || g.axis === 'y') && Number.isFinite(+g.pos)).map((g) => ({ axis: g.axis, pos: +g.pos }));
     if (p.anim !== undefined) p.anim = cleanMotion(p.anim, PAGE_ANIMATIONS, { duration: LIMITS.duration, stagger: LIMITS.stagger });

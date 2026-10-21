@@ -46,7 +46,9 @@
         { "id": "VIEW-04", "title": "Dark mode" },
         { "id": "VIEW-05", "title": "Present pages full screen and move with the arrow keys" },
         { "id": "VIEW-06", "title": "Rulers and guides you drag out, which elements snap to" },
-        { "id": "VIEW-07", "title": "Grid with snapping, safe margins and print bleed" }
+        { "id": "VIEW-07", "title": "Grid with snapping, safe margins and print bleed" },
+        { "id": "VIEW-08", "title": "Speaker notes for each page" },
+        { "id": "VIEW-09", "title": "Presenter view: notes, the next page and a timer, with the slides in their own window" }
       ]
     },
     {

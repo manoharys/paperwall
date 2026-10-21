@@ -6,7 +6,7 @@ import { Editor } from './editor.js';
 import { Canvas } from './canvas.js';
 import { Inspector, resizeDialog } from './inspector.js';
 import { InsertPanel } from './insert.js';
-import { PageStrip, present } from './pages.js';
+import { PageStrip, present, presenterView } from './pages.js';
 import { bindShortcuts, cheatSheet } from './shortcuts.js';
 import { exportDialog, saveProjectFile, thumbnail, api as exportApi } from './export.js';
 import { renderHome } from './home.js';
@@ -159,6 +159,7 @@ async function openEditor(id) {
     h('div', { class: 'top-group right' },
       iconButton('play', 'Play (animations and page timing)', () => present(editor, canvas, { autoplay: true }), { 'data-testid': 'play' }),
       iconButton('present', 'Present', () => present(editor, canvas), { 'data-testid': 'present' }),
+      iconButton('speaker', 'Presenter view: your notes, the next page and a timer, with the slides in their own window', () => presenterView(editor, canvas), { 'data-testid': 'presenter-view-btn' }),
       iconButton('save', 'Save to file', () => saveProjectFile(editor.doc), { 'data-testid': 'save-file' }),
       iconButton('search', 'Find and replace (Ctrl+F)', () => findDialog(editor), { 'data-testid': 'find-btn' }),
       iconButton('history', 'Version history', () => historyDialog(editor), { 'data-testid': 'history-btn' }),

@@ -949,6 +949,16 @@ export class Editor {
   }
 
   /** Change a page's motion (anim, duration, transition); undefined clears one. */
+  /** A page's speaker notes (shown in the presenter view, never on the page). */
+  setPageNotes(i, text, key = null) {
+    const page = this.doc.pages[i];
+    if (!page) return;
+    this.change(() => {
+      if (text.trim()) page.notes = text.slice(0, 10000);
+      else delete page.notes;
+    }, { key });
+  }
+
   setPageMotion(i, patch, key = null) {
     const page = this.doc.pages[i];
     if (!page) return;
