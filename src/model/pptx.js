@@ -8,7 +8,7 @@
 import { buildZip } from './zip.js';
 import { shapePath, maskPath, drawPath } from './shapes.js';
 import { sortedStops, normalizeHex } from './color.js';
-import { printDpi, DEFAULT_FILTERS } from './doc.js';
+import { printDpi, DEFAULT_FILTERS, stillIsCurrent } from './doc.js';
 import { parsePath } from './pdf-vector.js';
 
 const enc = new TextEncoder();
@@ -64,7 +64,7 @@ export function pptxKind(doc, el) {
     case 'video': {
       const asset = doc.assets[el.assetId];
       if (!asset) return el.assetId ? 'raster' : 'skip'; // an empty frame shows nothing in downloads
-      if (el.type === 'video' && !asset.poster) return 'raster';
+      if (el.type === 'video' && !asset.poster && !stillIsCurrent(doc, el)) return 'raster';
       return hasFilters(el) ? 'raster' : 'picture';
     }
     case 'group':
@@ -240,7 +240,8 @@ class Slide {
   }
 
   picture(el) {
-    const token = `asset:${el.assetId}:${el.type === 'video' ? 'poster' : 'file'}`;
+    // (A video shows its still, where it starts, else the poster taken when it was added.)
+    const token = el.type !== 'video' ? `asset:${el.assetId}:file` : stillIsCurrent(this.doc, el) ? `asset:${el.still}:file` : `asset:${el.assetId}:poster`;
     const m = this.media(token);
     if (!m) return '';
     const rid = this.imageRel(m.name);

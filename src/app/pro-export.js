@@ -5,6 +5,7 @@
 
 import { renderPage } from '../model/render.js';
 import { onPaper } from '../model/flow.js';
+import { stillIsCurrent } from '../model/doc.js';
 import { planVectorPdf, buildVectorPdf, rasterScale } from '../model/pdf-vector.js';
 import { planPptx, buildPptx } from '../model/pptx.js';
 import { jpegInfo } from '../model/jpeg.js';
@@ -67,7 +68,11 @@ async function decode(src, max = MAX_PHOTO_SIDE) {
   return canvas;
 }
 
-/** Every picture the pages show, by the name writers know it by: "asset:<id>:file" (or ":poster" for a video's). */
+/**
+ * Every picture the pages show, by the name writers know it by:
+ * "asset:<id>:file" (a video's still is a picture of its own), or
+ * "asset:<id>:poster" for a video's small poster.
+ */
 function pictureTokens(doc, pages) {
   const out = new Map(); // token -> data: URL
   const visit = (els) => {
@@ -76,7 +81,8 @@ function pictureTokens(doc, pages) {
       if (el.type === 'group') visit(el.children);
       const a = doc.assets[el.assetId];
       if (el.type === 'image' && a?.dataUrl) out.set(`asset:${el.assetId}:file`, a.dataUrl);
-      if (el.type === 'video' && a?.poster) out.set(`asset:${el.assetId}:poster`, a.poster);
+      if (el.type === 'video' && stillIsCurrent(doc, el) && doc.assets[el.still].dataUrl) out.set(`asset:${el.still}:file`, doc.assets[el.still].dataUrl);
+      else if (el.type === 'video' && a?.poster) out.set(`asset:${el.assetId}:poster`, a.poster);
     }
   };
   for (const i of pages) {
