@@ -115,7 +115,7 @@ function imageFilter(ctx, fl) {
 
 // ---------- elements ----------
 
-function transformOf(el) {
+export function transformOf(el) {
   const cx = el.x + el.w / 2;
   const cy = el.y + el.h / 2;
   const sx = el.flipX ? -1 : 1;
@@ -553,12 +553,16 @@ export function renderPage(doc, pageIndex, opts = {}) {
   return svgDocument(ctx, pageBody(ctx, page, w, h, opts), w, h, opts);
 }
 
-/** The outer SVG around a page's (or frame's) contents: size, fonts, definitions. */
+/**
+ * The outer SVG around a page's (or frame's) contents: size, fonts, definitions.
+ * opts.view ({ x, y, w, h } in page px) shows just that part of the page.
+ */
 function svgDocument(ctx, body, w, h, opts, extra = '') {
   const style = opts.fontCss ? `<style>${opts.fontCss}</style>` : '';
   const scale = opts.scale || 1;
-  const size = opts.noSize ? '' : ` width="${f(w * scale)}" height="${f(h * scale)}"`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"${size} viewBox="0 0 ${w} ${h}"${extra}>` +
+  const v = opts.view || { x: 0, y: 0, w, h };
+  const size = opts.noSize ? '' : ` width="${f(v.w * scale)}" height="${f(v.h * scale)}"`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"${size} viewBox="${opts.view ? `${f(v.x)} ${f(v.y)} ${f(v.w)} ${f(v.h)}` : `0 0 ${w} ${h}`}"${extra}>` +
     `<defs>${style}${ctx.defs.join('')}</defs>${body}</svg>`;
 }
 
@@ -668,6 +672,24 @@ export function renderFrame(doc, frame, opts = {}) {
   // On white, as in every download (so a see-through moment of a transition
   // looks the same played, presented or downloaded).
   return svgDocument(ctx, `<rect width="${f(w)}" height="${f(h)}" fill="#ffffff"/>${body}`, w, h, opts, ' overflow="hidden"');
+}
+
+/**
+ * One element's markup as the page draws it (in page px, with its own
+ * turn, opacity and shadow), and the definitions it needs. For writers of
+ * other formats (vector PDF, PowerPoint), which read it back.
+ */
+export function elementMarkup(doc, el, opts = {}) {
+  const ctx = makeCtx(doc, opts);
+  const markup = renderElement(ctx, el);
+  return { markup, defs: ctx.defs.join('') };
+}
+
+/** A page's background as markup, filling w × h (the page, or more for print bleed). */
+export function backgroundMarkup(doc, page, w, h, opts = {}) {
+  const ctx = makeCtx(doc, opts);
+  const markup = renderBackground(ctx, page.background, f(w), f(h));
+  return { markup, defs: ctx.defs.join('') };
 }
 
 /** Render a single element on its own, for previews (layers list, thumbnails). */
