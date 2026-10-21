@@ -50,7 +50,7 @@ export function flowDocument(doc, measure) {
         set(el, 'w', inner);
         set(el, 'h', fitHeight(el, measure));
       } else if (el.type === 'image' || el.type === 'video') {
-        const ratio = el.h / el.w || 1;
+        const ratio = el.w > 0 && el.h > 0 ? el.h / el.w : 1; // (a shape it can't have: square)
         set(el, 'w', inner);
         set(el, 'h', Math.round(inner * ratio));
       } else if (el.w > inner) {
