@@ -270,7 +270,7 @@ export function exportDialog(editor) {
           if (!audio) note = "The soundtrack couldn't be read here, so the video is silent.";
         }
         const blob = state.format === 'gif'
-          ? await exportGif(still, pages, { onProgress, signal })
+          ? await exportGif(still, pages, { onProgress, onNote: (m) => (note = m), signal })
           : await exportVideo(still, pages, { container: state.format, audio, volume: still.audio?.volume ?? 1, onProgress, onNote: (m) => (note = m), signal });
         if (signal.aborted) return;
         download(blob, `${name}.${state.format}`);

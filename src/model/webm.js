@@ -98,9 +98,11 @@ export function buildWebmParts({ video, audio = null, duration }) {
   ].sort((a, b) => a.timestamp - b.timestamp || a.track - b.track);
   const clusters = [];
   let cur = null;
+  // Times here can't be negative: if an encoder's lead-in starts before 0,
+  // everything moves later by that much (keeping every gap as it was).
+  const base = Math.min(0, blocks[0]?.timestamp ?? 0); // (blocks are in time order)
   for (const b of blocks) {
-    // (A block timed before 0, an encoder's lead-in, goes at 0: times can't be negative here.)
-    const ms = Math.max(0, Math.round(b.timestamp / 1000));
+    const ms = Math.round((b.timestamp - base) / 1000);
     if (!cur || (b.track === 1 && b.key) || ms - cur.start > 30000) {
       // A cluster that opens on a video key frame is a place to jump to.
       cur = { start: ms, blocks: [], key: b.track === 1 && b.key };

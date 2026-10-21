@@ -195,6 +195,7 @@ export class VideoFrames {
       // A video that won't seek here shows its poster from now on, rather
       // than holding up every frame for the wait.
       if (!(await seeked)) {
+        this.stuck = true; // (a download says so)
         p.failed = true;
         p.ready = Promise.resolve(false);
         return null;

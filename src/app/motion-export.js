@@ -80,7 +80,7 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal, r
   } finally {
     videos?.dispose();
   }
-  return { count, total: tl.total };
+  return { count, total: tl.total, stuck: !!videos?.stuck };
 }
 
 /** One frame (the page(s) at their moment, as SVG) into the canvas. */
@@ -98,17 +98,20 @@ async function drawFrame(svg, { ctx, width, height }) {
 }
 
 /** The design as an animated GIF. */
-export async function exportGif(doc, pages, { size = null, onProgress, signal } = {}) {
+const STUCK = "A video couldn't be followed frame by frame in this browser: from where it stopped, its still picture shows.";
+
+export async function exportGif(doc, pages, { size = null, onProgress, onNote, signal } = {}) {
   const { width, height } = frameSize(doc, 'gif', size);
   const fps = FPS.gif;
   const gif = new GifEncoder({ width, height });
   // GIF delays are whole hundredths of a second: each frame gets its share of
   // the clock, rounded, so the whole GIF keeps time (no drift).
   const at = (i) => Math.round((i * 100) / fps) * 10;
-  await eachFrame(doc, pages, { fps, width, height, onProgress, signal, readBack: true }, (canvas, ctx, i, t, same) => {
+  const { stuck } = await eachFrame(doc, pages, { fps, width, height, onProgress, signal, readBack: true }, (canvas, ctx, i, t, same) => {
     if (same && i > 0) return gif.hold(at(i + 1) - at(i));
     gif.add(ctx.getImageData(0, 0, width, height).data, at(i + 1) - at(i));
   });
+  if (stuck) onNote?.(STUCK);
   return new Blob([gif.finish()], { type: 'image/gif' });
 }
 
@@ -172,8 +175,9 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
   });
   encoder.configure(pick.config);
   let total;
+  let stuck = false;
   try {
-    ({ total } = await eachFrame(doc, pages, { fps, width, height, onProgress, signal }, async (canvas, ctx, i) => {
+    ({ total, stuck } = await eachFrame(doc, pages, { fps, width, height, onProgress, signal }, async (canvas, ctx, i) => {
       if (failure) throw failure;
       const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
       // A key frame every two seconds, so players can jump around.
@@ -195,6 +199,7 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
   }
   if (failure) throw failure;
   if (pick.codec === 'avc' && !description) throw new Error(NO_AVC_DESCRIPTION);
+  if (stuck) onNote?.(STUCK);
   let sound = null;
   if (audio) {
     // The pictures are done: a sound that won't encode leaves a silent video, not nothing.
