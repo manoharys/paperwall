@@ -261,20 +261,20 @@ export function exportDialog(editor) {
         const onProgress = (p) => (btn.lastChild.textContent = `Making ${state.format.toUpperCase()}… ${Math.round(p * 100)}%`);
         const still = versionSnapshot(doc);
         const signal = stopper.signal;
-        let note = null;
+        const notes = []; // everything left out, each said
         let audio = null;
         // (Whether video can be made here is known before the sound is decoded for it.)
         if (state.format !== 'gif' && !canMakeVideo()) throw new Error("This browser can't make videos. Try a recent Chrome, Edge, Safari or Firefox.");
         if (state.format !== 'gif' && still.audio) {
           audio = await soundtrackBuffer(still).catch(() => null);
-          if (!audio) note = "The soundtrack couldn't be read here, so the video is silent.";
+          if (!audio) notes.push("The soundtrack couldn't be read here, so the video is silent.");
         }
         const blob = state.format === 'gif'
-          ? await exportGif(still, pages, { onProgress, onNote: (m) => (note = m), signal })
-          : await exportVideo(still, pages, { container: state.format, audio, volume: still.audio?.volume ?? 1, onProgress, onNote: (m) => (note = m), signal });
+          ? await exportGif(still, pages, { onProgress, onNote: (m) => notes.push(m), signal })
+          : await exportVideo(still, pages, { container: state.format, audio, volume: still.audio?.volume ?? 1, onProgress, onNote: (m) => notes.push(m), signal });
         if (signal.aborted) return;
         download(blob, `${name}.${state.format}`);
-        if (note) toast(note);
+        if (notes.length) toast(notes.join(' '));
       } else if (state.format === 'pdf') {
         const pdf = await exportPdf(doc, pages);
         if (stopper.signal.aborted) return; // closed while making it
