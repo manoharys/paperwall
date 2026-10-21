@@ -54,7 +54,7 @@ export function isRtl(code = lang) {
 /** Switch the interface's language (and the page's lang and dir with it). */
 export function setLanguage(code) {
   lang = CATALOGS[code] ? code : pickLanguage([code]);
-  numbers.clear();
+  formats.clear();
   plurals = null;
   if (typeof document !== 'undefined') {
     document.documentElement.lang = lang;
@@ -63,15 +63,19 @@ export function setLanguage(code) {
   return lang;
 }
 
-// Number formats by their options, made once per language.
-const numbers = new Map();
+// Number, date, time-ago and name formats by their options, made once per language.
+const formats = new Map();
 let plurals = null;
+
+function format(kind, opts, make) {
+  const key = `${kind}|${JSON.stringify(opts)}`;
+  if (!formats.has(key)) formats.set(key, make());
+  return formats.get(key);
+}
 
 /** A number as this language writes it (no thousands separators unless asked). */
 export function formatNumber(n, opts = {}) {
-  const key = JSON.stringify(opts);
-  if (!numbers.has(key)) numbers.set(key, new Intl.NumberFormat(lang, { useGrouping: false, maximumFractionDigits: 2, ...opts }));
-  return numbers.get(key).format(n);
+  return format('number', opts, () => new Intl.NumberFormat(lang, { useGrouping: false, maximumFractionDigits: 2, ...opts })).format(n);
 }
 
 /**
@@ -84,13 +88,13 @@ export function ltr(text) {
 
 /** A date (and maybe a time) in this language. */
 export function formatDate(at, opts = { day: 'numeric', month: 'short', year: 'numeric' }) {
-  return new Intl.DateTimeFormat(lang, opts).format(new Date(at));
+  return format('date', opts, () => new Intl.DateTimeFormat(lang, opts)).format(new Date(at));
 }
 
 /** "3 minutes ago", "yesterday": how long ago, in this language. */
 export function formatAgo(at, now = Date.now()) {
-  const rtf = new Intl.RelativeTimeFormat(lang, { numeric: 'auto', style: 'short' });
-  const s = Math.round((at - now) / 1000);
+  const rtf = format('ago', {}, () => new Intl.RelativeTimeFormat(lang, { numeric: 'auto', style: 'short' }));
+  const s = Math.min(0, Math.round((at - now) / 1000)); // (a clock a little ahead: just now)
   if (Math.abs(s) < 60) return rtf.format(0, 'second');
   const m = Math.round(s / 60);
   if (Math.abs(m) < 60) return rtf.format(m, 'minute');
@@ -103,7 +107,7 @@ export function formatAgo(at, now = Date.now()) {
 /** A language's name in the interface's language (for lists of languages). */
 export function languageName(code) {
   try {
-    return new Intl.DisplayNames([lang], { type: 'language' }).of(code) || code;
+    return format('names', {}, () => new Intl.DisplayNames([lang], { type: 'language' })).of(code) || code;
   } catch {
     return code;
   }
@@ -134,15 +138,35 @@ function pluralForm(entry, n) {
  * ({ one, other, ... }) picks its form by vars.n.
  */
 export function t(key, vars) {
-  let text = lookup(key);
+  const text = template(key, vars);
   if (text === undefined) return key;
-  if (typeof text === 'object') text = pluralForm(text, vars?.n ?? 0);
-  if (!vars) return text;
-  return text.replace(/\{(\w+)\}/g, (all, name) => {
-    const v = vars[name];
-    if (v === undefined || v === null) return all;
-    return typeof v === 'number' ? formatNumber(v) : String(v);
-  });
+  return vars ? fill(text, vars).join('') : text;
+}
+
+/** A key's words before filling: its plural form picked by vars.n. */
+function template(key, vars) {
+  const text = lookup(key);
+  return typeof text === 'object' ? pluralForm(text, vars?.n ?? 0) : text;
+}
+
+/**
+ * The template's pieces with each {placeholder} filled in one pass, so
+ * what's filled in is never read for placeholders itself. Nodes stay
+ * nodes; unknown placeholders stay as they are.
+ */
+function fill(text, vars) {
+  const out = [''];
+  let at = 0;
+  for (const m of text.matchAll(/\{(\w+)\}/g)) {
+    const v = vars[m[1]];
+    if (v === undefined || v === null) continue;
+    out[out.length - 1] += text.slice(at, m.index);
+    if (typeof v === 'object' && 'nodeType' in v) out.push(v, '');
+    else out[out.length - 1] += typeof v === 'number' ? formatNumber(v) : String(v);
+    at = m.index + m[0].length;
+  }
+  out[out.length - 1] += text.slice(at);
+  return out.filter((p) => p !== '');
 }
 
 /**
@@ -150,23 +174,8 @@ export function t(key, vars) {
  * returns the pieces in order, ready to append.
  */
 export function tn(key, vars = {}) {
-  const nodes = {};
-  const plain = {};
-  for (const [k, v] of Object.entries(vars)) {
-    if (v && typeof v === 'object' && 'nodeType' in v) nodes[k] = v;
-    else plain[k] = v;
-  }
-  const text = t(key, plain);
-  const out = [];
-  let at = 0;
-  for (const m of text.matchAll(/\{(\w+)\}/g)) {
-    if (!nodes[m[1]]) continue;
-    if (m.index > at) out.push(text.slice(at, m.index));
-    out.push(nodes[m[1]]);
-    at = m.index + m[0].length;
-  }
-  if (at < text.length) out.push(text.slice(at));
-  return out;
+  const text = template(key, vars);
+  return text === undefined ? [key] : fill(text, vars);
 }
 
 /** The {placeholders} a catalog entry uses (for checking translations). */

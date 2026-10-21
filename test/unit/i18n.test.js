@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { CATALOGS, LANGUAGES, t, setLanguage, pickLanguage, placeholders, formatNumber, language } from '../../src/app/i18n.js';
+import { CATALOGS, LANGUAGES, t, tn, setLanguage, pickLanguage, placeholders, formatNumber, formatAgo, formatDate, languageName, language } from '../../src/app/i18n.js';
 
 const en = CATALOGS.en;
 const same = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
@@ -79,6 +79,34 @@ test('t fills placeholders, picks plural forms and falls back to English', () =>
     assert.notEqual(t('common.pages', { n: 2 }), t('common.pages', { n: 3 }));
     setLanguage('ja');
     assert.ok(t('common.pages', { n: 5 }).includes('5'));
+  } finally {
+    setLanguage('en');
+  }
+});
+
+test('filled-in words are never read for placeholders', () => {
+  const link = { nodeType: 1, name: 'link' };
+  setLanguage('en');
+  // A provider name that happens to say {link} stays as typed; the node goes where the sentence puts it.
+  const parts = tn('ai.keyHint', { name: 'My {link} AI', link });
+  assert.equal(parts.filter((p) => p === link).length, 1);
+  assert.ok(parts.some((p) => typeof p === 'string' && p.includes('My {link} AI')));
+  assert.equal(t('home.openDesign', { name: '{name} {n}' }), 'Open {name} {n}');
+  assert.deepEqual(tn('no.such.key'), ['no.such.key']);
+});
+
+test('time ago: a time a little ahead is just now; formats follow the language', () => {
+  try {
+    setLanguage('en');
+    const now = Date.UTC(2026, 0, 10, 12);
+    assert.equal(formatAgo(now + 5 * 60e3, now), formatAgo(now, now));
+    assert.equal(formatAgo(now - 3 * 60e3, now), '3 min. ago');
+    const date = formatDate(now);
+    const name = languageName('fr');
+    setLanguage('de');
+    assert.match(formatAgo(now - 3 * 60e3, now), /vor 3 Min/);
+    assert.notEqual(formatDate(now), date);
+    assert.notEqual(languageName('fr'), name);
   } finally {
     setLanguage('en');
   }
