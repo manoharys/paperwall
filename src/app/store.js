@@ -1,7 +1,7 @@
 // Everything is stored in this browser, on this device: designs, the images
 // you've added, and your brand kit. Nothing is ever sent anywhere.
 
-import { keptAssets } from '../model/doc.js';
+import { keptAssets, clone } from '../model/doc.js';
 
 const DB_NAME = 'paperwall';
 const DB_VERSION = 3;
@@ -149,6 +149,7 @@ export async function getThumb(id) {
 // Saves of one design go one at a time (one's clean-up mustn't remove a
 // file the next has just written).
 const saving = new Map(); // design id → its latest save, rename or delete
+let ticks = 0; // what was asked first (always counts up: two never tie)
 
 /** Run `fn` once whatever was asked of a design before has finished (saves, renames and deletes in turn). */
 function inTurn(id, fn) {
@@ -160,7 +161,7 @@ function inTurn(id, fn) {
 
 /** Save a design with a small preview image (left as it was when `thumb` is undefined). */
 export function saveDesign(doc, thumb) {
-  const asked = performance.now();
+  const asked = ++ticks;
   // (A save asked for before the design was deleted doesn't bring it back.)
   return inTurn(doc.id, () => ((deletedAt.get(doc.id) || -1) > asked ? null : writeDesign(doc, thumb)));
 }
@@ -184,7 +185,9 @@ async function writeDesign(doc, thumb) {
   // soundtrack). Each file goes in its own row, written when it isn't there
   // (a file never changes once added: an asset id is always the same file);
   // the design keeps only where to find it.
+  // (Its pages as they are now: they can change while its files are written.)
   const kept = keptAssets(doc);
+  kept.pages = clone(kept.pages);
   const have = new Set(await mediaKeys(doc.id));
   const assets = {};
   const writes = [];
@@ -198,7 +201,8 @@ async function writeDesign(doc, thumb) {
   const known = seen.get(doc.id) || new Set();
   for (const k of Object.values(assets)) known.add(k.stored);
   seen.set(doc.id, known);
-  await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: doc.height, pages: doc.pages.length, thumb: thumb ?? null, doc: { ...kept, assets } });
+  // (A document's height: a sheet's, not the long page it has grown to.)
+  await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: kept.document?.pageHeight || doc.height, pages: kept.pages.length, thumb: thumb ?? null, doc: { ...kept, assets } });
   // Files this design no longer uses go: ones this tab has known it to
   // use (another tab's new file isn't taken for an old one).
   const keep = new Set(Object.values(assets).map((a) => a.stored));
@@ -262,10 +266,10 @@ export async function saveThumb(id, thumb) {
   await put('settings', thumbKey(id), thumb);
 }
 
-const deletedAt = new Map(); // design id → when it was deleted in this tab
+const deletedAt = new Map(); // design id → when it was deleted in this tab (in `ticks`)
 
 export function deleteDesign(id) {
-  deletedAt.set(id, performance.now());
+  deletedAt.set(id, ++ticks);
   // In turn with its saves and renames (one under way would write it back,
   // one asked for meanwhile waits and finds it gone).
   return inTurn(id, async () => {

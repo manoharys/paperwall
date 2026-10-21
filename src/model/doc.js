@@ -149,6 +149,11 @@ export function makeBoard(doc) {
 /** Sticky note colors. */
 export const NOTE_COLORS = ['#ffe58a', '#ffb3c7', '#a8e6cf', '#a7c7ff', '#ffd1a1', '#d7c4ff'];
 
+/** A document's settings, each in range. */
+export function documentSettings(d) {
+  return { pageHeight: clampNum(d.pageHeight, 200, 20000, DOCUMENT.pageHeight), margin: clampNum(d.margin, 0, 1000, DOCUMENT.margin), gap: clampNum(d.gap, 0, 400, DOCUMENT.gap), dpi: clampNum(d.dpi, 36, 1200, DOCUMENT.dpi) };
+}
+
 /** A sticky note: text on a square of color. */
 export function createSticky(color = NOTE_COLORS[0], props = {}) {
   return createText({ text: 'Note', note: color, w: 320, h: 320, size: 32, weight: 500, lineHeight: 1.3, ...props });
@@ -557,9 +562,7 @@ export function validateDesign(doc) {
   // A document's flow, a whiteboard's growing: numbers in range, else plain.
   if (doc.document !== undefined) {
     const d = doc.document;
-    doc.document = d && typeof d === 'object'
-      ? { pageHeight: clampNum(d.pageHeight, 200, 20000, DOCUMENT.pageHeight), margin: clampNum(d.margin, 0, 1000, DOCUMENT.margin), gap: clampNum(d.gap, 0, 400, DOCUMENT.gap), dpi: clampNum(d.dpi, 36, 1200, DOCUMENT.dpi) }
-      : undefined;
+    doc.document = d && typeof d === 'object' ? documentSettings(d) : undefined;
   }
   if (doc.board !== undefined) doc.board = doc.board === true || undefined;
   delete doc.dpi; // (only ever set on a document's sheets, made for paper)

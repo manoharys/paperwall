@@ -7,6 +7,7 @@
 import { fitHeight, layoutText, approxMeasure, notePad } from './text-layout.js';
 import { clone, DOCUMENT } from './doc.js';
 import { scaleElement } from './commands.js';
+import { boundsOf } from './geometry.js';
 
 export { DOCUMENT };
 export const BOARD = { grow: 1200, edge: 400, max: 20000 }; // (20000: as big as any design may be)
@@ -17,10 +18,10 @@ function blocks(page) {
   return page.elements.filter((el) => !el.hidden && !joined(el)).map((el, i) => ({ el, i })).sort((a, b) => a.el.y - b.el.y || a.i - b.i).map((b) => b.el);
 }
 
-/** A document's layout settings (margins never more than a quarter of a sheet each: there's always room for blocks). */
+/** A document's layout settings (margins never more than a quarter of a sheet each way: there's always room for blocks). */
 function settings(doc) {
   const opts = { ...DOCUMENT, ...doc.document };
-  opts.margin = Math.min(opts.margin, opts.pageHeight / 4);
+  opts.margin = Math.min(opts.margin, opts.pageHeight / 4, doc.width / 4);
   return opts;
 }
 
@@ -44,7 +45,8 @@ export function flowDocument(doc, measure) {
   for (const page of doc.pages) {
     let y = opts.margin;
     for (const el of blocks(page)) {
-      if (el.type === 'text' && !el.curve) {
+      // (A sticky note keeps its size: it's a note, not a paragraph.)
+      if (el.type === 'text' && !el.curve && !el.note) {
         set(el, 'w', inner);
         set(el, 'h', fitHeight(el, measure));
       } else if (el.type === 'image' || el.type === 'video') {
@@ -126,12 +128,14 @@ export function paginate(doc, measure = approxMeasure) {
       });
       top = el.y + el.h - (at + pieces[pieces.length - 1].h);
     }
-    // Lines between blocks on the same sheet go on it (one between sheets can't be drawn).
+    // Lines between blocks on the same sheet go on it (one between sheets
+    // can't be drawn, nor one to a thing not on any).
     for (const el of page.elements) {
       if (el.hidden || el.type !== 'connector') continue;
       if (reshaped.has(el.start?.id) || reshaped.has(el.end?.id)) continue;
       const a = where.get(el.start?.id);
       const b = where.get(el.end?.id);
+      if ((el.start?.id && !a) || (el.end?.id && !b)) continue;
       const at = a || b;
       if (at && (!a || !b || a.sheet === b.sheet)) at.sheet.elements.push({ ...clone(el), y: el.y - at.top });
     }
@@ -182,10 +186,11 @@ export function growBoard(doc) {
   let bottom = 0;
   for (const page of doc.pages) {
     for (const el of page.elements) {
-      left = Math.min(left, el.x);
-      top = Math.min(top, el.y);
-      right = Math.max(right, el.x + el.w);
-      bottom = Math.max(bottom, el.y + el.h);
+      const b = boundsOf(el); // (as turned)
+      left = Math.min(left, b.x);
+      top = Math.min(top, b.y);
+      right = Math.max(right, b.x + b.w);
+      bottom = Math.max(bottom, b.y + b.h);
     }
   }
   if (left === Infinity) return null;

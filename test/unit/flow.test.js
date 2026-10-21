@@ -147,3 +147,18 @@ test('[DW-03] a long block starts in the room left on a sheet, not always on a n
   assert.ok(first[1].y > first[0].y + first[0].h, 'below the title');
   assert.ok(first[1].y + first[1].h <= DOCUMENT.pageHeight - DOCUMENT.margin + 0.5);
 });
+
+test('[DW-01] a sticky note in a document keeps its size', () => {
+  const doc = createDesignFromPreset('doc');
+  doc.pages[0].elements.push(createSticky(undefined, { y: 99999 }));
+  flowDocument(doc, approxMeasure);
+  const note = doc.pages[0].elements[2];
+  assert.deepEqual([note.w, note.h], [320, 320]);
+});
+
+test('[DW-04] a whiteboard grows for a thing turned out past its edge', () => {
+  const doc = createDesignFromPreset('whiteboard');
+  doc.pages[0].elements = [createText({ text: 'Long', w: 2000, h: 100, x: 1000, y: 600, rotation: 90 })];
+  const moved = growBoard(doc);
+  assert.ok(moved?.dy > 0, 'grew on top');
+});

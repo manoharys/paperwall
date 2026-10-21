@@ -1,7 +1,7 @@
 // Edits to a design. Every function changes the design in place; the editor
 // records a history snapshot before calling one, which is what makes undo work.
 
-import { uid, createPage, clone, restroke } from './doc.js';
+import { uid, createPage, clone, restroke, documentSettings } from './doc.js';
 import { boundsOf, unionBounds, rotatePoint, boxCenter } from './geometry.js';
 import { updateConnectors } from './connectors.js';
 import { normalizeHex } from './color.js';
@@ -416,7 +416,8 @@ export function resizeDesign(doc, width, height, { asDocument = !!doc.document }
   // (A document staying one is measured by its sheet, not the long page it has grown to.)
   const sy = height / (flows ? doc.document.pageHeight : doc.height);
   // (Margins and gaps by the smaller ratio, like everything else.)
-  if (flows) out.document = { ...out.document, pageHeight: height, margin: Math.round(out.document.margin * Math.min(sx, sy)), gap: Math.round(out.document.gap * Math.min(sx, sy)), dpi: Math.round((out.document.dpi || 150) * sx) };
+  // (In the same ranges as when it's opened again, so it lays out the same then.)
+  if (flows) out.document = documentSettings({ pageHeight: height, margin: Math.round(out.document.margin * Math.min(sx, sy)), gap: Math.round(out.document.gap * Math.min(sx, sy)), dpi: Math.round((out.document.dpi || 150) * sx) });
   else delete out.document;
   const s = Math.min(sx, sy);
   for (const page of out.pages) {
