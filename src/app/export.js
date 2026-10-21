@@ -6,13 +6,12 @@ import { renderPage, textRuns } from '../model/render.js';
 import { buildPdf } from '../model/pdf.js';
 import { buildZip } from '../model/zip.js';
 import { validateDesign, clone, visiblePages, printDpi, pageLabel, versionSnapshot, soundtrackOf, keptAssets } from '../model/doc.js';
-import { measure, fontCssFor, registerDesignFonts, ensureDesignFonts } from './fonts.js';
+import { measure, fontCssFor, registerDesignFonts, onPaper } from './fonts.js';
 import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage, canvasScale, toBlob, blobBytes } from './ui.js';
 import { section, segmented, slider, toggle } from './widgets.js';
 import { exportGif, exportVideo, canMakeVideo } from './motion-export.js';
 import { exportVectorPdf, exportPptx } from './pro-export.js';
 import { designMoves, startsTooLate, timeline } from '../model/motion.js';
-import { onPaper as sheetsOf } from '../model/flow.js';
 
 export function maxScale(doc, wanted) {
   return canvasScale(doc.width, doc.height, wanted);
@@ -56,16 +55,6 @@ export async function exportSvg(doc, pageIndex, { transparent = false } = {}) {
 export function pagePoints(doc) {
   const dpi = printDpi(doc);
   return { ptWidth: (doc.width / dpi) * 72, ptHeight: (doc.height / dpi) * 72, renderScale: dpi === 300 ? 1 : 2 };
-}
-
-/**
- * On paper, a document is sheets (split between its blocks); anything else
- * is as it is. Split once its fonts are in: they decide where lines break.
- */
-async function onPaper(doc, pages) {
-  if (!doc.document) return [doc, pages]; // (nothing to split: no fonts to wait for)
-  await ensureDesignFonts(doc);
-  return sheetsOf(doc, pages, measure);
 }
 
 export async function exportPdf(doc0, pages0, { quality = 0.92 } = {}) {

@@ -4,14 +4,13 @@
 // can't be drawn any other way (shadows, glows, filters, charts...).
 
 import { renderPage } from '../model/render.js';
-import { onPaper } from '../model/flow.js';
 import { stillIsCurrent } from '../model/doc.js';
 import { planVectorPdf, buildVectorPdf, rasterScale } from '../model/pdf-vector.js';
 import { planPptx, buildPptx } from '../model/pptx.js';
 import { jpegInfo } from '../model/jpeg.js';
 import { deflate } from '../model/deflate.js';
 import { bleedSize } from '../model/view.js';
-import { measure, fontCssFor, designFontFiles, ensureDesignFonts } from './fonts.js';
+import { measure, fontCssFor, designFontFiles, ensureDesignFonts, onPaper } from './fonts.js';
 import { dataUrlToBytes, loadImage, canvasScale, toBlob, blobBytes } from './ui.js';
 
 const MAX_PHOTO_SIDE = 4096;
@@ -225,9 +224,9 @@ function stopper(signal) {
  */
 export async function exportVectorPdf(doc0, pages0, { print = false, signal, onProgress } = {}) {
   const check = stopper(signal);
+  // (Every design's fonts, document or not: its text is measured to be written.)
   await ensureDesignFonts(doc0);
-  // (Split into sheets once its fonts are in: they decide where lines break.)
-  const [doc, pages] = onPaper(doc0, pages0, measure);
+  const [doc, pages] = await onPaper(doc0, pages0);
   const fonts = await designFontFiles(doc);
   check();
   const images = await readPictures(doc, pages, check, rasterScale(doc, { print }), pdfPicture);
@@ -254,7 +253,7 @@ export async function exportVectorPdf(doc0, pages0, { print = false, signal, onP
 export async function exportPptx(doc0, pages0, { signal, onProgress } = {}) {
   const check = stopper(signal);
   await ensureDesignFonts(doc0);
-  const [doc, pages] = onPaper(doc0, pages0, measure);
+  const [doc, pages] = await onPaper(doc0, pages0);
   const media = await readPictures(doc, pages, check, rasterScale(doc), pptxPicture);
   // (A photo whose picture couldn't be read comes as a picture of itself.)
   const wants = planPptx(doc, pages, media);
