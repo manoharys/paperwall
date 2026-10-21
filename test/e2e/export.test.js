@@ -113,7 +113,7 @@ test('[EXP-06] download as PDF with all pages', async () => {
   const { name, bytes } = await downloadVia(page, () => page.click('[data-testid="export-format"] [data-value="pdf"]'));
   const text = bytes.toString('latin1');
   assert.match(name, /\.pdf$/);
-  assert.match(text, /^%PDF-1\.4/);
+  assert.match(text, /^%PDF-1\.7/, 'the vector PDF, by default');
   assert.match(text, /\/Count 2/);
   if (hasPdftoppm()) {
     const dir = mkdtempSync(join(tmpdir(), 'paperwall-pdf-'));
@@ -265,7 +265,11 @@ test('[EXP-12] PDF with real, selectable and searchable text', async () => {
   const { page, context } = await newDesign('a4');
   await addText(page);
   await page.evaluate(() => window.paperwall.editor.update({ text: 'Spring fair at Café Lumière', align: 'center' }));
-  const { bytes } = await downloadVia(page, () => page.click('[data-testid="export-format"] [data-value="pdf"]'));
+  // The flattened PDF: each page a picture, with an invisible text layer. (The vector PDF's text is checked in EXP-13.)
+  const { bytes } = await downloadVia(page, async () => {
+    await page.click('[data-testid="export-format"] [data-value="pdf"]');
+    await page.click('[data-testid="export-pdf-kind"] [data-value="flat"]');
+  });
   const raw = bytes.toString('latin1');
   assert.ok(raw.includes('Caf\xe9') && raw.includes('Lumi\xe8re'), 'accents survive as single bytes');
   try {
