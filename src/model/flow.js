@@ -90,7 +90,10 @@ export function paginate(doc, measure = approxMeasure) {
     const reshaped = new Set(); // blocks split over sheets or made smaller
     const bottomOf = (sh) => sh.elements.reduce((b, e) => Math.max(b, e.y + e.h), 0);
     const start = (y) => {
+      const first = !sheet;
       sheet = { ...page, id: `${page.id}-${out.pages.length + 1}`, elements: [] };
+      // (A page's speaker notes go with its first sheet, not again on each.)
+      if (!first) delete sheet.notes;
       out.pages.push(sheet);
       top = y - opts.margin;
     };

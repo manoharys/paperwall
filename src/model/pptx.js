@@ -399,7 +399,7 @@ function notesMasterXml() {
 }
 
 function notesSlideXml(text) {
-  const paras = String(text).split('\n').map((t) => `<a:p>${t ? `<a:r><a:rPr lang="en-US" dirty="0"/><a:t>${xmlText(t)}</a:t></a:r>` : ''}<a:endParaRPr lang="en-US" dirty="0"/></a:p>`).join('');
+  const paras = String(text).split(/\r\n?|\n/).map((t) => `<a:p>${t ? `<a:r><a:rPr lang="en-US" dirty="0"/><a:t>${xmlText(t)}</a:t></a:r>` : ''}<a:endParaRPr lang="en-US" dirty="0"/></a:p>`).join('');
   return `${XML}<p:notes ${NS}><p:cSld><p:spTree>${GROUP_ROOT}` +
     '<p:sp><p:nvSpPr><p:cNvPr id="2" name="Slide picture"/><p:cNvSpPr><a:spLocks noGrp="1" noRot="1" noChangeAspect="1"/></p:cNvSpPr><p:nvPr><p:ph type="sldImg"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp>' +
     `<p:sp><p:nvSpPr><p:cNvPr id="3" name="Notes"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>${paras}</p:txBody></p:sp>` +
