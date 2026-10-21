@@ -9,6 +9,7 @@ import { buildZip } from './zip.js';
 import { shapePath, maskPath, drawPath } from './shapes.js';
 import { sortedStops, normalizeHex } from './color.js';
 import { printDpi, DEFAULT_FILTERS, stillIsCurrent } from './doc.js';
+import { notePad } from './text-layout.js';
 import { parsePath } from './pdf-vector.js';
 
 const enc = new TextEncoder();
@@ -48,12 +49,14 @@ const hasFilters = (el) => el.filters && Object.entries(DEFAULT_FILTERS).some(([
 
 const PRESET_TEXT = new Set(['none', undefined, null]);
 
-/** How an element goes into a slide: 'text', 'shape', 'line', 'picture', 'path', 'group', or 'raster'. */
+/** How an element goes into a slide: 'text', 'note', 'shape', 'line', 'picture', 'path', 'group', or 'raster'. */
 export function pptxKind(doc, el) {
   if (el.shadow) return 'raster';
   switch (el.type) {
     case 'text':
-      return !el.curve && PRESET_TEXT.has(el.effect?.type ?? 'none') ? 'text' : 'raster';
+      if (el.curve || !PRESET_TEXT.has(el.effect?.type ?? 'none')) return 'raster';
+      // A sticky note: a square of its color with the text inside.
+      return el.note ? 'note' : 'text';
     case 'shape':
       return 'shape';
     case 'line':
@@ -68,7 +71,7 @@ export function pptxKind(doc, el) {
       return hasFilters(el) ? 'raster' : 'picture';
     }
     case 'group':
-      return (el.opacity ?? 1) >= 1 && el.children.every((c) => c.hidden || ['text', 'shape', 'line', 'path', 'picture', 'group', 'skip'].includes(pptxKind(doc, c))) ? 'group' : 'raster';
+      return (el.opacity ?? 1) >= 1 && el.children.every((c) => c.hidden || ['text', 'note', 'shape', 'line', 'path', 'picture', 'group', 'skip'].includes(pptxKind(doc, c))) ? 'group' : 'raster';
     default:
       return 'raster';
   }
@@ -203,6 +206,8 @@ class Slide {
     switch (pptxKind(this.doc, el)) {
       case 'text':
         return this.text(el);
+      case 'note':
+        return this.text(el, { note: true });
       case 'shape':
         return this.shape(el);
       case 'line':
@@ -266,7 +271,8 @@ class Slide {
     return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${this.id()}" name="Group ${this.nextId - 1}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr>${xfrm(el, this.emu, 'a:xfrm', ext)}</p:grpSpPr>${kids}</p:grpSp>`;
   }
 
-  text(el) {
+  /** A text box; with { note: true } a sticky note (its color behind, the text inside its edges). */
+  text(el, { note = false } = {}) {
     const emu = this.emu;
     const pt = (px) => (px * emu) / 12700; // points
     const size = Math.max(1, Math.min(4000, Math.round(pt(el.size) * 100) / 100));
@@ -289,22 +295,38 @@ class Slide {
     const algn = { left: 'l', center: 'ctr', right: 'r', justify: 'just' }[el.align] || 'l';
     const spacing = `<a:lnSpc><a:spcPts val="${Math.round(pt(el.size * (el.lineHeight || 1.2)) * 100)}"/></a:lnSpc>`;
     const indent = Math.round(el.size * 1.1 * emu);
-    const paras = String(el.text ?? '').split('\n').map((t) => {
+    // (A document's text cut for its sheets numbers on from `listStart`, and
+    // when it `continues` a list item, its first line has no mark of its own.)
+    const startAt = el.list === 'number' && el.listStart > 1 ? ` startAt="${Math.round(el.listStart)}"` : '';
+    const paras = String(el.text ?? '').split('\n').map((t, i) => {
       let bullet = '<a:buNone/>';
       let margin = '';
-      if (el.list === 'bullet' && t.trim()) {
+      if (el.list && t.trim() && i === 0 && el.continues) {
+        margin = ` marL="${indent}" indent="0"`;
+      } else if (el.list === 'bullet' && t.trim()) {
         bullet = '<a:buFont typeface="Arial"/><a:buChar char="•"/>';
         margin = ` marL="${indent}" indent="-${indent}"`;
       } else if (el.list === 'number' && t.trim()) {
-        bullet = '<a:buFont typeface="+mj-lt"/><a:buAutoNum type="arabicPeriod"/>';
+        bullet = `<a:buFont typeface="+mj-lt"/><a:buAutoNum type="arabicPeriod"${startAt}/>`;
         margin = ` marL="${indent}" indent="-${indent}"`;
       }
       const pPr = `<a:pPr algn="${algn}"${margin}>${spacing}${bullet}</a:pPr>`;
       return `<a:p>${pPr}${t ? `<a:r>${rPr('rPr')}<a:t>${xmlText(t)}</a:t></a:r>` : ''}${rPr('endParaRPr')}</a:p>`;
     }).join('');
     const pad = el.highlight ? Math.round((el.highlight.padding ?? 0) * emu) : 0;
+    const body = (l, t) => `<p:txBody><a:bodyPr wrap="square" lIns="${l}" tIns="${t}" rIns="${l}" bIns="${t}" rtlCol="0" anchor="t"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paras}</p:txBody></p:sp>`;
+    if (note) {
+      // As the page draws it: rounded a little, lifted off the page by a soft shadow.
+      const r = Math.min(8, el.w * 0.02);
+      const adj = Math.round((r / Math.max(1, Math.min(el.w, el.h))) * 100000);
+      const inset = Math.round(notePad(el) * emu);
+      const lift = Math.round((el.h * 0.012 + 2) * emu);
+      return `<p:sp>${this.nv('Sp', `Sticky note ${this.nextId}`)}<p:spPr>${xfrm(el, emu)}<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val ${adj}"/></a:avLst></a:prstGeom>${fill(el.note, a)}<a:ln><a:noFill/></a:ln>` +
+        `<a:effectLst><a:outerShdw dist="${lift}" dir="5400000" algn="t" rotWithShape="0"><a:srgbClr val="000000"><a:alpha val="${Math.round(12000 * a)}"/></a:srgbClr></a:outerShdw></a:effectLst></p:spPr>` +
+        body(inset, inset + pad);
+    }
     return `<p:sp>${this.nv('Sp', `Text ${this.nextId}`, ' txBox="1"')}<p:spPr>${xfrm(el, emu)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>` +
-      `<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="${pad}" rIns="0" bIns="${pad}" rtlCol="0" anchor="t"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paras}</p:txBody></p:sp>`;
+      body(0, pad);
   }
 
   /** The slide's background fill: its color or gradient (a photo's color behind it). */
