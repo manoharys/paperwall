@@ -112,8 +112,8 @@ export function layoutText(el, measure) {
 export function fitHeight(el, measure) {
   const { height } = layoutText(el, measure);
   const pad = el.highlight ? (el.highlight.padding ?? 0) * 2 : 0;
-  // A sticky note keeps its size, and grows only when its words need more.
-  if (el.note) return Math.max(Math.ceil(height + pad + notePad(el) * 2), el.h || el.w);
+  // A sticky note keeps its square, and is taller only while its words need it.
+  if (el.note) return Math.max(Math.ceil(height + pad + notePad(el) * 2), el.w);
   return Math.ceil(height + pad);
 }
 

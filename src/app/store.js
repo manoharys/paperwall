@@ -148,16 +148,21 @@ export async function getThumb(id) {
 
 // Saves of one design go one at a time (one's clean-up mustn't remove a
 // file the next has just written).
-const saving = new Map(); // design id → its latest save
+const saving = new Map(); // design id → its latest save, rename or delete
+
+/** Run `fn` once whatever was asked of a design before has finished (saves, renames and deletes in turn). */
+function inTurn(id, fn) {
+  const job = (saving.get(id) || Promise.resolve()).catch(() => null).then(fn);
+  saving.set(id, job);
+  job.finally(() => saving.get(id) === job && saving.delete(id)).catch(() => null);
+  return job;
+}
 
 /** Save a design with a small preview image (left as it was when `thumb` is undefined). */
 export function saveDesign(doc, thumb) {
   const asked = performance.now();
   // (A save asked for before the design was deleted doesn't bring it back.)
-  const job = (saving.get(doc.id) || Promise.resolve()).catch(() => null).then(() => ((deletedAt.get(doc.id) || -1) > asked ? null : writeDesign(doc, thumb)));
-  saving.set(doc.id, job);
-  job.finally(() => saving.get(doc.id) === job && saving.delete(doc.id)).catch(() => null);
-  return job;
+  return inTurn(doc.id, () => ((deletedAt.get(doc.id) || -1) > asked ? null : writeDesign(doc, thumb)));
 }
 
 async function writeDesign(doc, thumb) {
@@ -213,15 +218,12 @@ export async function hasDesign(id) {
 /** Rename a stored design (without reading its files). */
 export function renameDesign(id, name) {
   // In turn with the design's saves (a save under way would put the old name back).
-  const job = (saving.get(id) || Promise.resolve()).catch(() => null).then(async () => {
+  return inTurn(id, async () => {
     const row = await get('designs', id);
     if (!row) return;
     const updatedAt = Date.now();
     await put('designs', id, { ...row, name, updatedAt, doc: { ...row.doc, name, updatedAt } });
   });
-  saving.set(id, job);
-  job.finally(() => saving.get(id) === job && saving.delete(id)).catch(() => null);
-  return job;
 }
 
 function mediaKeys(designId) {
@@ -262,16 +264,18 @@ export async function saveThumb(id, thumb) {
 
 const deletedAt = new Map(); // design id → when it was deleted in this tab
 
-export async function deleteDesign(id) {
+export function deleteDesign(id) {
   deletedAt.set(id, performance.now());
-  // After any save of it already under way (or it would write its files back).
-  await saving.get(id)?.catch(() => null);
-  seen.delete(id);
-  await del('settings', thumbKey(id)).catch(() => null);
-  await del('designs', id);
-  await mediaKeys(id).then((keys) => batch('media', keys.map((k) => [k, undefined]))).catch(() => null);
-  // The design is gone either way; its history is cleaned up as well as it can be.
-  await deleteVersions(id).catch(() => null);
+  // In turn with its saves and renames (one under way would write it back,
+  // one asked for meanwhile waits and finds it gone).
+  return inTurn(id, async () => {
+    seen.delete(id);
+    await del('settings', thumbKey(id)).catch(() => null);
+    await del('designs', id);
+    await mediaKeys(id).then((keys) => batch('media', keys.map((k) => [k, undefined]))).catch(() => null);
+    // The design is gone either way; its history is cleaned up as well as it can be.
+    await deleteVersions(id).catch(() => null);
+  });
 }
 
 // ---------- version history (per design, on this device) ----------

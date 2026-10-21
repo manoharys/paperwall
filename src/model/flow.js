@@ -17,6 +17,13 @@ function blocks(page) {
   return page.elements.filter((el) => !el.hidden && !joined(el)).map((el, i) => ({ el, i })).sort((a, b) => a.el.y - b.el.y || a.i - b.i).map((b) => b.el);
 }
 
+/** A document's layout settings (margins never more than a quarter of a sheet each: there's always room for blocks). */
+function settings(doc) {
+  const opts = { ...DOCUMENT, ...doc.document };
+  opts.margin = Math.min(opts.margin, opts.pageHeight / 4);
+  return opts;
+}
+
 /**
  * Lay a document out: each block on its own line, one after another down the
  * page, text as wide as the page allows (and as tall as its words), pictures
@@ -24,7 +31,7 @@ function blocks(page) {
  * page. The page grows (never below a sheet) to fit. Returns whether anything moved.
  */
 export function flowDocument(doc, measure) {
-  const opts = { ...DOCUMENT, ...doc.document };
+  const opts = settings(doc);
   const inner = doc.width - opts.margin * 2;
   let height = opts.pageHeight;
   let changed = false;
@@ -70,9 +77,7 @@ export function flowDocument(doc, measure) {
  * A new design; the document itself is left as it is.
  */
 export function paginate(doc, measure = approxMeasure) {
-  const opts = { ...DOCUMENT, ...doc.document };
-  // (Margins never more than a quarter of a sheet each: there's always room for blocks.)
-  opts.margin = Math.min(opts.margin, opts.pageHeight / 4);
+  const opts = settings(doc);
   const room = opts.pageHeight - opts.margin * 2; // a sheet's height for blocks
   // (Shallow: the files aren't copied, just shared.)
   const out = { ...doc, height: opts.pageHeight, document: undefined, dpi: opts.dpi, pages: [] };

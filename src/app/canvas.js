@@ -203,7 +203,9 @@ export class Canvas {
     const bw = Math.max(vw, w + PAD * 2);
     const bh = Math.max(vh, hgt + PAD * 2);
     Object.assign(this.board.style, { width: `${bw}px`, height: `${bh}px` });
-    Object.assign(this.wrap.style, { width: `${w}px`, height: `${hgt}px`, left: `${(bw - w) / 2}px`, top: `${(bh - hgt) / 2}px` });
+    this.wrapWas = this.wrapAt;
+    this.wrapAt = { left: (bw - w) / 2, top: (bh - hgt) / 2 };
+    Object.assign(this.wrap.style, { width: `${w}px`, height: `${hgt}px`, left: `${this.wrapAt.left}px`, top: `${this.wrapAt.top}px` });
   }
 
   render() {
@@ -225,8 +227,10 @@ export class Canvas {
     const grew = ed.doc.document ? ed.doc.width === ow : resized && ed.doc.width >= ow && ed.doc.height >= oh;
     if (resized && !((ed.doc.document || ed.doc.board) && grew)) this.zoomToFit();
     else if (ed.boardMoved) {
-      this.el.scrollLeft += ed.boardMoved.dx * ed.zoom;
-      this.el.scrollTop += ed.boardMoved.dy * ed.zoom;
+      // (Scrolled by as much as things moved over, less however much the page's place in the view moved.)
+      const was = this.wrapWas || this.wrapAt;
+      this.el.scrollLeft += ed.boardMoved.dx * ed.zoom + this.wrapAt.left - was.left;
+      this.el.scrollTop += ed.boardMoved.dy * ed.zoom + this.wrapAt.top - was.top;
     }
     ed.boardMoved = null;
   }
@@ -235,10 +239,12 @@ export class Canvas {
     const { doc } = this.ed;
     const vw = Math.max(200, this.el.clientWidth - PAD * 2);
     const vh = Math.max(200, this.el.clientHeight - PAD * 2);
-    this.ed.setZoom(Math.min(vw / doc.width, vh / doc.height));
+    // (A document: a sheet of it, from the top, however long it has grown.)
+    const tall = doc.document ? Math.min(doc.height, doc.document.pageHeight) : doc.height;
+    this.ed.setZoom(Math.min(vw / doc.width, vh / tall));
     requestAnimationFrame(() => {
       this.el.scrollLeft = (this.board.offsetWidth - this.el.clientWidth) / 2;
-      this.el.scrollTop = (this.board.offsetHeight - this.el.clientHeight) / 2;
+      this.el.scrollTop = doc.document ? 0 : (this.board.offsetHeight - this.el.clientHeight) / 2;
     });
   }
 

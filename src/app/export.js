@@ -91,7 +91,9 @@ export async function exportPdf(doc0, pages0, { quality = 0.92 } = {}) {
 }
 
 /** A small preview for the home screen. */
-export async function thumbnail(doc) {
+export async function thumbnail(doc0) {
+  // (A document's first sheet, not a strip of its whole length.)
+  const [doc] = onPaper(doc0, [0]);
   const scale = 360 / Math.max(doc.width, doc.height);
   const canvas = await rasterize(doc, 0, { scale, background: '#ffffff' });
   return canvas.toDataURL('image/jpeg', 0.82);

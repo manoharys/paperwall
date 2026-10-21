@@ -486,29 +486,33 @@ export class Editor {
    * quickly loads the video once). Resolves when it's done.
    */
   refreshStill(id) {
-    this.stills ||= new Map(); // video id → { timer, done }
+    this.stills ||= new Map(); // video id → { timer, done, taking }
     const before = this.stills.get(id);
-    if (before) {
+    if (before && !before.taking) {
       clearTimeout(before.timer);
       before.done();
     }
     return new Promise((done) => {
-      const timer = setTimeout(() => {
+      const entry = { done, taking: false };
+      entry.timer = setTimeout(() => {
         // (Still listed while it's taken, so changes meanwhile don't start another.)
+        entry.taking = true;
+        const timer = entry.timer;
         this.takeStill(id).finally(() => {
           if (this.stills.get(id)?.timer === timer) this.stills.delete(id);
           this.retakeStills(); // (its start may have moved while it was taken)
           done();
         });
       }, 250);
-      this.stills.set(id, { timer, done });
+      this.stills.set(id, entry);
     });
   }
 
   /** Videos whose still isn't from where they start now (moved, undone, pasted) get a new one. */
   retakeStills() {
-    // (One at a time, and none once the editor has closed: each loads its whole video.)
-    if (this.closed || this.stills?.size) return;
+    // (One at a time, and none once the editor has closed: each loads its
+    // whole video. One waiting to be taken waits on for the latest change.)
+    if (this.closed || [...(this.stills?.values() || [])].some((s) => s.taking)) return;
     this.stillFailed ||= new Map(); // video id → a start no still could be taken from (not tried again and again)
     const walk = (els) => {
       for (const el of els) {
@@ -516,7 +520,7 @@ export class Editor {
         if (el.type !== 'video' || !this.doc.assets[el.assetId]) continue;
         const start = el.trim?.start || 0;
         if (stillIsCurrent(this.doc, el) || this.stillFailed.get(el.id) === start) continue;
-        this.refreshStill(el.id);
+        if (!this.stills?.size || this.stills.has(el.id)) this.refreshStill(el.id);
         return true;
       }
     };
