@@ -299,9 +299,11 @@ kbd { font: 12px ui-monospace, monospace; background: var(--panel-2); border: 1p
 
 /* presenting */
 .presenter { position: fixed; inset: 0; z-index: 80; background: #000; display: grid; place-items: center; outline: 0; cursor: pointer; }
-.slide { max-width: 100vw; max-height: 100vh; width: 100vw; display: grid; place-items: center; }
+.slide { position: relative; max-width: 100vw; max-height: 100vh; width: 100vw; display: grid; place-items: center; }
 .slide svg { max-width: 100vw; max-height: 100vh; width: auto; height: auto; display: block; }
 .slide-video { width: 100%; height: 100%; object-fit: fill; display: block; }
+.slide-video-box { position: absolute; overflow: hidden; }
+.slide-video-box .slide-video { position: absolute; }
 .presenter-view { position: fixed; inset: 0; z-index: 80; background: #15151c; color: #eee; display: grid; grid-template-rows: auto 1fr auto; gap: 12px; padding: 16px; outline: 0; }
 .presenter-view header, .presenter-view footer { display: flex; align-items: center; gap: 12px; }
 .presenter-view footer { justify-content: flex-end; }

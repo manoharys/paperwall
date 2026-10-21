@@ -567,16 +567,40 @@ export function renderPage(doc, pageIndex, opts = {}) {
 }
 
 /**
- * The outer SVG around a page's (or frame's) contents: size, fonts, definitions.
- * opts.view ({ x, y, w, h } in page px) shows just that part of the page.
+ * A page in parts, for redrawing just what changed: the outer SVG's opening
+ * tag, its definitions, the background and each element in order ('' for
+ * one not shown, else one <g>). renderPage() is these put together.
  */
-function svgDocument(ctx, body, w, h, opts, extra = '') {
-  const style = opts.fontCss ? `<style>${opts.fontCss}</style>` : '';
+export function renderPageParts(doc, pageIndex, opts = {}) {
+  const page = doc.pages[pageIndex];
+  if (!page) throw new Error(`No page ${pageIndex + 1}`);
+  const ctx = makeCtx(doc, opts);
+  const w = num(doc.width, 1);
+  const h = num(doc.height, 1);
+  const background = opts.transparent ? '' : renderBackground(ctx, page.background, w, h);
+  const elements = page.elements.map((el) => renderElement(ctx, el));
+  return { head: svgHead(w, h, opts), defs: svgDefs(ctx, opts), background, elements };
+}
+
+/**
+ * The outer SVG's opening tag: its size. opts.view ({ x, y, w, h } in page
+ * px) shows just that part of the page.
+ */
+function svgHead(w, h, opts, extra = '') {
   const scale = opts.scale || 1;
   const v = opts.view || { x: 0, y: 0, w, h };
   const size = opts.noSize ? '' : ` width="${f(v.w * scale)}" height="${f(v.h * scale)}"`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"${size} viewBox="${opts.view ? `${f(v.x)} ${f(v.y)} ${f(v.w)} ${f(v.h)}` : `0 0 ${w} ${h}`}"${extra}>` +
-    `<defs>${style}${ctx.defs.join('')}</defs>${body}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"${size} viewBox="${opts.view ? `${f(v.x)} ${f(v.y)} ${f(v.w)} ${f(v.h)}` : `0 0 ${w} ${h}`}"${extra}>`;
+}
+
+/** What goes in the SVG's <defs>: fonts, gradients, filters. */
+function svgDefs(ctx, opts) {
+  return (opts.fontCss ? `<style>${opts.fontCss}</style>` : '') + ctx.defs.join('');
+}
+
+/** The outer SVG around a page's (or frame's) contents: size, fonts, definitions. */
+function svgDocument(ctx, body, w, h, opts, extra = '') {
+  return `${svgHead(w, h, opts, extra)}<defs>${svgDefs(ctx, opts)}</defs>${body}</svg>`;
 }
 
 /**
@@ -683,8 +707,10 @@ export function renderFrame(doc, frame, opts = {}) {
     body = layer(frame.from.index, frame.from.local, tr.from) + layer(frame.index, frame.local, tr.to);
   } else body = layer(frame.index, frame.local, null);
   // On white, as in every download (so a see-through moment of a transition
-  // looks the same played, presented or downloaded).
-  return svgDocument(ctx, `<rect width="${f(w)}" height="${f(h)}" fill="#ffffff"/>${body}`, w, h, opts, ' overflow="hidden"');
+  // looks the same played, presented or downloaded). `transparent`: neither
+  // the white nor the page's background (a layer to go over others).
+  const white = opts.transparent ? '' : `<rect width="${f(w)}" height="${f(h)}" fill="#ffffff"/>`;
+  return svgDocument(ctx, `${white}${body}`, w, h, opts, ' overflow="hidden"');
 }
 
 /**

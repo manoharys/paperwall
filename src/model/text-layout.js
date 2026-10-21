@@ -40,14 +40,34 @@ export function noteInner(el) {
   return { ...el, note: null, x: el.x + p, y: el.y + p, w: Math.max(1, el.w - p * 2), h: Math.max(1, el.h - p * 2) };
 }
 
+// Each text box's last layout is kept with what it was worked out from (its
+// words, style and width, and the measurer), so redrawing or reflowing a long
+// document only measures the boxes that changed. Layouts are shared: never
+// changed by those who read them.
+const LAID_OUT_BY = ['text', 'w', 'size', 'lineHeight', 'letterSpacing', 'caps', 'list', 'listStart', 'continues', 'font', 'weight', 'italic', 'note'];
+let laidOut = new WeakMap(); // element → { key, measure, layout }
+
+/** Forget every kept layout (the measurer's widths changed: a font loaded). */
+export function forgetLayouts() {
+  laidOut = new WeakMap();
+}
+
 /**
  * Lay out a text element.
  * Returns lines with their text, left offset (x, for list indents) and width,
  * plus the line height and the total height.
  */
 export function layoutText(el, measure) {
+  const key = JSON.stringify(LAID_OUT_BY.map((k) => el[k]));
+  const kept = laidOut.get(el);
+  if (kept && kept.key === key && kept.measure === measure) return kept.layout;
   // A sticky note's text wraps inside its edges.
-  if (el.note) return layoutText(noteInner(el), measure);
+  const layout = el.note ? layoutText(noteInner(el), measure) : layoutLines(el, measure);
+  laidOut.set(el, { key, measure, layout });
+  return layout;
+}
+
+function layoutLines(el, measure) {
   const m = measureWith(measure, el);
   const lineHeight = el.size * (el.lineHeight || 1.2);
   const lines = [];

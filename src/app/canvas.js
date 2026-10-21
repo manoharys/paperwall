@@ -1,7 +1,7 @@
 // The canvas: draws the current page and handles selecting, moving,
 // resizing, rotating, cropping and editing text directly on it.
 
-import { renderPage } from '../model/render.js';
+import { renderPageParts } from '../model/render.js';
 import {
   boundsOf, unionBounds, boxCorners, handlePosition, resizeBox, angleTo, snapAngle, snapMove,
   pointInBox, rectFromPoints, rectsIntersect, HANDLES,
@@ -20,10 +20,22 @@ const PAD = 64;
 const RATIO_LOCKED = new Set([...KEEPS_RATIO, 'group']);
 
 
+// The blob: URLs of the design last opened (key → { dataUrl, url }). Opening
+// it again reuses them (its photos aren't copied again); opening another
+// design lets them go.
+let opened = { id: null, urls: new Map() };
+function blobUrls(designId) {
+  if (opened.id !== designId) {
+    for (const { url } of opened.urls.values()) URL.revokeObjectURL(url);
+    opened = { id: designId, urls: new Map() };
+  }
+  return opened.urls;
+}
+
 export class Canvas {
   constructor(editor) {
     this.ed = editor;
-    this.urls = new Map();
+    this.urls = blobUrls(editor.doc.id);
     this.hover = null;
     this.drag = null;
     this.marquee = null;
@@ -180,7 +192,8 @@ export class Canvas {
   }
 
   // A blob: URL for an asset (or a video's poster: `part` 'poster'), made
-  // once, so redrawing doesn't copy the picture's data each time.
+  // once, so redrawing doesn't copy the picture's data each time. Kept while
+  // the design is open, and for opening it again (see blobUrls).
   assetHref = (assetId, part) => {
     const a = this.ed.doc.assets[assetId];
     const dataUrl = part === 'poster' ? a?.poster : a?.dataUrl;
@@ -191,6 +204,7 @@ export class Canvas {
       entry = { dataUrl, url: blobUrlFor(dataUrl) };
       this.urls.set(key, entry);
     }
+    entry.dataUrl = dataUrl; // (the same file read in again is compared in full just once)
     return entry.url;
   };
 
@@ -211,8 +225,7 @@ export class Canvas {
   render() {
     const ed = this.ed;
     this.layout();
-    const skip = ed.editingTextId ? new Set([ed.editingTextId]) : null;
-    this.svgHost.innerHTML = renderPage(ed.doc, ed.page, { measure, assetHref: this.assetHref, editor: true, scale: ed.zoom, skip, idPrefix: 'cv' });
+    this.drawPage();
     this.drawOverlay();
     if (this.textarea) this.positionTextarea();
     // The page changed size (a restored version, resizing, undoing either): fit it in view again.
@@ -233,6 +246,49 @@ export class Canvas {
       this.el.scrollTop += ed.boardMoved.dy * ed.zoom + this.wrapAt.top - was.top;
     }
     ed.boardMoved = null;
+  }
+
+  /**
+   * Draw the page. Only what changed since it was last drawn is replaced
+   * (typing in a long document, or dragging one thing on a busy page,
+   * leaves the rest as it is); anything else draws it all again.
+   */
+  drawPage() {
+    const ed = this.ed;
+    const skip = ed.editingTextId ? new Set([ed.editingTextId]) : null;
+    const now = renderPageParts(ed.doc, ed.page, { measure, assetHref: this.assetHref, editor: true, scale: ed.zoom, skip, idPrefix: 'cv' });
+    const was = this.drawn;
+    this.drawn = { ...now, pageId: ed.pageData.id };
+    const svg = this.svgHost.firstElementChild;
+    const same = was && svg && was.pageId === ed.pageData.id &&
+      was.elements.length === now.elements.length && now.elements.every((m, i) => !m === !was.elements[i]);
+    const changed = same ? now.elements.flatMap((m, i) => (m === was.elements[i] ? [] : [i])) : null;
+    // Each element shown is one <g>, in order, after the background.
+    const nodes = changed?.length ? svg.querySelectorAll(':scope > g') : [];
+    let k = 0;
+    const at = now.elements.map((m) => (m ? k++ : -1));
+    if (!changed || changed.length > now.elements.length / 2 || (changed.length && nodes.length !== k)) {
+      this.svgHost.innerHTML = `${now.head}<defs>${now.defs}</defs>${now.background}${now.elements.join('')}</svg>`;
+      return;
+    }
+    const scratch = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    // (A document grown longer: just the page's size.)
+    if (was.head !== now.head) {
+      scratch.innerHTML = `${now.head}</svg>`;
+      for (const name of ['width', 'height', 'viewBox']) svg.setAttribute(name, scratch.firstChild.getAttribute(name));
+    }
+    const defs = svg.querySelector(':scope > defs');
+    if (was.defs !== now.defs) defs.innerHTML = now.defs;
+    // (The background is what's between the definitions and the elements: never a <g>.)
+    if (was.background !== now.background) {
+      for (const n of [...svg.children]) if (n !== defs && n.localName !== 'g') n.remove();
+      scratch.innerHTML = now.background;
+      defs.after(...scratch.childNodes);
+    }
+    for (const i of changed) {
+      scratch.innerHTML = now.elements[i];
+      nodes[at[i]].replaceWith(scratch.firstChild);
+    }
   }
 
   zoomToFit() {

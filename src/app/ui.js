@@ -313,10 +313,10 @@ export function lazily(el, fn) {
   observer.observe(el);
 }
 
-/** Stop waiting on everything inside root, before it is thrown away. */
+/** Stop waiting on root and everything inside it, before it is thrown away. */
 export function forget(root) {
   if (!observer) return;
-  for (const el of root.querySelectorAll('[data-lazy]')) {
+  for (const el of [root, ...root.querySelectorAll('[data-lazy]')]) {
     observer.unobserve(el);
     pending.delete(el);
   }

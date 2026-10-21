@@ -1,0 +1,258 @@
+// Staying quick with big designs: many pages of photos, long documents, and
+// motion downloads with videos. Times are generous (CI machines are slow);
+// what's drawn again, and what isn't, is checked exactly.
+
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { newDesign, waitForEditor, settled, teardown } from './helpers.js';
+
+after(teardown);
+
+/** Make a design of `pages` pages, each with a title and three photos from `photos` big JPEGs, and open it. Resolves to how long opening took (ms). */
+async function openPhotoDesign(page, { pages = 60, photos = 12 } = {}) {
+  const id = await page.evaluate(async ([n, m]) => {
+    const photo = (seed) => {
+      const c = document.createElement('canvas');
+      c.width = 1600;
+      c.height = 1200;
+      const g = c.getContext('2d');
+      for (let i = 0; i < 40; i++) {
+        g.fillStyle = `hsl(${(seed * 47 + i * 23) % 360} 70% ${30 + (i % 5) * 10}%)`;
+        g.fillRect((i * 131 + seed * 17) % 1500, (i * 71 + seed * 29) % 1100, 300, 260);
+      }
+      return c.toDataURL('image/jpeg', 0.92);
+    };
+    const filters = { brightness: 100, contrast: 100, saturation: 100, grayscale: 0, sepia: 0, blur: 0, warmth: 0, tint: 0, hue: 0, vignette: 0, duotone: null };
+    const img = (id, assetId, x, y) => ({ id, type: 'image', x, y, w: 480, h: 360, rotation: 0, opacity: 1, assetId, crop: { x: 0, y: 0, w: 1, h: 1 }, filters, radius: 0, mask: 'none' });
+    const text = (id, t) => ({ id, type: 'text', x: 80, y: 40, w: 900, h: 70, rotation: 0, opacity: 1, text: t, font: 'Inter', size: 56, weight: 700, italic: false, color: '#111111', align: 'left', lineHeight: 1.2, letterSpacing: 0, caps: false, list: 'none', outline: null, highlight: null, curve: 0 });
+    const assets = {};
+    for (let i = 0; i < m; i++) assets[`ph${i}`] = { type: 'image', mime: 'image/jpeg', dataUrl: photo(i), width: 1600, height: 1200, name: `photo-${i}.jpg` };
+    const list = [];
+    for (let p = 0; p < n; p++) {
+      list.push({ id: `pg${p}`, background: { type: 'color', color: '#ffffff' }, elements: [text(`t${p}`, `Page ${p + 1}`), img(`a${p}`, `ph${p % m}`, 40, 160), img(`b${p}`, `ph${(p + 5) % m}`, 560, 160), img(`c${p}`, `ph${(p + 9) % m}`, 300, 600)] });
+    }
+    const now = Date.now();
+    const doc = { version: 1, id: `dbig${now}`, name: 'Many photos', width: 1080, height: 1080, unit: 'px', pages: list, assets, createdAt: now, updatedAt: now };
+    await window.paperwall.store.saveDesign(doc, null);
+    return doc.id;
+  }, [pages, photos]);
+  await page.evaluate((d) => {
+    window.openedAt = performance.now();
+    location.hash = `#/d/${d}`;
+  }, id);
+  await page.waitForFunction((d) => window.paperwall?.editor?.doc.id === d, id, { timeout: 30000 });
+  await page.waitForSelector('[data-testid="page"] svg image');
+  await settled(page);
+  return page.evaluate(() => performance.now() - window.openedAt);
+}
+
+test('[APP-07] a 60-page design full of photos opens, moves between pages and redraws only what changed', async () => {
+  const { page, context, errors } = await newDesign('square');
+  const opened = await openPhotoDesign(page);
+  assert.ok(opened < 15000, `opened in ${Math.round(opened)} ms`);
+  assert.equal(await page.locator('[data-testid="page-thumb"]').count(), 60);
+  // Only the thumbnails near the screen are drawn.
+  await settled(page);
+  const drawn = await page.locator('[data-testid="page-thumb"] .page-img svg').count();
+  assert.ok(drawn > 0 && drawn < 60, `${drawn} of 60 thumbnails drawn`);
+  // Moving between pages.
+  const times = await page.evaluate(async () => {
+    const ed = window.paperwall.editor;
+    const out = [];
+    for (const i of [7, 23, 41, 59, 2, 30, 0, 15, 45]) {
+      const t = performance.now();
+      ed.setPage(i);
+      await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+      out.push(performance.now() - t);
+    }
+    return out.sort((a, b) => a - b);
+  });
+  const median = times[times.length >> 1];
+  assert.ok(median < 400, `switching pages: median ${Math.round(median)} ms (${times.map(Math.round).join(', ')})`);
+  // An edit on one page: its thumbnail is drawn again, the others are kept.
+  await page.evaluate(() => {
+    for (const img of document.querySelectorAll('[data-testid="page-thumb"] .page-img')) img.kept = true;
+  });
+  const edit = await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    const t = performance.now();
+    ed.update({ color: '#ff0066' }, null, [ed.pageData.elements[0].id]);
+    return performance.now() - t;
+  });
+  assert.ok(edit < 400, `an edit took ${Math.round(edit)} ms`);
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-testid="page-thumb"] .page-img')].some((img) => !img.kept));
+  const fresh = await page.evaluate(() => [...document.querySelectorAll('[data-testid="page-thumb"] .page-img')].map((img, i) => (img.kept ? null : i)).filter((i) => i !== null));
+  assert.deepEqual(fresh, [45], 'just the edited page');
+  // On the canvas, only the changed element is drawn again.
+  const kept = await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    const nodes = [...document.querySelectorAll('[data-testid="page"] [data-id]')];
+    for (const n of nodes) n.kept = true;
+    ed.update({ x: 50 }, null, [ed.pageData.elements[1].id]);
+    return [...document.querySelectorAll('[data-testid="page"] svg > g[data-id]')].map((n) => !!n.kept);
+  });
+  assert.deepEqual(kept, [true, false, true, true]);
+  // The design's preview is drawn from small copies of its photos: quick.
+  const thumb = await page.evaluate(async () => {
+    const ed = window.paperwall.editor;
+    await ed.persistThumb(); // (the copies are made the first time)
+    const t = performance.now();
+    await ed.persistThumb();
+    return performance.now() - t;
+  });
+  assert.ok(thumb < 1000, `a preview took ${Math.round(thumb)} ms`);
+  // Undo steps share the photos: each is small.
+  const step = await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    return ed.history.past.at(-1).length;
+  });
+  assert.ok(step < 200000, `an undo step is ${step} characters`);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('[APP-07] typing in a 200-paragraph document stays quick', async () => {
+  const { page, context, errors } = await newDesign('doc');
+  await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    const body = ed.pageData.elements[1];
+    const more = Array.from({ length: 200 }, (_, i) => ({ ...JSON.parse(JSON.stringify(body)), id: `para${i}`, y: 10000 + i, text: `Paragraph ${i + 1}. ${'Words that wrap over a few lines of the page. '.repeat(5)}` }));
+    ed.change(() => ed.pageData.elements.push(...more));
+  });
+  await settled(page);
+  const id = await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    const el = ed.pageData.elements[198]; // (near the end: a new line moves just the few below)
+    window.paperwall.canvas.startTextEdit(el);
+    return el.id;
+  });
+  await page.waitForSelector('[data-testid="text-editor"]');
+  await page.keyboard.press('End');
+  // Every other block stays as it was drawn.
+  await page.evaluate(() => {
+    for (const n of document.querySelectorAll('[data-testid="page"] svg > g[data-id]')) n.kept = true;
+  });
+  const times = await page.evaluate(async () => {
+    const ta = document.querySelector('[data-testid="text-editor"]');
+    const out = [];
+    for (let i = 0; i < 20; i++) {
+      const t = performance.now();
+      ta.value += i % 5 === 4 ? ' ' : 'x';
+      ta.dispatchEvent(new Event('input'));
+      await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+      out.push(performance.now() - t);
+    }
+    return out.sort((a, b) => a - b);
+  });
+  const median = times[times.length >> 1];
+  assert.ok(median < 100, `a keystroke: median ${Math.round(median)} ms (${times.map(Math.round).join(', ')})`);
+  const redrawn = await page.evaluate(() => [...document.querySelectorAll('[data-testid="page"] svg > g[data-id]')].filter((n) => !n.kept).length);
+  assert.ok(redrawn <= 4, `${redrawn} blocks drawn again`);
+  await page.keyboard.press('Escape');
+  const text = await page.evaluate((i) => window.paperwall.editor.pageData.elements.find((e) => e.id === i).text, id);
+  assert.match(text, /xxxx xxxx/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+/** Put a one-second video of a square popping up on a blue screen on the page (made here, as a WebM), at `box`. Resolves to its element id. */
+function addClip(page, box) {
+  return page.evaluate(async (b) => {
+    const ed = window.paperwall.editor;
+    const clipDoc = JSON.parse(JSON.stringify(ed.doc));
+    Object.assign(clipDoc, { width: 320, height: 240, document: undefined, board: undefined });
+    clipDoc.pages = [{ id: 'clip', background: { type: 'color', color: '#2040ff' }, duration: 1, elements: [{ id: 'sq', type: 'shape', shape: 'rect', x: 110, y: 70, w: 100, h: 100, rotation: 0, opacity: 1, fill: '#ffff00', anim: { type: 'pop', duration: 0.5 } }] }];
+    const blob = await window.paperwall.export.exportVideo(clipDoc, [0], { container: 'webm' });
+    const dataUrl = await new Promise((ok) => {
+      const r = new FileReader();
+      r.onload = () => ok(r.result.replace(/^data:[^;,]*/, 'data:video/webm'));
+      r.readAsDataURL(blob);
+    });
+    const filters = { brightness: 100, contrast: 100, saturation: 100, grayscale: 0, sepia: 0, blur: 0, warmth: 0, tint: 0, hue: 0, vignette: 0, duotone: null };
+    const el = { id: 'clip-el', type: 'video', x: b.x, y: b.y, w: b.w, h: b.h, rotation: 0, opacity: 1, assetId: 'clip', crop: { x: 0, y: 0, w: 1, h: 1 }, filters, radius: 0, mask: 'none', trim: { start: 0 }, loop: true };
+    ed.change(() => {
+      ed.doc.assets.clip = { type: 'video', mime: 'video/webm', dataUrl, width: 320, height: 240, duration: 1 };
+      ed.pageData.elements.push(el);
+    });
+    return el.id;
+  }, box);
+}
+
+test('[APP-07] a video download draws what is still once, with the video and what is over it in place', async () => {
+  const { page, context, errors } = await newDesign('square');
+  await addClip(page, { x: 0, y: 0, w: 1080, h: 810 });
+  // A red bar over the video, and a green one below it.
+  await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    const bar = (id, y, fill) => ({ id, type: 'shape', shape: 'rect', x: 0, y, w: 1080, h: 120, rotation: 0, opacity: 1, fill });
+    ed.change(() => {
+      ed.pageData.elements.unshift(bar('under', 900, '#00c000'));
+      ed.pageData.elements.push(bar('over', 600, '#ff0000'));
+    });
+    ed.setPageMotion(0, { duration: 3 });
+  });
+  const out = await page.evaluate(async () => {
+    const ed = window.paperwall.editor;
+    const t = performance.now();
+    const blob = await window.paperwall.export.exportVideo(ed.doc, [0], { container: 'webm' });
+    const took = performance.now() - t;
+    const v = document.createElement('video');
+    v.muted = true;
+    v.src = URL.createObjectURL(blob);
+    await new Promise((ok) => (v.onloadeddata = ok));
+    const c = document.createElement('canvas');
+    c.width = v.videoWidth;
+    c.height = v.videoHeight;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    const at = async (time) => {
+      v.currentTime = time;
+      await new Promise((ok) => (v.onseeked = ok));
+      g.drawImage(v, 0, 0);
+      const px = (x, y) => [...g.getImageData(Math.round((x * c.width) / 1080), Math.round((y * c.height) / 1080), 1, 1).data].slice(0, 3);
+      // (The video fills 1080 × 810: its square's corner, then the blue around it.)
+      return { over: px(540, 660), under: px(540, 960), square: px(400, 270), video: px(100, 100) };
+    };
+    return { took, a: await at(0.1), b: await at(0.8) };
+  });
+  assert.ok(out.took < 60000, `made in ${Math.round(out.took)} ms`);
+  const near = (p, q) => p.every((v, i) => Math.abs(v - q[i]) < 60);
+  for (const f of [out.a, out.b]) {
+    assert.ok(near(f.over, [255, 0, 0]), `the bar over the video stays over it: ${f.over}`);
+    assert.ok(near(f.under, [0, 192, 0]), `the bar below it shows: ${f.under}`);
+    assert.ok(near(f.video, [32, 64, 255]), `the video shows: ${JSON.stringify(out)}`);
+  }
+  assert.ok(near(out.a.square, [32, 64, 255]) && near(out.b.square, [255, 255, 0]), `and moves: ${out.a.square} → ${out.b.square}`);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('[MOT-07] in Safari, a presented video plays live over the slide, where it is on the page', async () => {
+  const safari = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15';
+  const { page, context } = await newDesign('square', { userAgent: safari });
+  await addClip(page, { x: 270, y: 135, w: 540, h: 405 });
+  await page.click('[data-testid="present"]');
+  await page.waitForFunction(() => {
+    const v = document.querySelector('[data-testid="slide-video-box"] video');
+    return v && v.currentTime > 0.2;
+  });
+  const placed = await page.evaluate(() => {
+    const svg = document.querySelector('[data-testid="slide"] svg').getBoundingClientRect();
+    const box = document.querySelector('[data-testid="slide-video-box"]').getBoundingClientRect();
+    const k = svg.width / 1080;
+    return [box.left - svg.left - 270 * k, box.top - svg.top - 135 * k, box.width - 540 * k, box.height - 405 * k];
+  });
+  assert.ok(placed.every((d) => Math.abs(d) < 2), `over its place in the slide: ${placed}`);
+  assert.equal(await page.locator('[data-testid="slide"] foreignObject video').count(), 0, 'not inside the slide');
+  await page.keyboard.press('Escape');
+  // Turned, it can't be laid over the slide as it looks: it shows as pictures.
+  await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    ed.update({ rotation: 20 }, null, ['clip-el']);
+  });
+  await page.click('[data-testid="present"]');
+  await page.waitForFunction(() => document.querySelector('[data-testid="slide"] image'));
+  await page.waitForTimeout(600);
+  assert.equal(await page.locator('[data-testid="slide-video-box"]').count(), 0);
+  await page.keyboard.press('Escape');
+  await context.close();
+});

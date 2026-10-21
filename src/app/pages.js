@@ -4,8 +4,9 @@ import { h, icon, iconButton, clear, debounce, dialog, toast, lazily, forget, pr
 import { renderPage, renderFrame } from '../model/render.js';
 import { animationsEnd, keepsMoving, hasLoop, soundFade, pageDuration, pageFrame, transitionOf, timeline } from '../model/motion.js';
 import { VideoFrames, videosOn, blobUrlFor } from './media.js';
-import { measure, fontCssFor } from './fonts.js';
-import { visiblePages, pageName, pageLabel, soundtrackOf } from '../model/doc.js';
+import { measure, measureVersion, fontCssFor } from './fonts.js';
+import { visiblePages, pageName, pageLabel, soundtrackOf, DEFAULT_FILTERS } from '../model/doc.js';
+import { boundsOf, rectsIntersect } from '../model/geometry.js';
 
 export class PageStrip {
   constructor(editor, canvas) {
@@ -22,6 +23,8 @@ export class PageStrip {
         this.zoomLabel,
         iconButton('plus', 'Zoom in', () => canvas.zoomBy(1.25), { 'data-testid': 'zoom-in' }),
         iconButton('fit', 'Zoom to fit', () => canvas.zoomToFit(), { 'data-testid': 'zoom-fit' })));
+    this.images = new Map(); // page id → { looks, img }: each page's picture as last drawn
+    this.drawnCount = 0;
     this.redraw = debounce(() => this.render(), 250);
     editor.on((what) => {
       if (what === 'view') this.zoomLabel.textContent = `${Math.round(editor.zoom * 100)}%`;
@@ -49,14 +52,48 @@ export class PageStrip {
     });
   }
 
+  /**
+   * A page's picture for the strip: the one already drawn if the page looks
+   * the same, else a new one, drawn once it scrolls into view. (A change to
+   * one page of a long design draws just that page again.)
+   */
+  pageImage(p, i, keep) {
+    const ed = this.ed;
+    const looks = `${ed.doc.width}x${ed.doc.height}|${measureVersion()}|${JSON.stringify(p)}`;
+    const kept = keep ? this.images.get(p.id) : null;
+    if (kept?.looks === looks) return kept.img;
+    if (kept) forget(kept.img);
+    const img = h('span', { class: 'page-img', style: { aspectRatio: `${ed.doc.width} / ${ed.doc.height}` } });
+    // (Ids in each picture are its own, wherever the page moves to.)
+    const prefix = `ps${++this.drawnCount}`;
+    lazily(img, () => {
+      // The page as it is now, wherever it is (undo brings back copies of pages).
+      const pages = this.ed.doc.pages;
+      const at = pages[i]?.id === p.id ? i : pages.findIndex((q) => q.id === p.id);
+      if (at >= 0) img.innerHTML = renderPage(this.ed.doc, at, { measure, noSize: true, placeholders: true, idPrefix: prefix, assetHref: this.canvas.assetHref });
+    });
+    if (keep) this.images.set(p.id, { looks, img });
+    return img;
+  }
+
   render() {
     const ed = this.ed;
     clear(this.list);
+    // Pictures of pages no longer in the design go.
+    const ids = new Set(ed.doc.pages.map((p) => p.id));
+    for (const [id, kept] of this.images) {
+      if (ids.has(id)) continue;
+      forget(kept.img);
+      this.images.delete(id);
+    }
+    const seen = new Set(); // (two pages with one id, from an odd file: the second's picture isn't kept)
     ed.doc.pages.forEach((p, i) => {
       const label = pageLabel(p, i);
+      const keep = !seen.has(p.id);
+      seen.add(p.id);
       const item = h('li', { class: `${i === ed.page ? 'on' : ''}${p.hidden ? ' hidden-page' : ''}`, draggable: 'true', 'data-testid': 'page-thumb' },
         pressable({ class: 'page-thumb', title: label, 'aria-label': label, 'aria-current': String(i === ed.page) }, () => ed.setPage(i),
-          h('span', { class: 'page-img', style: { aspectRatio: `${ed.doc.width} / ${ed.doc.height}` }, html: renderPage(ed.doc, i, { measure, noSize: true, placeholders: true, idPrefix: `ps${i}`, assetHref: this.canvas.assetHref }) }),
+          this.pageImage(p, i, keep),
           h('span', { class: 'page-no' }, String(i + 1)),
           p.hidden ? h('span', { class: 'page-hidden-mark', 'aria-hidden': 'true' }, icon('eyeOff', 14)) : null),
         p.title ? h('span', { class: 'page-title', 'data-testid': 'page-title-label' }, p.title) : null);
@@ -173,6 +210,22 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
   let wait = 0; // a still page's timer, when playing
   let fading = 0; // when playing the last page: the soundtrack's fade-out, as downloads end
   let live = false; // the page's videos are playing in place: nothing to redraw
+  // Safari: live videos laid over the slide, each in a box of its own (see shownPlainly).
+  const overlays = [];
+  const placeOverlays = () => {
+    const svg = slide.querySelector('svg');
+    if (!svg || !overlays.length) return;
+    const r = svg.getBoundingClientRect();
+    const s = slide.getBoundingClientRect();
+    const k = r.width / doc.width;
+    for (const { el, box, v } of overlays) {
+      const crop = el.crop || { x: 0, y: 0, w: 1, h: 1 };
+      const iw = (el.w / crop.w) * k;
+      const ih = (el.h / crop.h) * k;
+      Object.assign(box.style, { left: `${r.left - s.left + el.x * k}px`, top: `${r.top - s.top + el.y * k}px`, width: `${el.w * k}px`, height: `${el.h * k}px`, borderRadius: `${(el.radius || 0) * k}px`, opacity: String(el.opacity ?? 1) });
+      Object.assign(v.style, { left: `${-crop.x * iw}px`, top: `${-crop.y * ih}px`, width: `${iw}px`, height: `${ih}px` });
+    }
+  };
   const draw = (now) => {
     frame = 0;
     const i = shown[at];
@@ -181,18 +234,24 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
     const tr = transitionOf(page);
     // Once only videos or looping animations move, 30 frames a second is plenty.
     const settled = local >= Math.max(info.end, from !== null ? tr.duration : 0);
-    if (LIVE_VIDEO && settled && info.keeps && !info.loops && !live) {
+    if ((LIVE_VIDEO || info.plain) && settled && info.keeps && !info.loops && !live) {
       // Only videos move now: drawn once more, with each live video in its
       // own place in the slide (layered and clipped as designed), so no
-      // picture is taken of them frame by frame.
+      // picture is taken of them frame by frame. (In Safari, over the slide.)
       live = true;
       slide.innerHTML = renderFrame(doc, pageFrame(doc, i, local, null), { ...opts, idPrefix: `pr${i}`, videoSlots: true });
+      overlays.length = 0;
       for (const box of slide.querySelectorAll('foreignObject[data-video]')) {
         const v = videos.videoOf({ id: box.dataset.video });
         if (!v) continue;
         v.className = 'slide-video';
         const playing = !v.paused;
-        box.append(v);
+        if (LIVE_VIDEO) box.append(v);
+        else {
+          const over = h('div', { class: 'slide-video-box', 'data-testid': 'slide-video-box' }, v);
+          slide.append(over);
+          overlays.push({ el: info.videos.find((el) => el.id === box.dataset.video), box: over, v });
+        }
         if (playing && v.paused) v.play().catch(() => null); // (moved to another window, a video can stop)
         // The picture under it goes once the video shows (it'd show through
         // a see-through video).
@@ -204,6 +263,7 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
           else v.addEventListener('playing', () => under.remove(), { once: true });
         }
       }
+      placeOverlays();
     } else if (live) {
       // Nothing to draw: the videos play themselves.
     } else if ((settled && info.keeps) || info.videos.length ? now - drawn < 33 && drawn : false) {
@@ -262,6 +322,7 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
     taken.clear(); // a page's videos start afresh: no picture from an earlier visit
     const page = doc.pages[shown[at]];
     info = { end: animationsEnd(page), keeps: keepsMoving(page, doc.assets), loops: hasLoop(page), videos: videosOn(doc, [shown[at]]) };
+    info.plain = !LIVE_VIDEO && shownPlainly(page, info.videos);
     videos.pauseAll();
     videos.start(info.videos, started);
     // Back before the page Play started on: the sound starts over from there
@@ -298,6 +359,7 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
     sound?.stop();
     hostDoc.removeEventListener('keydown', onKey, true);
     hostDoc.removeEventListener('fullscreenchange', onFullscreen);
+    host.removeEventListener('resize', placeOverlays);
     window.removeEventListener('hashchange', close);
     if (hostDoc.fullscreenElement) hostDoc.exitFullscreen().catch(() => null);
     root.remove();
@@ -318,6 +380,7 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
   });
   hostDoc.addEventListener('keydown', onKey, true);
   hostDoc.addEventListener('fullscreenchange', onFullscreen);
+  host.addEventListener('resize', placeOverlays);
   // Leaving the editor (Back, say) ends presenting too.
   window.addEventListener('hashchange', close);
   hostDoc.body.append(root);
@@ -445,9 +508,24 @@ export function presenterView(editor, canvas) {
 }
 
 // Safari draws HTML inside SVG (the live video's place) without the page's
-// moves, turns and clipping, so there videos are shown as pictures throughout.
+// moves, turns and clipping, so there videos play over the slide when they
+// can (see shownPlainly), else are shown as pictures throughout.
 // (Every browser on iPhones and iPads is Safari inside: any WebKit that isn't Chrome's Blink.)
 const LIVE_VIDEO = typeof navigator === 'undefined' || !(/AppleWebKit/.test(navigator.userAgent) && !/Chrome\/|Chromium\//.test(navigator.userAgent));
+
+/**
+ * Whether a page's videos can play over its slide, as they look on it: each
+ * on the page itself (not in a group), not turned, flipped, clipped to a
+ * shape, filtered or shadowed, and with nothing over it.
+ */
+function shownPlainly(page, videos) {
+  return videos.length > 0 && videos.every((el) => {
+    const at = page.elements.indexOf(el);
+    if (at < 0 || el.rotation % 360 || el.flipX || el.flipY || (el.mask && el.mask !== 'none') || el.shadow) return false;
+    if (!Object.entries(el.filters || {}).every(([k, v]) => (v ?? null) === (DEFAULT_FILTERS[k] ?? null))) return false;
+    return page.elements.slice(at + 1).every((o) => o.hidden || !rectsIntersect(boundsOf(o), boundsOf(el)));
+  });
+}
 
 /** The design's soundtrack as something to play from a point, or null if it has none. */
 function soundtrackPlayer(doc) {

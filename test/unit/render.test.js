@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createDesign, createText, createShape, createLine, createImage, createIcon, createSticker, createQr, addAsset } from '../../src/model/doc.js';
 import { addElement, setBackground } from '../../src/model/commands.js';
-import { renderPage, esc } from '../../src/model/render.js';
+import { renderPage, renderPageParts, esc } from '../../src/model/render.js';
 import { layoutText, fitHeight, approxMeasure } from '../../src/model/text-layout.js';
 import { shapePath } from '../../src/model/shapes.js';
 import { qrMatrix, pickVersion } from '../../src/model/qr.js';
@@ -647,4 +647,18 @@ test('[ELM-10] a connector to elements inside a turned group follows them when t
   // Turned 90° about (250, 50): a's middle is at (250, -150), b's at (250, 250); the line runs between them.
   const [s, e] = before;
   assert.ok(Math.abs(s[0] - 250) < 0.01 && Math.abs(e[0] - 250) < 0.01, `vertical line at x 250 (${s} → ${e})`);
+});
+
+test('[APP-07] a page in parts, for redrawing just what changed, is the page drawn whole', () => {
+  const doc = createDesign({ width: 800, height: 600 });
+  setBackground(doc, 0, { type: 'gradient', gradient: { type: 'linear', angle: 90, stops: [{ offset: 0, color: '#f00' }, { offset: 1, color: '#00f' }] } });
+  addElement(doc, 0, createText({ text: 'Hello', shadow: { x: 2, y: 2, blur: 4, color: '#000', opacity: 0.4 } }));
+  addElement(doc, 0, createShape('star', { hidden: true }));
+  addElement(doc, 0, createShape('rect'));
+  const opts = { measure: approxMeasure, editor: true, scale: 0.5, idPrefix: 'cv' };
+  const parts = renderPageParts(doc, 0, opts);
+  assert.equal(`${parts.head}<defs>${parts.defs}</defs>${parts.background}${parts.elements.join('')}</svg>`, renderPage(doc, 0, opts));
+  assert.equal(parts.elements.length, 3);
+  assert.equal(parts.elements[1], '', 'nothing for a hidden element');
+  assert.ok(parts.elements.every((m) => !m || (m.startsWith('<g ') && m.endsWith('</g>'))), 'one <g> each');
 });

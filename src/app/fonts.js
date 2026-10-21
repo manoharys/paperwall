@@ -2,6 +2,7 @@
 // in exports. In the one-file build the font files are inlined as data URLs.
 
 import { FONTS, fontFiles, fontsUsed, nearestWeight } from '../model/fonts.js';
+import { forgetLayouts } from '../model/text-layout.js';
 import { bytesToBase64, dataUrlToBytes } from './ui.js';
 
 const inlined = () => globalThis.PAPERWALL_ASSETS?.fonts || null;
@@ -110,8 +111,17 @@ export function measure(text, el) {
   return (w * el.size) / 100;
 }
 
+let measured = 0; // counts up each time the widths are measured afresh
+
+/** Which widths text is measured with: changes when a font arrives (so pictures of text are drawn again). */
+export function measureVersion() {
+  return measured;
+}
+
 export function clearMeasureCache() {
+  measured++;
   widthCache.clear();
+  forgetLayouts(); // (worked out from the old widths)
 }
 
 async function fileAsDataUrl(file) {
