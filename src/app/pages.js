@@ -7,7 +7,7 @@ import { VideoFrames, videosOn, blobUrlFor } from './media.js';
 import { measure, measureVersion, fontCssFor } from './fonts.js';
 import { visiblePages, soundtrackOf, hasDefaultFilters } from '../model/doc.js';
 import { boundsOf, rectsIntersect } from '../model/geometry.js';
-import { t, formatNumber } from './i18n.js';
+import { t, formatNumber, ltr } from './i18n.js';
 import { pageName, pageLabel } from './names.js';
 
 export class PageStrip {
@@ -112,7 +112,7 @@ export class PageStrip {
       const item = h('li', { class: `${i === ed.page ? 'on' : ''}${p.hidden ? ' hidden-page' : ''}`, draggable: 'true', 'data-testid': 'page-thumb' },
         pressable({ class: 'page-thumb', title: label, 'aria-label': label, 'aria-current': String(i === ed.page) }, () => ed.setPage(i),
           this.pageImage(p, i, keep),
-          h('span', { class: 'page-no' }, String(i + 1)),
+          h('span', { class: 'page-no' }, formatNumber(i + 1)),
           p.hidden ? h('span', { class: 'page-hidden-mark', 'aria-hidden': 'true' }, icon('eyeOff', 14)) : null),
         p.title ? h('span', { class: 'page-title', 'data-testid': 'page-title-label' }, p.title) : null);
       pageDrag(item, i, (from) => ed.movePage(from, i));
@@ -156,7 +156,7 @@ export function pageGrid(editor, canvas) {
           d.close();
         }, img),
         h('div', { class: 'pg-meta' },
-          h('b', null, String(i + 1)),
+          h('b', null, formatNumber(i + 1)),
           h('span', null, p.title || ''),
           p.hidden ? h('small', null, t('pages.hidden')) : null,
           iconButton(p.hidden ? 'eye' : 'eyeOff', p.hidden ? t('pages.show') : t('pages.hide'), () => {
@@ -360,7 +360,7 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
       fading = setTimeout(() => sound.fadeOut(Math.max(0.05, (end - performance.now()) / 1000)), Math.max(0, end - fade * 1000 - performance.now()));
     }
     slide.style.aspectRatio = `${doc.width} / ${doc.height}`;
-    counter.textContent = `${at + 1} / ${shown.length}`;
+    counter.textContent = ltr(`${formatNumber(at + 1)} / ${formatNumber(shown.length)}`);
     onPage?.(shown[at], shown);
     draw(started);
   };
@@ -485,7 +485,7 @@ export function presenterView(editor, canvas) {
     else upcoming.replaceChildren(h('p', { class: 'pv-end' }, t('present.theEnd')));
     notes.textContent = doc.pages[i].notes || t('present.noNotes');
     notes.classList.toggle('empty', !doc.pages[i].notes);
-    count.textContent = `${k + 1} / ${list.length}`;
+    count.textContent = ltr(`${formatNumber(k + 1)} / ${formatNumber(list.length)}`);
   };
   // The time since the start (minutes:seconds); and if the slides' window
   // is closed, presenting ends.

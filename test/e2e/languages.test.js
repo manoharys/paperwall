@@ -252,6 +252,15 @@ test('[APP-08] Arabic lays the interface out right to left; the page itself stay
   assert.equal(await page.textContent('[data-testid="selection-title"]'), say('ar', 'type.text'));
   assert.deepEqual(await audit(page), []);
   assert.deepEqual(await rawKeys(page), []);
+  // Page numbers are written as Arabic writes numbers: the strip's badges and the presenter's count.
+  const ar = (n) => new Intl.NumberFormat('ar', { useGrouping: false }).format(n);
+  await page.evaluate(() => window.paperwall.editor.addPage());
+  await page.waitForFunction((two) => [...document.querySelectorAll('.page-no')].map((n) => n.textContent).join() === two, `${ar(1)},${ar(2)}`);
+  await page.click('[data-testid="present"]');
+  await page.waitForSelector('.slide-count');
+  const count = (await page.textContent('.slide-count')).replace(/[⁦-⁩]/g, '');
+  assert.ok([`${ar(1)} / ${ar(2)}`, `${ar(2)} / ${ar(2)}`].includes(count), count);
+  await page.keyboard.press('Escape');
   // Back to English: left to right again.
   await page.click('[data-testid="main"]');
   await pick(page, 'en', 'menu-language');
