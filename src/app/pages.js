@@ -326,6 +326,7 @@ function soundtrackPlayer(doc) {
   const volume = doc.audio.volume ?? 1;
   let mixer = null;
   let gain = null;
+  let fadeTurn = 0; // a fade without Web Audio stops when this moves on
   const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
   try {
     mixer = new Ctx();
@@ -358,8 +359,9 @@ function soundtrackPlayer(doc) {
   audio.addEventListener('loadedmetadata', play);
   return {
     seek(t) {
+      fadeTurn++; // back from any fade
       if (gain) {
-        gain.gain.cancelScheduledValues(0); // back from any fade
+        gain.gain.cancelScheduledValues(0);
         gain.gain.value = volume;
       } else audio.volume = volume;
       wanted = t;
@@ -369,13 +371,16 @@ function soundtrackPlayer(doc) {
     /** Fade to silence over `seconds` (as downloads end). */
     fadeOut(seconds) {
       if (!gain) {
-        // No Web Audio: the player's own volume, stepped down.
+        // No Web Audio: the player's own volume, stepped down (until a seek
+        // starts the fade's turn over).
+        const turn = ++fadeTurn;
         const from = audio.volume;
         const start = performance.now();
         const step = () => {
+          if (turn !== fadeTurn || stopped || wanted === null) return;
           const k = Math.min(1, (performance.now() - start) / 1000 / Math.max(0.05, seconds));
           audio.volume = from * (1 - k);
-          if (k < 1 && !stopped && wanted !== null) setTimeout(step, 50);
+          if (k < 1) setTimeout(step, 50);
         };
         return step();
       }

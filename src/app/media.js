@@ -83,7 +83,9 @@ export async function videoInfo(file) {
     c.width = Math.max(1, Math.round(v.videoWidth * s));
     c.height = Math.max(1, Math.round(v.videoHeight * s));
     c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
-    return { width: v.videoWidth, height: v.videoHeight, duration, poster: c.toDataURL('image/jpeg', 0.82) };
+    // A see-through video keeps its see-through parts in its poster too.
+    const poster = seeThrough(v) ? c.toDataURL('image/webp', 0.82) : c.toDataURL('image/jpeg', 0.82);
+    return { width: v.videoWidth, height: v.videoHeight, duration, poster };
   } finally {
     v.removeAttribute('src');
     v.load();

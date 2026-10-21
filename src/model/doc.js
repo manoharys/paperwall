@@ -465,7 +465,20 @@ export function validateDesign(doc) {
   // The soundtrack: a sound the design has, at a volume from 0 to 1.
   if (doc.audio !== undefined) {
     const a = soundtrackOf(doc);
-    doc.audio = a && a.type === 'audio' ? { assetId: doc.audio.assetId, volume: Number.isFinite(+doc.audio.volume) ? Math.max(0, Math.min(1, +doc.audio.volume)) : 1 } : undefined;
+    doc.audio = a && a.type === 'audio' ? { assetId: doc.audio.assetId, volume: clampNum(doc.audio.volume, 0, 1, 1) } : undefined;
+  }
+  // Each element shows its own kind of file: a picture where a video's file
+  // is named (or the other way round) is left out, as a missing file would be.
+  const kindOf = (id) => doc.assets[id] && (doc.assets[id].type || 'image');
+  const check = (els) => {
+    for (const el of els) {
+      if ((el.type === 'image' || el.type === 'video') && el.assetId && kindOf(el.assetId) && kindOf(el.assetId) !== el.type) el.assetId = null;
+      if (el.type === 'group') check(el.children);
+    }
+  };
+  for (const p of doc.pages) {
+    check(p.elements);
+    if (p.background?.type === 'image' && kindOf(p.background.assetId) && kindOf(p.background.assetId) !== 'image') p.background = { type: 'color', color: p.background.color || '#ffffff' };
   }
   return doc;
 }

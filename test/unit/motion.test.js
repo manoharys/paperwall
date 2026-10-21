@@ -508,3 +508,16 @@ test('[MOT-05] GIF: a photo behind something moving doesn\'t shimmer', async () 
   assert.deepEqual(b[p], a[p], 'unchanged pixel keeps its color');
   assert.deepEqual(b[25 * W + 45], [255, 0, 0], 'the square moved');
 });
+
+test('[MOT-08] a file\'s soundtrack volume left empty plays at full; elements show their own kind of file', async () => {
+  const { createVideo, createImage } = await import('../../src/model/doc.js');
+  const doc = createDesign({ width: 100, height: 100 });
+  doc.assets.s = { type: 'audio', dataUrl: 'data:audio/mpeg;base64,AA==' };
+  doc.assets.v = { type: 'video', dataUrl: 'data:video/webm;base64,AA==' };
+  doc.audio = { assetId: 's', volume: null };
+  doc.pages[0].elements.push(createImage('v'), createVideo('v'));
+  validateDesign(doc);
+  assert.equal(doc.audio.volume, 1);
+  assert.equal(doc.pages[0].elements[0].assetId, null, 'a picture naming a video file');
+  assert.equal(doc.pages[0].elements[1].assetId, 'v');
+});
