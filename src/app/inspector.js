@@ -275,7 +275,7 @@ export class Inspector {
     return section(t('inspector.animate'),
       h('div', { class: 'anim-grid', role: 'group', 'aria-label': t('inspector.animation'), 'data-testid': 'anim-types' }, [
         // With a page animation (and not inside a group, which comes in as
-        // one): t('inspector.withPage') follows it, None keeps this one still.
+        // one): "With the page" follows it, None keeps this one still.
         ...(withPage ? [h('button', { type: 'button', class: `anim${!el.anim ? ' on' : ''}`, 'aria-pressed': String(!el.anim), 'data-testid': 'anim-page', onClick: () => this.up({ anim: null }) }, t('inspector.withPage'))] : []),
         ...Object.entries(ANIMATIONS).map(([type, { name }]) => {
           const on = type === 'none' ? (withPage ? el.anim?.type === 'none' : a.type === 'none') : a.type === type;
@@ -744,7 +744,7 @@ function styleBtn(name, label, on, onClick, testid) {
   return h('button', { type: 'button', class: on ? 'on' : '', title: label, 'aria-label': label, 'aria-pressed': String(!!on), 'data-testid': testid, onClick }, icon(name));
 }
 
-/** The t('inspector.resize') dialog. */
+/** The "Resize to another format" dialog. */
 export function resizeDialog(editor) {
   const doc = editor.doc;
   let unit = 'px';

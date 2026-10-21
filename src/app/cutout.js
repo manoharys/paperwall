@@ -1,4 +1,4 @@
-// t('inspector.removeBgSmart'): cuts the subject out of a busy photo with a
+// "Remove background (smart)": cuts the subject out of a busy photo with a
 // small segmentation model that runs on this device. The model's weights are
 // downloaded once, only after the person says yes (we show the size and
 // where from), checked against a pinned SHA-256 and kept in this browser.

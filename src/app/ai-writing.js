@@ -1,4 +1,4 @@
-// AI writing (an online extra): an t('ai.menu') menu for the selected text box that
+// AI writing (an online extra): an "AI" menu for the selected text box that
 // writes, rewrites, shortens, lengthens, corrects, changes the tone of or
 // translates its text. Each result replaces the text as one undo step and
 // keeps the box's style.

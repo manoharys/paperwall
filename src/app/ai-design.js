@@ -12,7 +12,7 @@ import { ensureFont, measure } from './fonts.js';
 import { t } from './i18n.js';
 import { presetName } from './names.js';
 
-/** The t('aiDesign.title') block for the home screen. `newDesign(doc, opts)` opens a design. */
+/** The "Describe a design" block for the home screen. `newDesign(doc, opts)` opens a design. */
 export function aiDesignBlock({ newDesign }) {
   const text = h('textarea', { rows: '2', maxlength: '1000', placeholder: t('aiDesign.placeholder'), 'aria-label': t('aiDesign.title'), 'data-testid': 'ai-design-prompt' });
   const size = h('select', { 'aria-label': t('common.size'), 'data-testid': 'ai-design-size' }, DESIGN_SIZES.map((p) => h('option', { value: p.id }, presetName(p))));
