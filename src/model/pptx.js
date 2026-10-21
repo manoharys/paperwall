@@ -49,8 +49,19 @@ const hasFilters = (el) => el.filters && Object.entries(DEFAULT_FILTERS).some(([
 
 const PRESET_TEXT = new Set(['none', undefined, null]);
 
-/** How an element goes into a slide: 'text', 'note', 'shape', 'line', 'picture', 'path', 'group', or 'raster'. */
-export function pptxKind(doc, el) {
+/** The picture a photo or video shows: "asset:<id>:file" (a video's still, where it starts) or a video's ":poster". */
+function pictureToken(doc, el) {
+  if (el.type !== 'video') return `asset:${el.assetId}:file`;
+  return stillIsCurrent(doc, el) ? `asset:${el.still}:file` : `asset:${el.assetId}:poster`;
+}
+
+/**
+ * How an element goes into a slide: 'text', 'note', 'shape', 'line',
+ * 'picture', 'path', 'group', or 'raster'. With `media` (the pictures there
+ * are, as buildPptx takes them), a photo whose picture isn't there is a
+ * 'raster' too.
+ */
+export function pptxKind(doc, el, media = null) {
   if (el.shadow) return 'raster';
   switch (el.type) {
     case 'text':
@@ -68,10 +79,11 @@ export function pptxKind(doc, el) {
       const asset = doc.assets[el.assetId];
       if (!asset) return el.assetId ? 'raster' : 'skip'; // an empty frame shows nothing in downloads
       if (el.type === 'video' && !asset.poster && !stillIsCurrent(doc, el)) return 'raster';
+      if (media && !media.has(pictureToken(doc, el))) return 'raster';
       return hasFilters(el) ? 'raster' : 'picture';
     }
     case 'group':
-      return (el.opacity ?? 1) >= 1 && el.children.every((c) => c.hidden || ['text', 'note', 'shape', 'line', 'path', 'picture', 'group', 'skip'].includes(pptxKind(doc, c))) ? 'group' : 'raster';
+      return (el.opacity ?? 1) >= 1 && el.children.every((c) => c.hidden || ['text', 'note', 'shape', 'line', 'path', 'picture', 'group', 'skip'].includes(pptxKind(doc, c, media))) ? 'group' : 'raster';
     default:
       return 'raster';
   }
@@ -94,12 +106,12 @@ function pictureBox(doc, el) {
   return x1 - x0 > 0 && y1 - y0 > 0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
 }
 
-/** Which elements of these pages need a picture: [{ page, key, box }] (box in page px). */
-export function planPptx(doc, pages) {
+/** Which elements of these pages need a picture: [{ page, key, box }] (box in page px). media as for pptxKind. */
+export function planPptx(doc, pages, media = null) {
   const wants = [];
   for (const i of pages) {
     for (const el of doc.pages[i].elements) {
-      if (el.hidden || pptxKind(doc, el) !== 'raster') continue;
+      if (el.hidden || pptxKind(doc, el, media) !== 'raster') continue;
       const box = pictureBox(doc, el);
       if (box) wants.push({ page: i, key: el.id, box });
     }
@@ -180,10 +192,11 @@ function geometry(shape, el, emu, d) {
 // ---------- slides ----------
 
 class Slide {
-  constructor(doc, emu, media) {
+  constructor(doc, emu, media, have) {
     this.doc = doc;
     this.emu = emu;
     this.media = media; // token -> the picture, with its file name once used
+    this.have = have; // the pictures there are (env.media), for pptxKind
     this.rels = []; // [rId, type, target]
     this.nextId = 2;
     this.images = new Map(); // media name -> rId
@@ -203,7 +216,7 @@ class Slide {
   }
 
   element(el) {
-    switch (pptxKind(this.doc, el)) {
+    switch (pptxKind(this.doc, el, this.have)) {
       case 'text':
         return this.text(el);
       case 'note':
@@ -246,8 +259,7 @@ class Slide {
 
   picture(el) {
     // (A video shows its still, where it starts, else the poster taken when it was added.)
-    const token = el.type !== 'video' ? `asset:${el.assetId}:file` : stillIsCurrent(this.doc, el) ? `asset:${el.still}:file` : `asset:${el.assetId}:poster`;
-    const m = this.media(token);
+    const m = this.media(pictureToken(this.doc, el));
     if (!m) return '';
     const rid = this.imageRel(m.name);
     const c = el.crop || { x: 0, y: 0, w: 1, h: 1 };
@@ -415,7 +427,7 @@ function notesOf(page) {
  * The .pptx file. env: { media: Map(token -> { bytes, ext: 'png'|'jpeg',
  * width, height }) for the design's pictures ("asset:<id>:file", or
  * ":poster" for a video's), pictures: Map("<page>:<key>" -> PNG bytes) for
- * the elements planPptx listed, title }.
+ * the elements planPptx (given the same media) listed, title }.
  */
 export function buildPptx(doc, pages, env = {}) {
   if (!pages.length) throw new Error('A presentation needs at least one slide');
@@ -435,11 +447,11 @@ export function buildPptx(doc, pages, env = {}) {
     }
     return named.get(token);
   };
-  const plan = new Map(planPptx(doc, pages).map((w) => [`${w.page}:${w.key}`, w.box]));
+  const plan = new Map(planPptx(doc, pages, env.media).map((w) => [`${w.page}:${w.key}`, w.box]));
   const withNotes = pages.filter((i) => notesOf(doc.pages[i]));
   const slides = pages.map((index, n) => {
     const page = doc.pages[index];
-    const s = new Slide(doc, emu, media);
+    const s = new Slide(doc, emu, media, env.media);
     s.rel(`${REL}/slideLayout`, '../slideLayouts/slideLayout1.xml');
     const behind = s.backgroundPicture(page);
     const shapes = page.elements.filter((el) => !el.hidden).map((el) => {

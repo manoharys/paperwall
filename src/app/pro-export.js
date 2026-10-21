@@ -10,6 +10,7 @@ import { planVectorPdf, buildVectorPdf, rasterScale } from '../model/pdf-vector.
 import { planPptx, buildPptx } from '../model/pptx.js';
 import { jpegInfo } from '../model/jpeg.js';
 import { deflate } from '../model/deflate.js';
+import { bleedSize } from '../model/view.js';
 import { measure, fontCssFor, designFontFiles, ensureDesignFonts } from './fonts.js';
 import { dataUrlToBytes, loadImage } from './ui.js';
 
@@ -134,7 +135,7 @@ async function pptxPictures(doc, pages, check) {
       const canvas = await decode(url);
       out.set(token, { bytes: await canvasPng(canvas), ext: 'png', width: canvas.width, height: canvas.height });
     } catch {
-      /* unreadable: left out, as a missing picture is */
+      /* unreadable: the element comes as a picture of itself */
     }
   }
   return out;
@@ -155,14 +156,19 @@ function allBut(page, key) {
   return skip;
 }
 
-/** A part of a page (one element, or the background) drawn by the browser into a canvas. */
-async function drawPart(doc, want, scale, fontCss) {
+/**
+ * A part of a page (one element, or the background) drawn by the browser
+ * into a canvas. The background runs `bleed` px past the page's edges, as
+ * the print PDF's does.
+ */
+async function drawPart(doc, want, scale, fontCss, bleed = 0) {
   const { box } = want;
   const s = Math.max(0.05, Math.min(scale, MAX_SIDE / Math.max(box.w, box.h), Math.sqrt(MAX_PIXELS / (box.w * box.h))));
   const svg = renderPage(doc, want.page, {
     measure,
     fontCss,
     transparent: want.key !== '@bg',
+    bleed,
     skip: allBut(doc.pages[want.page], want.key),
     view: box,
     scale: s,
@@ -202,10 +208,12 @@ export async function exportVectorPdf(doc0, pages0, { print = false, signal, onP
   if (wants.length) {
     const fontCss = await fontCssFor(doc);
     const scale = rasterScale(doc, { print });
+    // (For print, the background's picture covers the bleed too.)
+    const bleed = print ? bleedSize(doc) : 0;
     for (const [n, w] of wants.entries()) {
       check();
       onProgress?.(n / (wants.length + 1));
-      rasters.set(`${w.page}:${w.key}`, await canvasPixels(await drawPart(doc, w, scale, fontCss)));
+      rasters.set(`${w.page}:${w.key}`, await canvasPixels(await drawPart(doc, w, scale, fontCss, bleed)));
     }
   }
   check();
@@ -219,7 +227,8 @@ export async function exportPptx(doc0, pages0, { signal, onProgress } = {}) {
   await ensureDesignFonts(doc0);
   const [doc, pages] = onPaper(doc0, pages0, measure);
   const media = await pptxPictures(doc, pages, check);
-  const wants = planPptx(doc, pages);
+  // (A photo whose picture couldn't be read comes as a picture of itself.)
+  const wants = planPptx(doc, pages, media);
   const pictures = new Map();
   if (wants.length) {
     const fontCss = await fontCssFor(doc);

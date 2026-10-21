@@ -555,7 +555,8 @@ function renderBackground(ctx, bg, w, h) {
 /**
  * Render one page as a complete SVG document.
  * opts: measure, assetHref, fontCss (embedded @font-face rules), transparent,
- * editor (adds data-id attributes), idPrefix, scale (output size multiplier).
+ * editor (adds data-id attributes), idPrefix, scale (output size multiplier),
+ * bleed (page px the background runs past each edge, as the print PDF's does).
  */
 export function renderPage(doc, pageIndex, opts = {}) {
   const page = doc.pages[pageIndex];
@@ -584,7 +585,8 @@ function svgDocument(ctx, body, w, h, opts, extra = '') {
  * began), animated elements are drawn where they are at that moment.
  */
 function pageBody(ctx, page, w, h, opts) {
-  const bg = opts.transparent ? '' : renderBackground(ctx, page.background, w, h);
+  const b = opts.bleed || 0;
+  const bg = opts.transparent ? '' : b > 0 ? `<g transform="translate(${f(-b)} ${f(-b)})">${renderBackground(ctx, page.background, f(w + b * 2), f(h + b * 2))}</g>` : renderBackground(ctx, page.background, w, h);
   if (opts.time === undefined) return bg + page.elements.map((el) => renderElement(ctx, el)).join('');
   const before = ctx.motion;
   ctx.motion = { page, order: readingOrder(page), time: opts.time, size: Math.min(w, h) };
