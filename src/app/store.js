@@ -152,14 +152,17 @@ const saving = new Map(); // design id → its latest save
 
 /** Save a design with a small preview image (left as it was when `thumb` is undefined). */
 export function saveDesign(doc, thumb) {
-  const job = (saving.get(doc.id) || Promise.resolve()).catch(() => null).then(() => writeDesign(doc, thumb));
+  const asked = performance.now();
+  // (A save asked for before the design was deleted doesn't bring it back.)
+  const job = (saving.get(doc.id) || Promise.resolve()).catch(() => null).then(() => ((deletedAt.get(doc.id) || -1) > asked ? null : writeDesign(doc, thumb)));
   saving.set(doc.id, job);
   job.finally(() => saving.get(doc.id) === job && saving.delete(doc.id)).catch(() => null);
   return job;
 }
 
 async function writeDesign(doc, thumb) {
-  deleted.delete(doc.id); // (saved again: a design once more, say opened from a file)
+  deleted.delete(doc.id);
+  deletedAt.delete(doc.id); // (saved again on purpose: a design once more) // (saved again: a design once more, say opened from a file)
   if (thumb !== undefined) await put('settings', thumbKey(doc.id), thumb);
   else {
     thumb = await get('settings', thumbKey(doc.id));
@@ -227,6 +230,10 @@ export async function loadDesign(id) {
   if (!doc?.assets) return doc;
   // (A design saved before files were kept apart has them inline already.)
   const refs = Object.values(doc.assets).filter((a) => a && typeof a.stored === 'string');
+  // The files it's known to use, so a later save may tidy away ones it stops using.
+  const known = seen.get(id) || new Set();
+  for (const a of refs) known.add(a.stored);
+  seen.set(id, known);
   const data = await getMany('media', refs.map((a) => a.stored));
   refs.forEach((a, i) => {
     if (typeof data[i] === 'string') a.dataUrl = data[i];
@@ -251,8 +258,14 @@ export async function saveThumb(id, thumb) {
   await put('settings', thumbKey(id), thumb);
 }
 
+const deletedAt = new Map(); // design id → when it was deleted in this tab
+
 export async function deleteDesign(id) {
   deleted.add(id);
+  deletedAt.set(id, performance.now());
+  // After any save of it already under way (or it would write its files back).
+  await saving.get(id)?.catch(() => null);
+  seen.delete(id);
   await del('settings', thumbKey(id)).catch(() => null);
   await del('designs', id);
   await mediaKeys(id).then((keys) => batch('media', keys.map((k) => [k, undefined]))).catch(() => null);

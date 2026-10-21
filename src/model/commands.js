@@ -410,9 +410,10 @@ export function resizeDesign(doc, width, height) {
   const out = clone(doc);
   out.id = uid('d');
   const sx = width / doc.width;
-  const sy = height / doc.height;
+  // (A document is measured by its sheet, not the long page it has grown to.)
+  const sy = height / (doc.document?.pageHeight || doc.height);
   // A document: its sheets become the new size, its margins and gaps in step.
-  if (out.document) out.document = { pageHeight: height, margin: Math.round(out.document.margin * sx), gap: Math.round(out.document.gap * sx) };
+  if (out.document) out.document = { ...out.document, pageHeight: height, margin: Math.round(out.document.margin * sx), gap: Math.round(out.document.gap * sx), dpi: Math.round((out.document.dpi || 150) * sx) };
   const s = Math.min(sx, sy);
   for (const page of out.pages) {
     for (const el of page.elements) {

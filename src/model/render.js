@@ -159,7 +159,7 @@ function renderVideo(ctx, el) {
   const asset = ctx.doc.assets[el.assetId];
   // Playing: the moment's picture; else its still (where it starts, full
   // size), else the small poster taken when it was added.
-  const still = el.still && ctx.doc.assets[el.still] ? ctx.href(el.still) : '';
+  const still = el.still && ctx.doc.assets[el.still] && (el.stillAt ?? 0) === (el.trim?.start || 0) ? ctx.href(el.still) : '';
   const href = ctx.videoFrame?.(el) || still || (asset ? ctx.href(el.assetId, 'poster') : '');
   // Presenting a page whose videos play live: a place for the playing video
   // itself (put in after drawing), framed and clipped like a picture.

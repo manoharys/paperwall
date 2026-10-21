@@ -103,3 +103,27 @@ test('[DW-03] text taller than a sheet goes on over the next sheets, in whole li
   assert.ok(pic.h <= room + 0.5, 'the tall picture fits a sheet');
   assert.ok(texts.includes('After'), 'what follows is there');
 });
+
+test('[DW-03] a numbered list over two sheets counts on, and a word broken over lines stays whole', () => {
+  const doc = createDesignFromPreset('doc');
+  const page = doc.pages[0];
+  const items = Array.from({ length: 120 }, (_, i) => `Item ${i + 1}`);
+  page.elements[1].list = 'number';
+  page.elements[1].text = items.join('\n');
+  flowDocument(doc, approxMeasure);
+  const paper = paginate(doc, approxMeasure);
+  const pieces = paper.pages.flatMap((p) => p.elements).filter((e) => e.id.startsWith(page.elements[1].id));
+  assert.ok(pieces.length >= 2, `${pieces.length} pieces`);
+  const second = pieces[1];
+  const { lines } = layoutText(second, approxMeasure);
+  const firstItem = Number(second.text.split('\n')[0].replace('Item ', ''));
+  assert.equal(lines[0].prefix, `${firstItem}.  `, 'numbered on from the sheet before');
+  // A long word broken over lines comes back whole.
+  const long = 'x'.repeat(4000);
+  page.elements[1].list = 'none';
+  page.elements[1].text = long;
+  flowDocument(doc, approxMeasure);
+  const again = paginate(doc, approxMeasure).pages.flatMap((p) => p.elements).filter((e) => e.id.startsWith(page.elements[1].id));
+  assert.equal(again.map((e) => e.text).join(''), long);
+  assert.ok(again.every((e) => !e.text.includes(' ')), 'no spaces put into the word');
+});

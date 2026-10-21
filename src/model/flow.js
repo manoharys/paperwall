@@ -8,7 +8,7 @@ import { fitHeight, layoutText, approxMeasure } from './text-layout.js';
 import { clone } from './doc.js';
 import { scaleElement } from './commands.js';
 
-export const DOCUMENT = { pageHeight: 1754, margin: 120, gap: 28 };
+export const DOCUMENT = { pageHeight: 1754, margin: 120, gap: 28, dpi: 150 };
 export const BOARD = { grow: 1200, edge: 400, max: 24000 };
 
 /** The blocks of a page in flow order: top to bottom (as last placed). Lines between things follow them, so aren't blocks. */
@@ -72,7 +72,7 @@ export function paginate(doc, measure = approxMeasure) {
   const opts = { ...DOCUMENT, ...doc.document };
   const room = opts.pageHeight - opts.margin * 2; // a sheet's height for blocks
   // (Shallow: the files aren't copied, just shared.)
-  const out = { ...doc, height: opts.pageHeight, document: undefined, pages: [] };
+  const out = { ...doc, height: opts.pageHeight, document: undefined, dpi: opts.dpi, pages: [] };
   for (const page of doc.pages) {
     let sheet = null;
     let top = 0; // where this sheet starts on the long page
@@ -123,9 +123,15 @@ function textPieces(el, room, measure) {
   const { lines, lineHeight } = layoutText(el, measure);
   const per = Math.max(1, Math.floor(room / lineHeight));
   const pieces = [];
+  let items = 0; // list items so far (a numbered list carries on counting)
   for (let i = 0; i < lines.length; i += per) {
-    const text = lines.slice(i, i + per).reduce((t, l, k) => (k === 0 ? l.text : `${t}${l.start ? '\n' : ' '}${l.text}`), '');
-    const piece = { ...el, id: `${el.id}-${pieces.length + 1}`, text };
+    const chunk = lines.slice(i, i + per);
+    // Lines of a paragraph join with a space, a word broken over lines with nothing.
+    const text = chunk.reduce((t, l, k) => (k === 0 ? l.text : `${t}${l.start ? '\n' : l.glue ? '' : ' '}${l.text}`), '');
+    // A piece that starts inside a paragraph goes on with it (no new bullet or number).
+    const piece = { ...el, id: `${el.id}-${pieces.length + 1}`, text, listStart: items + 1, continues: !chunk[0].start };
+    // (An item it goes on with was counted with the piece before.)
+    items += chunk.filter((l, k) => l.start && l.text.trim() && !(k === 0 && piece.continues)).length;
     piece.h = fitHeight(piece, measure);
     pieces.push(piece);
   }

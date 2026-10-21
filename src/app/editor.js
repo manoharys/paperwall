@@ -482,6 +482,7 @@ export class Editor {
       const now = locate(this.doc, id, this.pageData.id)?.el;
       if (!now || (now.trim?.start || 0) !== start) return; // moved on meanwhile: that one takes its own
       now.still = addAsset(this.doc, { dataUrl: url, mime: url.slice(5, url.indexOf(';')), width: img.naturalWidth, height: img.naturalHeight });
+      now.stillAt = start; // (shown only while it still starts there: an undo can part them)
       this.afterChange(false, { edit: false });
     } catch {
       /* the poster stays */

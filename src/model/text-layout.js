@@ -47,20 +47,26 @@ export function layoutText(el, measure) {
   const lines = [];
   let brokeWord = false;
   const paragraphs = displayText(el).split('\n');
-  let number = 0;
-  for (const para of paragraphs) {
+  // (A piece of a longer text, on a later sheet: `listStart` numbers on from
+  // there, and `continues` means its first paragraph began before it.)
+  let number = (el.listStart || 1) - 1;
+  for (const [pi, para] of paragraphs.entries()) {
     let prefix = '';
+    const goesOn = pi === 0 && el.continues;
     if (el.list === 'bullet' && para.trim()) prefix = '•  ';
-    if (el.list === 'number' && para.trim()) prefix = `${++number}.  `;
+    if (el.list === 'number' && para.trim()) prefix = goesOn ? `${Math.max(1, number)}.  ` : `${++number}.  `;
     const indent = prefix ? m(prefix) : 0;
+    if (goesOn && prefix) prefix = ''; // in line with the rest of its item, without its mark again
     const avail = Math.max(1, el.w - indent);
     const words = para.split(/(\s+)/).filter((w) => w.length);
     let cur = '';
     let first = true;
+    let glue = false; // the next line goes on with a word broken over lines
     const push = (text) => {
       const t = text.replace(/\s+$/, '');
-      lines.push({ text: t, prefix: first ? prefix : '', indent, width: m(t), start: first });
+      lines.push({ text: t, prefix: first ? prefix : '', indent, width: m(t), start: first, glue });
       first = false;
+      glue = false;
     };
     if (!words.length) {
       lines.push({ text: '', prefix: '', indent: 0, width: 0, start: true });
@@ -82,7 +88,10 @@ export function layoutText(el, measure) {
       if (m(word) > avail) {
         const parts = breakWord(word, avail, m);
         brokeWord = true;
-        for (let i = 0; i < parts.length - 1; i++) push(parts[i]);
+        for (let i = 0; i < parts.length - 1; i++) {
+          push(parts[i]);
+          glue = true;
+        }
         cur = parts[parts.length - 1];
       } else {
         cur = word;

@@ -54,6 +54,7 @@ export function pxPerUnit(unit, dpi = DPI) {
 
 /** The resolution a design prints and exports at: print units at DPI, px designs as screens see them. */
 export function printDpi(doc) {
+  if (doc.dpi > 0) return doc.dpi; // (a document's sheets: as A4 is to its width)
   return doc.unit === 'mm' || doc.unit === 'in' ? DPI : 96;
 }
 
@@ -112,7 +113,8 @@ export const DOC_STYLES = {
 
 /** A design that flows as a document (see flow.js), started with a title and a paragraph. */
 export function makeDocument(doc) {
-  doc.document = { pageHeight: doc.height, margin: 120, gap: 28 };
+  // 150 dpi: an A4 sheet (210 mm) is 1240 px wide.
+  doc.document = { pageHeight: doc.height, margin: 120, gap: 28, dpi: 150 };
   doc.name = 'Untitled document';
   doc.pages[0].elements.push(createText({ ...DOC_STYLES.title, y: 0 }), createText({ ...DOC_STYLES.body, y: 1 }));
   // (Laid out as text is measured once open; roughly right till then.)
@@ -543,10 +545,11 @@ export function validateDesign(doc) {
   if (doc.document !== undefined) {
     const d = doc.document;
     doc.document = d && typeof d === 'object'
-      ? { pageHeight: clampNum(d.pageHeight, 200, 20000, 1754), margin: clampNum(d.margin, 0, 1000, 120), gap: clampNum(d.gap, 0, 400, 28) }
+      ? { pageHeight: clampNum(d.pageHeight, 200, 20000, 1754), margin: clampNum(d.margin, 0, 1000, 120), gap: clampNum(d.gap, 0, 400, 28), dpi: clampNum(d.dpi, 36, 1200, 150) }
       : undefined;
   }
   if (doc.board !== undefined) doc.board = doc.board === true || undefined;
+  delete doc.dpi; // (only ever set on a document's sheets, made for paper)
   // The soundtrack: a sound the design has, at a volume from 0 to 1.
   if (doc.audio !== undefined) {
     const a = soundtrackOf(doc);
@@ -561,6 +564,7 @@ export function validateDesign(doc) {
       if ((el.type === 'image' || el.type === 'video') && el.assetId && kindOf(el.assetId) && kindOf(el.assetId) !== el.type) el.assetId = el.type === 'image' ? null : 'missing';
       // A video's still is a picture it has, or it goes (the poster shows).
       if (el.still !== undefined && !(el.type === 'video' && kindOf(el.still) === 'image')) delete el.still;
+      if (el.stillAt !== undefined) el.stillAt = clampNum(el.stillAt, 0, 86400, 0);
       if (el.type === 'group') check(el.children);
     }
   };

@@ -217,7 +217,8 @@ export class Canvas {
     const size = `${ed.doc.width}x${ed.doc.height}`;
     const resized = this.pageSize && this.pageSize !== size;
     this.pageSize = size;
-    if (resized) this.zoomToFit();
+    // (A document or whiteboard growing as you work stays where you are.)
+    if (resized && !ed.doc.document && !ed.doc.board) this.zoomToFit();
   }
 
   zoomToFit() {
