@@ -13,6 +13,7 @@ import { iconById, stickerById } from '../model/graphics.js';
 import { getSetting } from './store.js';
 import { aiWritingSection } from './ai-writing.js';
 import { creditSection } from './photos.js';
+import { smartRemoveBackground, cutoutOf, refineCutout } from './cutout.js';
 
 const DUOTONES = [
   ['Ink', '#1a1a2e', '#f7f4ef'], ['Ocean', '#0b2a45', '#7fd1c7'], ['Sunset', '#5b1a6e', '#ffb36b'], ['Berry', '#3b1426', '#ff8fa3'],
@@ -523,6 +524,11 @@ export class Inspector {
             btn.disabled = false;
           }
         } }, icon('crop'), 'Remove plain background'),
+        // Busy photos: a model on this device (asks once to download it).
+        h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'remove-bg-smart', onClick: () => smartRemoveBackground(ed) }, icon('paint'), 'Remove background (smart)'),
+        cutoutOf(el.assetId) ? slider({ label: 'Refine edges', value: Math.round(cutoutOf(el.assetId).refine * 100), min: 0, max: 100, testid: 'cutout-refine', onChange: (v, l) => {
+          if (!l) refineCutout(ed, el, v / 100);
+        } }) : null,
         h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'image-to-bg', onClick: () => ed.setImageAsBackground() }, icon('background'), 'Use as page background')),
       asset?.credit ? creditSection(asset.credit) : null,
       section('Adjust',

@@ -18,6 +18,7 @@ import { menuButton, toggle, segmented, closePopover } from './widgets.js';
 import { findDialog } from './find.js';
 import { historyDialog } from './history.js';
 import { openOnlineSettings } from './online-settings.js';
+import { api as cutoutApi } from './cutout.js';
 
 const root = document.getElementById('app');
 let current = null; // { editor, unbind }
@@ -230,7 +231,7 @@ async function openEditor(id) {
     },
   };
   // Handy in the console, and used by the end-to-end tests.
-  window.paperwall = { editor, canvas, inspector, export: exportApi, store };
+  window.paperwall = { editor, canvas, inspector, export: exportApi, store, cutout: cutoutApi };
 }
 
 window.addEventListener('hashchange', route);
