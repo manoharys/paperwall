@@ -408,3 +408,34 @@ test('[EXP-13] [EXP-15] SVG pictures are drawn at the size they\'re shown, in th
   }
   await context.close();
 });
+
+test('[EXP-14] print PDF photos are as sharp as 300 DPI needs where they\'re shown', async () => {
+  const { page, context } = await newDesign('a4');
+  // A 5000 × 3000 PNG, cropped to its middle and shown the A4's width: 4960 px of it at 300 DPI.
+  await uploadImages(page, [await makePng(page, { w: 5000, h: 3000 })]);
+  await page.evaluate(() => window.paperwall.editor.update({ x: 0, y: 0, w: 2480, h: 1488, crop: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 } }));
+  const doc = await state(page);
+  assert.equal(rasterScale(doc, { print: true }), 1, 'an A4 design is 300 per inch already');
+  const size = (bytes) => /\/Width (\d+) \/Height (\d+)/.exec(find(readPdf(bytes), /\/Subtype \/Image/)[0].dict).slice(1).map(Number);
+  assert.deepEqual(size(await exportCopy(page, 'exportVectorPdf', () => {}, { print: true })), [4960, 2976], 'what 300 DPI needs, not 4096');
+  assert.deepEqual(size(await exportCopy(page, 'exportVectorPdf', () => {})), [4096, 2458], 'the screen PDF as before');
+  // Shown smaller, only as much as it needs.
+  const small = (d) => Object.assign(d.pages[0].elements[0], { w: 1240, h: 744, crop: null });
+  assert.deepEqual(size(await exportCopy(page, 'exportVectorPdf', small, { print: true })), [1240, 744]);
+  await context.close();
+});
+
+test('[EXP-15] PowerPoint: a background photo that can\'t be read comes as a picture of the background', async () => {
+  const { page, context } = await newDesign('slides');
+  const bytes = await exportCopy(page, 'exportPptx', (d) => {
+    d.assets.broken = { type: 'image', mime: 'image/png', dataUrl: 'data:image/png;base64,AAAA', width: 1920, height: 1080 };
+    d.pages[0].background = { type: 'image', assetId: 'broken', color: '#264653' };
+  });
+  const deck = unzip(bytes);
+  const slide = deck.get('ppt/slides/slide1.xml').toString();
+  checkXml(slide, 'slide1.xml');
+  assert.match(slide, /<p:spTree>.*?<\/p:grpSpPr><p:pic>.*?<a:off x="0" y="0"\/><a:ext cx="18288000" cy="10287000"\/>/, 'a picture of the whole background, behind everything');
+  const media = [...deck.keys()].filter((n) => n.startsWith('ppt/media/'));
+  assert.equal(media.length, 1);
+  await context.close();
+});

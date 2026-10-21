@@ -15,7 +15,8 @@ import { createDesign, createText, createShape, createLine, createImage, createI
 import { createConnector } from '../../src/model/connectors.js';
 import { flowDocument, onPaper } from '../../src/model/flow.js';
 import { approxMeasure, notePad } from '../../src/model/text-layout.js';
-import { renderPage } from '../../src/model/render.js';
+import { renderPage, effectPad } from '../../src/model/render.js';
+import { TEXT_COMBOS, comboGroup } from '../../src/model/text-combos.js';
 import { fontsUsed, fontFile } from '../../src/model/fonts.js';
 import { craft, NDBITS } from '../../scripts/brotli-dict.mjs';
 import { readPdf, find, pageContents, unzip, checkXml, has } from '../formats.js';
@@ -556,4 +557,96 @@ test('[EXP-15] PowerPoint: linear gradients run as the page draws them, stretche
   const k = 1 / Math.SQRT2;
   assert.deepEqual(grads[0].pos, [0, Math.round((0.5 - 0.5 * k) * 100000), 50000, 50000, Math.round((0.5 + 0.5 * k) * 100000), 100000]);
   assert.deepEqual(grads[1], { ang: 90, pos: [0, 50000, 50000, 100000] }, 'straight down, as before');
+});
+
+test('[EXP-13] [EXP-15] a group drawn as one picture has room for its elements\' glows, shadows and turns', () => {
+  // The neon sign: its words glow well past the group's box.
+  const g = comboGroup(TEXT_COMBOS.find((c) => c.id === 'neon-open'), approxMeasure, { cx: 540, cy: 540 });
+  const neon = g.children[0];
+  assert.equal(neon.effect.type, 'neon');
+  const reach = effectPad(neon) - neon.x; // how far its letters' room goes past the group's left edge
+  assert.ok(reach > 50, `${reach}`);
+  assert.ok(effectPad(g) >= reach, `${effectPad(g)} covers ${reach}`);
+  // A shadowed square turned 45° in the corner of a group of its size; and the group's own shadow on top.
+  const sq = createShape('rect', { x: 0, y: 0, w: 100, h: 100, rotation: 45, shadow: { x: 0, y: 0, blur: 10 } });
+  const grp = createGroup([sq], { x: 0, y: 0, w: 100, h: 100 });
+  const inner = 2 + 15; // the square's own pad: 2, and its shadow's blur × 1.5
+  const turned = (100 + inner * 2) * Math.SQRT2; // its padded box, turned
+  assert.ok(Math.abs(effectPad(grp) - (turned - 100) / 2) < 1e-9, `${effectPad(grp)}`);
+  grp.shadow = { x: 4, y: 8, blur: 16 };
+  assert.ok(Math.abs(effectPad(grp) - ((turned - 100) / 2 + 4 + 8 + 24)) < 1e-9);
+  // Hidden elements don't count; a plain group is as it was.
+  sq.hidden = true;
+  assert.equal(effectPad(grp), 2 + 4 + 8 + 24);
+  assert.equal(effectPad(createGroup([createShape('rect', { x: 10, y: 10, w: 50, h: 50 })], { x: 0, y: 0, w: 100, h: 100 })), 2);
+  // PowerPoint and the PDF use it: the group's picture covers the glow.
+  const doc = createDesign({ width: 1080, height: 1080 });
+  g.shadow = { x: 0, y: 4, blur: 8 };
+  doc.pages[0].elements.push(g);
+  const [want] = planPptx(doc, [0]);
+  assert.equal(want.key, g.id);
+  assert.ok(want.box.x <= g.x + neon.x - effectPad(neon) + 0.5, 'the glow inside the picture');
+  const [pdfWant] = planVectorPdf(doc, [0], {});
+  assert.ok(pdfWant.box.x <= g.x + neon.x - effectPad(neon) + 0.5);
+});
+
+test('[EXP-15] PowerPoint: line and letter spacing, outlines and indents within the schema\'s ranges', () => {
+  const doc = createDesign({ width: 1080, height: 1080 });
+  doc.pages[0].elements.push(createText({ x: 0, y: 0, w: 1000, h: 1000, text: 'Huge', size: 2000, lineHeight: 3, letterSpacing: 9000, outline: { width: 30000, color: '#000000' }, list: 'bullet' }));
+  doc.pages[0].elements.push(createText({ x: 0, y: 0, w: 1000, h: 1000, text: 'Tight', size: 40, letterSpacing: -9000 }));
+  const slide = unzip(buildPptx(doc, [0], {})).get('ppt/slides/slide1.xml').toString();
+  checkXml(slide, 'slide1.xml');
+  const nums = (re) => [...slide.matchAll(re)].map((m) => +m[1]);
+  assert.ok(nums(/<a:spcPts val="(-?\d+)"\/>/g).every((v) => v >= 0 && v <= 158400));
+  assert.ok(nums(/<a:spcPts val="(-?\d+)"\/>/g).includes(158400), 'clamped, not 450000');
+  assert.deepEqual(nums(/ spc="(-?\d+)"/g).sort((a, b) => a - b).filter((v, i, a) => a.indexOf(v) === i), [-400000, 400000]);
+  assert.ok(nums(/<a:ln w="(\d+)">/g).every((v) => v <= 20116800));
+  assert.ok(nums(/ marL="(\d+)"/g).every((v) => v <= 51206400));
+  assert.ok(nums(/<a:rPr [^>]*sz="(\d+)"/g).every((v) => v >= 100 && v <= 400000));
+});
+
+test('[EXP-13] a space the font lacks doesn\'t make every space read back as it', () => {
+  const doc = createDesign({ width: 1000, height: 400 });
+  // Inter has no em space: it's drawn with the space's glyph.
+  doc.pages[0].elements.push(createText({ x: 50, y: 50, w: 900, h: 300, text: 'Wide gap then plain words', size: 40 }));
+  const fonts = new Map();
+  for (const { font, weight } of fontsUsed(doc)) fonts.set(`${font.name}|${weight}`, fontBytes(fontFile(font.slug, weight)));
+  const font = parseFont(fonts.values().next().value);
+  assert.equal(glyphFor(font, 0x2003), 0, 'Inter has no em space');
+  const bytes = buildVectorPdf(doc, [0], { fonts });
+  const pdf = readPdf(bytes);
+  const [type0] = find(pdf, /\/Subtype \/Type0/);
+  const cmap = pdf.objects.get(+/\/ToUnicode (\d+) 0 R/.exec(type0.dict)[1]).data;
+  let text;
+  try {
+    text = zlib.inflateSync(cmap).toString('latin1');
+  } catch {
+    text = cmap.toString('latin1');
+  }
+  const space = glyphFor(font, 32).toString(16).toUpperCase().padStart(4, '0');
+  assert.match(text, new RegExp(`<${space}> <0020>`), 'the space glyph reads back as a space');
+  assert.doesNotMatch(text, /<2003>/);
+  if (has('pdftotext', ['-v'])) {
+    const dir = mkdtempSync(join(tmpdir(), 'paperwall-unit-'));
+    writeFileSync(join(dir, 'a.pdf'), bytes);
+    assert.match(execFileSync('pdftotext', ['-enc', 'UTF-8', '-raw', join(dir, 'a.pdf'), '-']).toString(), /gap then plain words/);
+  }
+});
+
+test('[EXP-15] PowerPoint: a background photo that can\'t be read comes as a picture of the background', () => {
+  const { doc, img, png } = pptxSample();
+  doc.pages[0].background = { type: 'image', assetId: img, color: '#ffffff' };
+  const media = new Map(); // its file couldn't be read
+  const wants = planPptx(doc, [0], media);
+  assert.deepEqual(wants[0], { page: 0, key: '@bg', box: { x: 0, y: 0, w: doc.width, h: doc.height } });
+  assert.equal(planPptx(doc, [0]).some((w) => w.key === '@bg'), false, 'without media, as before');
+  const pictures = new Map(wants.map((w) => [`${w.page}:${w.key}`, new Uint8Array(png)]));
+  const slide = unzip(buildPptx(doc, [0], { media, pictures })).get('ppt/slides/slide1.xml').toString();
+  checkXml(slide, 'slide1.xml');
+  const first = /<p:spTree>.*?<\/p:grpSpPr>(<p:pic>.*?<\/p:pic>)/.exec(slide)[1];
+  assert.match(first, /<a:off x="0" y="0"\/><a:ext cx="18288000" cy="10287000"\/>/, 'behind everything, the whole slide');
+  // Readable, it's the photo itself, as before.
+  const ok = new Map([[`asset:${img}:file`, { bytes: new Uint8Array(png), ext: 'png', width: 192, height: 192 }]]);
+  assert.equal(planPptx(doc, [0], ok).some((w) => w.key === '@bg'), false);
+  assert.match(unzip(buildPptx(doc, [0], { media: ok })).get('ppt/slides/slide1.xml').toString(), /name="Background"/);
 });
