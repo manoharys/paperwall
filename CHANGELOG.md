@@ -13,7 +13,8 @@
 - Arabic reads right to left: the panels, top bar and page strip are
   mirrored, while the page you design keeps its own layout.
 - Works with a keyboard alone: a "skip to the canvas" link; on the canvas,
-  Tab and Shift+Tab pick elements one at a time, the arrow keys move them
+  N and Shift+N pick elements one at a time (Tab moves on, as anywhere
+  else), the arrow keys move them
   and Alt with the arrow keys resizes them; Enter and Space press the
   focused button; the color picker opens on its hex code; the Layers list is
   a list of buttons.

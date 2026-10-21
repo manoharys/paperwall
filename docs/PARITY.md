@@ -66,7 +66,7 @@ smaller way.
 | Phone and tablet | ✅ | installable web app, touch editing |
 | Open source and free forever | ✅ | MIT |
 | Interface in your language | ✅ | nine languages, Arabic right to left; numbers and dates written the local way |
-| Keyboard only and screen readers | ✅ | every control named, dialogs keep focus, Tab picks elements on the canvas and the arrows move and resize them, changes are announced |
+| Keyboard only and screen readers | ✅ | every control named, dialogs keep focus, N picks elements on the canvas and the arrows move and resize them, changes are announced |
 | Stays quick with long designs | ✅ | 50+ pages, long documents and large photos |
 
 ## Smaller than Canva
