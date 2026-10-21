@@ -225,3 +225,58 @@ test('[EXP-15] download as PowerPoint: slides with real text boxes, shapes and p
   await context.close();
 });
 
+test('[EXP-13] [EXP-14] [EXP-15] a document comes on its sheets in every PDF and in PowerPoint', async () => {
+  const { page, context } = await newDesign('doc');
+  await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    ed.update({ text: 'A long paragraph about the spring fair. '.repeat(500) }, null, [ed.pageData.elements[1].id]);
+    ed.select([]);
+  });
+  await page.fill('[data-testid="page-notes"]', 'Read it slowly');
+  assert.equal(await state(page, (ed) => ed.doc.pages.length), 1, 'one long page');
+  const counts = {};
+  for (const kind of ['vector', 'flat', 'print']) {
+    const { bytes } = await downloadVia(page, pdfKind(page, kind));
+    const pdf = readPdf(bytes);
+    const pages = find(pdf, /\/Type \/Page\b/);
+    counts[kind] = pages.length;
+    // A4 sheets (the document's 1240 × 1754 px at 150 per inch), not one long strip.
+    const box = (k) => new RegExp(`/${k} \\[([^\\]]+)\\]`).exec(pages[0].dict)[1].split(' ').map(Number);
+    const [x0, y0, x1, y1] = box(kind === 'print' ? 'TrimBox' : 'MediaBox');
+    assert.ok(Math.abs(x1 - x0 - 595.2) < 0.5 && Math.abs(y1 - y0 - 841.92) < 0.5, `${kind}: an A4 sheet, ${x1 - x0} × ${y1 - y0}`);
+    if (kind === 'vector') assert.match(pageContents(pdf).join('\n'), /BT \/F\d+ [\d.]+ Tf .* Tj ET/, 'real text on the sheets');
+  }
+  assert.ok(counts.vector >= 2, `${counts.vector} sheets`);
+  assert.deepEqual(counts, { vector: counts.vector, flat: counts.vector, print: counts.vector }, 'the same sheets in every PDF');
+  const { bytes } = await downloadVia(page, () => page.click('[data-testid="export-format"] [data-value="pptx"]'));
+  const parts = unzip(bytes);
+  const pres = parts.get('ppt/presentation.xml').toString();
+  assert.equal([...pres.matchAll(/<p:sldId /g)].length, counts.vector, 'a slide a sheet');
+  assert.match(pres, /<p:sldSz cx="7559040" cy="10692384"\/>/, 'slides the size of the sheets');
+  assert.equal([...parts.keys()].filter((n) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(n)).length, 1, 'the notes once');
+  assert.match(parts.get('ppt/notesSlides/notesSlide1.xml').toString(), /Read it slowly/);
+  await context.close();
+});
+
+test('[EXP-13] [EXP-15] a whiteboard\'s sticky notes as vectors in the PDF and as notes in PowerPoint', async () => {
+  const { page, context } = await newDesign('whiteboard');
+  const note = (await state(page, (ed) => ed.pageData.elements)).find((e) => e.note);
+  assert.ok(note, 'a whiteboard starts with a sticky note');
+  const { bytes } = await downloadVia(page, pdfKind(page, 'vector'));
+  const pdf = readPdf(bytes);
+  const content = pageContents(pdf).join('\n');
+  const rgb = [1, 3, 5].map((i) => Math.round((parseInt(note.note.slice(i, i + 2), 16) / 255) * 1000) / 1000).join(' ');
+  assert.ok(content.includes(`${rgb} rg`), `the note's color (${rgb})`);
+  assert.match(content, /BT \/F\d+ [\d.]+ Tf .* Tj ET/, 'its words as text');
+  assert.ok(find(pdf, /\/Subtype \/Type0/).length >= 1, 'in an embedded font');
+  if (has('pdftotext', ['-v'])) {
+    const dir = mkdtempSync(join(tmpdir(), 'paperwall-vpdf-'));
+    writeFileSync(join(dir, 'a.pdf'), bytes);
+    assert.match(execFileSync('pdftotext', ['-enc', 'UTF-8', join(dir, 'a.pdf'), '-']).toString().replace(/\s+/g, ' '), new RegExp(note.text));
+  }
+  const deck = unzip((await downloadVia(page, () => page.click('[data-testid="export-format"] [data-value="pptx"]'))).bytes);
+  const slide = deck.get('ppt/slides/slide1.xml').toString();
+  checkXml(slide, 'slide1.xml');
+  assert.match(slide, new RegExp(`name="Sticky note \\d+".*<a:srgbClr val="${note.note.slice(1).toUpperCase()}"/>.*<a:t>${note.text}</a:t>`), 'a shape of its color, its text editable inside');
+  await context.close();
+});

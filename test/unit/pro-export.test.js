@@ -11,9 +11,10 @@ import { readTables, writeSfnt, parseFont, subsetFont, glyphFor } from '../../sr
 import { jpegInfo } from '../../src/model/jpeg.js';
 import { planVectorPdf, buildVectorPdf, parsePath, parseColor, rasterScale } from '../../src/model/pdf-vector.js';
 import { buildPptx, planPptx, emuPerPx, pptxKind } from '../../src/model/pptx.js';
-import { createDesign, createText, createShape, createLine, createImage, createIcon, createGroup, addAsset, createDesignFromPreset, validateDesign, DOC_STYLES } from '../../src/model/doc.js';
+import { createDesign, createText, createShape, createLine, createImage, createIcon, createGroup, addAsset, createSticky, createVideo, createDesignFromPreset, validateDesign, DOC_STYLES } from '../../src/model/doc.js';
+import { createConnector } from '../../src/model/connectors.js';
 import { flowDocument, onPaper } from '../../src/model/flow.js';
-import { approxMeasure } from '../../src/model/text-layout.js';
+import { approxMeasure, notePad } from '../../src/model/text-layout.js';
 import { fontsUsed, fontFile } from '../../src/model/fonts.js';
 import { craft, NDBITS } from '../../scripts/brotli-dict.mjs';
 import { readPdf, find, pageContents, unzip, checkXml, has } from '../formats.js';
@@ -378,3 +379,49 @@ test('[EXP-15] PowerPoint: speaker notes go on their own slides, once a page', (
   assert.match(deck.get('ppt/slides/slide2.xml').toString(), new RegExp(`<a:buAutoNum type="arabicPeriod" startAt="${later.listStart}"/>`));
 });
 
+test('[EXP-13] [EXP-15] sticky notes, video stills, credited photos and lines between things', () => {
+  const doc = createDesignFromPreset('whiteboard');
+  const png = readFileSync(join(root, 'assets/icons', readdirSync(join(root, 'assets/icons')).find((f) => f.endsWith('.png'))));
+  const url = `data:image/png;base64,${png.toString('base64')}`;
+  const photo = addAsset(doc, { mime: 'image/png', dataUrl: url, width: 192, height: 192, credit: { creator: 'Ana Ruiz', license: 'CC BY 4.0', title: 'Hills' } });
+  const video = addAsset(doc, { kind: 'video', mime: 'video/mp4', dataUrl: 'data:video/mp4;base64,AAAA', width: 640, height: 360, duration: 3, poster: url });
+  const still = addAsset(doc, { mime: 'image/png', dataUrl: `${url}#still`, width: 640, height: 360 });
+  const p = doc.pages[0];
+  const first = p.elements[0];
+  p.elements.push(createSticky('#ffb3c7', { id: 'pink', x: 1200, y: 600, text: 'Second idea' }));
+  p.elements.push(createImage(photo, { id: 'photo', x: 100, y: 100, w: 300, h: 300 }));
+  p.elements.push(createVideo(video, { id: 'clip', x: 1600, y: 1200, w: 640, h: 360, still, stillAt: 0 }));
+  p.elements.push(createConnector({ id: 'link', from: [first.x + first.w, 760], to: [1200, 760], start: { id: first.id }, end: { id: 'pink' } }));
+  validateDesign(doc);
+  assert.equal(p.elements[1].note, '#ffb3c7');
+  assert.ok(doc.assets[photo].credit, 'the photo keeps its credit');
+  const fonts = new Map();
+  for (const { font, weight } of fontsUsed(doc)) fonts.set(`${font.name}|${weight}`, fontBytes(fontFile(font.slug, weight)));
+  const pic = () => ({ kind: 'flate', width: 2, height: 2, data: zlib.deflateSync(Buffer.alloc(12, 9)) });
+  const images = new Map([[`asset:${photo}:file`, pic()], [`asset:${still}:file`, pic()]]);
+  // PDF: all of it drawn as vectors, the video as its still.
+  assert.deepEqual(planVectorPdf(doc, [0], { fonts, images }), []);
+  const pdf = readPdf(buildVectorPdf(doc, [0], { fonts, images }));
+  const content = pageContents(pdf)[0];
+  assert.match(content, /1 0\.702 0\.78 rg/, 'the pink note');
+  assert.match(content, /\/GS\d+ gs 0 0 0 rg/, 'its soft shadow');
+  assert.match(content, /BT \/F\d+ 32 Tf/, 'its words as text');
+  assert.equal(find(pdf, /\/Subtype \/Image/).length, 2, 'the photo and the video\'s still');
+  // Without the still's picture, the video comes as a picture of itself: no error.
+  assert.deepEqual(planVectorPdf(doc, [0], { fonts, images: new Map([[`asset:${photo}:file`, pic()]]) }).map((w) => w.key), ['clip']);
+  // PowerPoint: notes as shapes of their color with the text inside, the still as the video's picture.
+  const kinds = Object.fromEntries(p.elements.map((el) => [el.id, pptxKind(doc, el)]));
+  assert.deepEqual(kinds, { [first.id]: 'note', pink: 'note', photo: 'picture', clip: 'picture', link: 'raster' });
+  const media = new Map([[`asset:${photo}:file`, { bytes: new Uint8Array(png), ext: 'png', width: 192, height: 192 }], [`asset:${still}:file`, { bytes: new Uint8Array(png), ext: 'png', width: 640, height: 360 }]]);
+  const pictures = new Map(planPptx(doc, [0]).map((w) => [`${w.page}:${w.key}`, new Uint8Array(png)]));
+  const parts = unzip(buildPptx(doc, [0], { media, pictures }));
+  const slide = parts.get('ppt/slides/slide1.xml').toString();
+  checkXml(slide, 'slide1.xml');
+  const pink = [...slide.matchAll(/<p:sp>.*?<\/p:sp>/g)].map((m) => m[0]).find((sp) => sp.includes('<a:t>Second idea</a:t>'));
+  assert.match(pink, /name="Sticky note \d+"/, 'the note is one shape with its text');
+  assert.match(pink, /<a:prstGeom prst="roundRect">.*<a:solidFill><a:srgbClr val="FFB3C7"\/><\/a:solidFill>/);
+  const inset = Math.round(notePad(p.elements[1]) * emuPerPx(doc));
+  assert.match(pink, new RegExp(`<a:bodyPr wrap="square" lIns="${inset}" tIns="${inset}"`), 'the text inside its edges');
+  assert.equal([...slide.matchAll(/<p:pic>/g)].length, 3, 'photo, video still and the line');
+  assert.equal([...parts.keys()].filter((n) => n.startsWith('ppt/media/')).length, 3);
+});
