@@ -84,6 +84,8 @@ export function readingOrder(page) {
  */
 export function animationOf(page, el, order = readingOrder(page), { nested = false } = {}) {
   const known = (a) => a && Object.hasOwn(ANIMATIONS, a.type) && a.type !== 'none';
+  // Its own 'none': kept still, even when the page comes in animated.
+  if (el.anim?.type === 'none') return null;
   const own = known(el.anim) ? el.anim : null;
   // Inside a group, only an element's own animation (the group comes in as one).
   const pageAnim = !nested && known(page.anim) && Object.hasOwn(PAGE_ANIMATIONS, page.anim.type) ? page.anim : null;

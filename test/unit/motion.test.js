@@ -521,3 +521,18 @@ test('[MOT-08] a file\'s soundtrack volume left empty plays at full; elements sh
   assert.equal(doc.pages[0].elements[0].assetId, null, 'a picture naming a video file');
   assert.equal(doc.pages[0].elements[1].assetId, 'v');
 });
+
+test('[MOT-02] an element set to None stays still while its page comes in animated', () => {
+  const page = createPage();
+  const a = createShape('rect', { x: 0, y: 0 });
+  const b = createShape('rect', { x: 0, y: 200 });
+  page.elements.push(a, b);
+  page.anim = { type: 'rise' };
+  b.anim = { type: 'none' };
+  assert.ok(animationOf(page, a), 'comes in with the page');
+  assert.equal(animationOf(page, b), null, 'kept still');
+  const doc = createDesign({ width: 100, height: 100 });
+  doc.pages[0] = page;
+  validateDesign(doc);
+  assert.deepEqual(doc.pages[0].elements[1].anim, { type: 'none' }, 'kept when a file is opened');
+});

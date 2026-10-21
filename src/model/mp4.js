@@ -97,7 +97,12 @@ function trak(t, id, offsets, duration) {
     const oruns = runLengths(shifts);
     ctts = full('ctts', 0, 0, u32(oruns.length), ...oruns.map(([n, o]) => concat([u32(n), u32(o)])));
   }
-  const edts = lead ? box('edts', full('elst', 0, 0, u32(1), u32(Math.round(duration * 1000)), u32(lead), u16(1), u16(0))) : null;
+  // Opus sound starts with its encoder's pre-skip (WebM says so with
+  // CodecDelay): the edit list starts the track after it, in time with the
+  // pictures.
+  const skip = !video && t.codec === 'opus' ? Math.round((opusPreSkip(t.codecPrivate || t.description) / 48000) * t.timescale) : 0;
+  const start = lead + skip;
+  const edts = start ? box('edts', full('elst', 0, 0, u32(1), u32(Math.round(duration * 1000)), u32(start), u16(1), u16(0))) : null;
   const keys = t.chunks.map((c, i) => (c.key ? i + 1 : 0)).filter(Boolean);
   const stss = video ? full('stss', 0, 0, u32(keys.length), ...keys.map(u32)) : null;
   const stsc = full('stsc', 0, 0, u32(1), u32(1), u32(1), u32(1)); // a chunk per sample

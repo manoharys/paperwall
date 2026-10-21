@@ -99,7 +99,8 @@ export function buildWebmParts({ video, audio = null, duration }) {
   const clusters = [];
   let cur = null;
   for (const b of blocks) {
-    const ms = Math.round(b.timestamp / 1000);
+    // (A block timed before 0, an encoder's lead-in, goes at 0: times can't be negative here.)
+    const ms = Math.max(0, Math.round(b.timestamp / 1000));
     if (!cur || (b.track === 1 && b.key) || ms - cur.start > 30000) {
       // A cluster that opens on a video key frame is a place to jump to.
       cur = { start: ms, blocks: [], key: b.track === 1 && b.key };

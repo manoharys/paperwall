@@ -438,7 +438,8 @@ export function validateDesign(doc) {
       if (el.points.length !== 2) el.points = [[0, 0], [1, 1]];
       for (const k of ['start', 'end']) el[k] = { id: typeof el[k]?.id === 'string' ? el[k].id : null, side: ['l', 'r', 't', 'b'].includes(el[k]?.side) ? el[k].side : undefined };
     }
-    if (el.anim !== undefined) el.anim = cleanMotion(el.anim, ANIMATIONS, { duration: LIMITS.duration, delay: LIMITS.delay });
+    // ({ type: 'none' } is kept: it keeps an element still while its page animates.)
+    if (el.anim !== undefined) el.anim = el.anim?.type === 'none' ? { type: 'none' } : cleanMotion(el.anim, ANIMATIONS, { duration: LIMITS.duration, delay: LIMITS.delay });
     if (el.type === 'video') {
       el.trim = { start: Math.max(0, Number.isFinite(+el.trim?.start) ? +el.trim.start : 0) };
       el.loop = el.loop !== false;
