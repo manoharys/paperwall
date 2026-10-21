@@ -138,8 +138,12 @@ export function all(store) {
 const thumbs = new Map();
 
 export async function saveDesign(doc, thumb) {
-  if (thumb === undefined && !thumbs.has(doc.id)) thumbs.set(doc.id, (await get('designs', doc.id))?.thumb ?? null);
   if (thumb !== undefined) thumbs.set(doc.id, thumb);
+  else if (!thumbs.has(doc.id)) {
+    const stored = (await get('designs', doc.id))?.thumb ?? null;
+    // (A newer preview may have come while that was read: it wins.)
+    if (!thumbs.has(doc.id)) thumbs.set(doc.id, stored);
+  }
   // Without files nothing uses any more (a deleted video, a replaced soundtrack).
   await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: doc.height, pages: doc.pages.length, thumb: thumbs.get(doc.id) ?? null, doc: keptAssets(doc) });
 }

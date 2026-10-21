@@ -190,7 +190,7 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
         if (under) {
           // Once it's playing from this visit's start (not still showing a
           // picture from an earlier one): 'playing' says so.
-          if (videos.isPlaying({ id: box.dataset.video })) under.remove();
+          if (videos.isPlaying({ id: box.dataset.video }) || videos.allEnded([{ id: box.dataset.video, loop: false }])) under.remove();
           else v.addEventListener('playing', () => under.remove(), { once: true });
         }
       }

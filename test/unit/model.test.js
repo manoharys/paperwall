@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createDesign, createDesignFromPreset, createText, createShape, createImage, createGroup, PRESETS,
-  toPx, fromPx, addAsset, pruneAssets, validateDesign, clone,
+  toPx, fromPx, addAsset, keptAssets, validateDesign, clone,
 } from '../../src/model/doc.js';
 import {
   addElement, moveElements, deleteElements, duplicateElements, copyElements, pasteElements, reorder,
@@ -320,9 +320,9 @@ test('[IMG-04] adding the same image twice stores it once, and unused images are
   assert.equal(a, b);
   const c = addAsset(doc, { mime: 'image/png', dataUrl: 'data:y', width: 1, height: 1 });
   addElement(doc, 0, createImage(a));
-  pruneAssets(doc);
-  assert.ok(doc.assets[a]);
-  assert.ok(!doc.assets[c]);
+  const saved = keptAssets(doc);
+  assert.ok(saved.assets[a]);
+  assert.ok(!saved.assets[c]);
 });
 
 test('[CLR-02] colors used in the design, most used first', () => {

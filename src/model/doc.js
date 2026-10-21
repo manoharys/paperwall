@@ -398,15 +398,6 @@ export function usedAssetIds(doc) {
   return used;
 }
 
-/** Remove images that no element or background uses any more. */
-export function pruneAssets(doc) {
-  // The same rule as what's saved (see keptAssets): fonts stay. In place:
-  // others may hold this assets object.
-  const kept = keptAssets(doc).assets;
-  for (const id of Object.keys(doc.assets)) if (!(id in kept)) delete doc.assets[id];
-  return doc;
-}
-
 /** Whether an image element is an empty frame: no picture yet, or its picture is missing. */
 export function isEmptyFrame(doc, el) {
   return el?.type === 'image' && !doc.assets[el.assetId];
