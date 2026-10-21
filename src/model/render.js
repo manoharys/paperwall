@@ -155,8 +155,14 @@ function renderLine(ctx, el) {
  * turned as it is, in the group's own terms), then its own shadow.
  */
 export function effectPad(el) {
-  let pad = 2 + (el.strokeWidth || 0) + (el.outline?.width || 0) * 2;
+  // (Lines and connectors draw 4 wide when they don't say.)
+  const lined = el.type === 'line' || el.type === 'connector';
+  const sw = el.strokeWidth || (lined ? 4 : 0);
+  let pad = 2 + sw + (el.outline?.width || 0) * 2;
   if (el.type === 'text') pad += (el.size || 16) * 0.8;
+  // An arrowhead reaches 0.6 of its size (3.2 × the stroke) to either side of
+  // its line, past the box where the line runs along it; its tip stays at the end.
+  if (lined && (el.startCap === 'arrow' || el.endCap === 'arrow')) pad += sw * 3.2 * 0.6;
   if (el.type === 'group') {
     for (const c of el.children || []) {
       if (c.hidden) continue;
