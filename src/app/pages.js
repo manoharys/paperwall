@@ -361,14 +361,24 @@ function soundtrackPlayer(doc) {
       if (gain) {
         gain.gain.cancelScheduledValues(0); // back from any fade
         gain.gain.value = volume;
-      }
+      } else audio.volume = volume;
       wanted = t;
       wantedAt = performance.now();
       if (audio.readyState >= 1) play();
     },
     /** Fade to silence over `seconds` (as downloads end). */
     fadeOut(seconds) {
-      if (!gain) return;
+      if (!gain) {
+        // No Web Audio: the player's own volume, stepped down.
+        const from = audio.volume;
+        const start = performance.now();
+        const step = () => {
+          const k = Math.min(1, (performance.now() - start) / 1000 / Math.max(0.05, seconds));
+          audio.volume = from * (1 - k);
+          if (k < 1 && !stopped && wanted !== null) setTimeout(step, 50);
+        };
+        return step();
+      }
       const now = mixer.currentTime;
       gain.gain.setValueAtTime(volume, now);
       gain.gain.linearRampToValueAtTime(0, now + Math.max(0.05, seconds));

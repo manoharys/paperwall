@@ -96,9 +96,14 @@ export async function audioInfo(file) {
   const url = URL.createObjectURL(file);
   const a = document.createElement('audio');
   a.preload = 'metadata';
+  // As with videos: iPhones and iPads load nothing until asked to play, so
+  // it's asked to (silently) and stopped as soon as its length is known.
+  a.muted = true;
+  a.autoplay = true;
   try {
     a.src = url;
     await once(a, 'loadedmetadata');
+    a.pause();
     return { duration: Number.isFinite(a.duration) ? a.duration : 0 };
   } finally {
     a.removeAttribute('src');
