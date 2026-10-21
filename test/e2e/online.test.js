@@ -298,7 +298,7 @@ test('[ON-05] online settings: each feature off until turned on, a provider each
   await page.fill('[data-testid="online-key-design"]', 'g-key');
   await page.click('[data-testid="online-test-design"]');
   await statusSays(page, 'design', /answered/);
-  assert.ok(seen.some((r) => r.url === 'https://generativelanguage.googleapis.com/v1beta/models?key=g-key'));
+  assert.ok(seen.some((r) => r.url === 'https://generativelanguage.googleapis.com/v1beta/models' && r.headers['x-goog-api-key'] === 'g-key'));
 
   // Ollama: no key, an address on this computer.
   await page.selectOption('[data-testid="online-provider-writing"]', 'ollama');

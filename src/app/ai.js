@@ -51,8 +51,8 @@ export async function complete({ feature, system, prompt, json = false, maxToken
     data = await res.json();
   } catch (e) {
     if (signal?.aborted) throw aborted();
-    // (A wrong model name is the usual reason for these.)
-    if (/answered (400|404)\b/.test(e.message)) throw new Error(`${e.message} Check the model name (${await modelFor(id)}) in the AI setup.`);
+    // (A wrong model name: no such model, or the provider says it's the model.)
+    if (/answered 404\b/.test(e.message) || (/answered 400\b/.test(e.message) && /model/i.test(e.message))) throw new Error(`${e.message} Check the model name (${await modelFor(id)}) in the AI setup.`);
     if (e instanceof SyntaxError) throw new Error(`${PROVIDERS[id].name} sent an answer that couldn't be read.`);
     throw e;
   }
@@ -83,13 +83,17 @@ export function aiSetup(feature, { onDone, onCancel } = {}) {
     const error = h('p', { class: 'ai-error', role: 'alert', 'data-testid': 'ai-setup-error', hidden: true });
     let keyInput = null;
     let modelInput = null;
+    let filling = 0;
     const fill = async () => {
       const p = PROVIDERS[id];
+      // (Only the latest provider picked fills the rows: arrowing through them starts several.)
+      const turn = ++filling;
+      const [saved, model] = await Promise.all([p.key ? keyFor(id) : '', modelFor(id)]);
+      if (turn !== filling) return;
       clear(keyRow);
       clear(modelRow);
       keyInput = null;
       if (p.key) {
-        const saved = await keyFor(id);
         keyInput = h('input', { type: 'password', autocomplete: 'off', spellcheck: 'false', placeholder: saved ? 'Saved on this device (paste to change)' : 'Paste your key', 'aria-label': `${p.name} key`, 'data-testid': 'ai-setup-key' });
         keyRow.append(h('span', null, 'Your key'), keyInput,
           h('small', { class: 'hint' }, 'Kept on this device and sent only to ', p.name, '. ', h('a', { href: p.keyUrl, target: '_blank', rel: 'noopener noreferrer' }, 'Get a key')));
@@ -97,12 +101,12 @@ export function aiSetup(feature, { onDone, onCancel } = {}) {
         keyRow.append(h('small', { class: 'hint' }, 'No key needed: Ollama runs on your own computer. Start it with OLLAMA_ORIGINS set to allow this page.'));
       }
       const list = h('datalist', { id: `ai-models-${feature}` }, (MODEL_CHOICES[id] || []).map((m) => h('option', { value: m })));
-      modelInput = h('input', { type: 'text', value: await modelFor(id), list: list.id, spellcheck: 'false', 'aria-label': 'Model', 'data-testid': 'ai-setup-model' });
+      modelInput = h('input', { type: 'text', value: model, list: list.id, spellcheck: 'false', 'aria-label': 'Model', 'data-testid': 'ai-setup-model' });
       const find = id === 'ollama' ? h('button', { type: 'button', class: 'link-btn', 'data-testid': 'ai-setup-find-models', onClick: async () => {
         // (A request to this computer: only once the feature is turned on.)
         if (!on.checked) return show(`Turn on ${FEATURES[feature].name} first.`);
         try {
-          await setOn(feature, true);
+          // (Not saved as turned on until Save: Cancel leaves it as it was.)
           const names = await ollamaModels();
           clear(list).append(...names.map((m) => h('option', { value: m })));
           if (names.length && !names.includes(modelInput.value)) modelInput.value = names[0];
@@ -117,12 +121,13 @@ export function aiSetup(feature, { onDone, onCancel } = {}) {
       error.textContent = msg;
       error.hidden = !msg;
     };
+    let filled = null; // the latest fill, which Save waits for (its rows are the ones read)
     pick.addEventListener('change', () => {
       id = pick.value;
       show('');
-      fill();
+      filled = fill();
     });
-    await fill();
+    await (filled = fill());
     box.append(
       h('p', { class: 'hint' }, `${FEATURES[feature].name} is an online extra. What you ask goes to the provider you pick here, and nothing is sent until you turn it on.`),
       h('label', { class: 'toggle' }, on, h('span', null, `Turn on ${FEATURES[feature].name}`)),
@@ -133,6 +138,7 @@ export function aiSetup(feature, { onDone, onCancel } = {}) {
       h('div', { class: 'row' },
         h('button', { type: 'button', class: 'btn small primary', 'data-testid': 'ai-setup-save', onClick: async () => {
           if (!on.checked) return show(`Turn on ${FEATURES[feature].name} to use it.`);
+          await filled;
           const typed = keyInput?.value.trim();
           if (PROVIDERS[id].key && !typed && !(await keyFor(id))) return show(`Paste your ${PROVIDERS[id].name} key.`);
           await setOn(feature, true);

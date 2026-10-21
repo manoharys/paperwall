@@ -91,7 +91,7 @@ test('[ON-03] AI writing: off until turned on; a text action replaces the text a
   assert.equal(r.headers['anthropic-version'], '2023-06-01');
   assert.equal(r.headers['anthropic-dangerous-direct-browser-access'], 'true');
   const body = JSON.parse(r.body);
-  assert.equal(body.model, 'claude-sonnet-5-5');
+  assert.equal(body.model, 'claude-opus-5-5');
   assert.ok(body.messages[0].content.includes('Add a heading'), 'the text is sent to be shortened');
   const after = await textEl(page, t.id);
   for (const k of ['font', 'size', 'weight', 'color', 'align', 'x', 'w']) assert.deepEqual(after[k], t[k], `${k} kept`);
@@ -151,7 +151,8 @@ test('[ON-03] Claude, OpenAI, Gemini and Ollama each get their own request, and 
   await page.click('[data-testid="ai-translate"]');
   await waitText(replies.gemini);
   const g = seen.at(-1);
-  assert.equal(g.url, `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${keys.gemini}`);
+  assert.equal(g.url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent');
+  assert.equal(g.headers['x-goog-api-key'], keys.gemini);
   assert.match(JSON.parse(g.body).contents[0].parts[0].text, /French/);
 
   // Ollama: no key; its installed models listed; fix spelling.
@@ -284,7 +285,7 @@ test('[ON-04] AI design offers three to pick from, and explains an answer it can
   const req = JSON.parse(seen.at(-1).body);
   assert.equal(req.generationConfig.responseMimeType, 'application/json');
   assert.match(req.contents[0].parts[0].text, /3 clearly different designs/);
-  assert.ok(seen.at(-1).url.endsWith('key=gm-design-key'));
+  assert.equal(seen.at(-1).headers['x-goog-api-key'], 'gm-design-key');
   await page.locator('[data-testid="ai-design-choice"]').nth(1).click();
   await waitForEditor(page);
   const doc = await page.evaluate(() => JSON.parse(JSON.stringify(window.paperwall.editor.doc)));

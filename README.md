@@ -111,8 +111,9 @@ end-to-end tests use Playwright.
 
 Paperwall covers making a design on your own, start to finish, including
 animated ones (GIF, MP4, WebM), documents, whiteboards and presenting with
-notes. It has no stock library, AI, collaboration or cloud, and no timeline
-video editor. The honest,
+notes. Stock photos and AI (writing, design) are opt-in extras that use free
+providers or your own key; there is no hosted library, no image generation,
+no collaboration or cloud, and no timeline video editor. The honest,
 area-by-area comparison is in [docs/PARITY.md](docs/PARITY.md).
 
 ## Contributing

@@ -818,6 +818,11 @@ export class Editor {
     return group ? cmd.findElement(this.pageData, group).children : frames;
   }
 
+  /** An element of the design by id (this page's first), or null. */
+  find(id) {
+    return locate(this.doc, id, this.pageData.id)?.el || null;
+  }
+
   /** Make a plain background see-through. Returns how much of the picture was cleared (0..1). */
   async removeBackground(tolerance = 0.12) {
     const el = this.single;
@@ -850,13 +855,10 @@ export class Editor {
    * picture at `dataUrl` in place, and may take its time. Returns the new
    * asset's id, or null if the element was changed or removed meanwhile.
    */
-  /** An element of the design by id (this page's first), or null. */
-  find(id) {
-    return locate(this.doc, id, this.pageData.id)?.el || null;
-  }
 
-  async remakeImage(elId, dataUrl, make, { key = null, name = 'image' } = {}) {
-    const before = locate(this.doc, elId)?.el?.assetId;
+  async remakeImage(elId, dataUrl, make, { key = null, name = 'image', from = null } = {}) {
+    // (`from`: the picture it was asked for, when that was a while ago: a download, say.)
+    const before = from ?? locate(this.doc, elId)?.el?.assetId;
     const img = await loadImage(dataUrl);
     const canvas = document.createElement('canvas');
     canvas.width = img.naturalWidth;

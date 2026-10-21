@@ -13,11 +13,11 @@ import { layoutDesign } from './layout.js';
 // ---------- providers ----------
 
 /** The model each provider uses until the person picks another. */
-export const DEFAULT_MODELS = { claude: 'claude-sonnet-5-5', openai: 'gpt-4.1-mini', gemini: 'gemini-2.5-flash', ollama: 'llama3.2' };
+export const DEFAULT_MODELS = { claude: 'claude-opus-5-5', openai: 'gpt-4.1-mini', gemini: 'gemini-2.5-flash', ollama: 'llama3.2' };
 
 /** Models offered in the model box (any other name can be typed). */
 export const MODEL_CHOICES = {
-  claude: ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-5-5'],
+  claude: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'],
   openai: ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4.1-nano'],
   gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite'],
   ollama: ['llama3.2'],
@@ -27,30 +27,44 @@ export const MODEL_CHOICES = {
  * The request for one answer from a provider: { url, init }. `key` goes only
  * in this provider's own request; `base` is Ollama's address.
  */
+/** The headers that carry a provider's key (and version), for every request to it. */
+export function authHeaders(provider, key) {
+  if (provider === 'claude') return { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' };
+  if (provider === 'openai') return { authorization: `Bearer ${key}` };
+  // (The key in a header, never in an address where logs would keep it.)
+  if (provider === 'gemini') return { 'x-goog-api-key': key };
+  return {};
+}
+
 export function buildRequest(provider, { model, key = '', base = 'http://localhost:11434', system = '', prompt = '', json = false, maxTokens = 1024 }) {
   model = String(model || DEFAULT_MODELS[provider] || '').trim();
   const post = (url, headers, body) => ({ url, init: { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) } });
   const messages = [{ role: 'system', content: system }, { role: 'user', content: prompt }];
   if (provider === 'claude') {
-    return post('https://api.anthropic.com/v1/messages', {
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    }, { model, max_tokens: maxTokens, system, messages: [{ role: 'user', content: prompt }] });
+    // Claude thinks before it answers, and that counts against max_tokens:
+    // room for both, and a light effort (writing is quick; a design, a little more).
+    // Models that can hand a declined request to another do (fallbacks).
+    const fallbacks = /^claude-(opus-5|sonnet-5-5|fable-5)/.test(model);
+    return post('https://api.anthropic.com/v1/messages', { ...authHeaders(provider, key), ...(fallbacks ? { 'anthropic-beta': 'server-side-fallback-2026-07-01' } : {}) }, {
+      model, max_tokens: Math.max(16000, maxTokens), system, messages: [{ role: 'user', content: prompt }],
+      output_config: { effort: json ? 'medium' : 'low' },
+      ...(fallbacks ? { fallbacks: 'default' } : {}),
+    });
   }
   if (provider === 'openai') {
-    return post('https://api.openai.com/v1/chat/completions', { authorization: `Bearer ${key}` },
+    return post('https://api.openai.com/v1/chat/completions', authHeaders(provider, key),
       { model, messages, max_completion_tokens: maxTokens, ...(json ? { response_format: { type: 'json_object' } } : {}) });
   }
   if (provider === 'gemini') {
-    return post(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {}, {
+    // (No output limit: Gemini's thinking counts against it, and could use it all up.)
+    return post(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, authHeaders(provider, key), {
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       ...(json ? { generationConfig: { responseMimeType: 'application/json' } } : {}),
     });
   }
   if (provider === 'ollama') {
-    return post(`${String(base).replace(/\/+$/, '')}/api/chat`, {}, { model, messages, stream: false, ...(json ? { format: 'json' } : {}) });
+    return post(`${String(base).replace(/\/+$/, '')}/api/chat`, {}, { model, messages, stream: false, options: { num_predict: maxTokens }, ...(json ? { format: 'json' } : {}) });
   }
   throw new Error(`${provider} can't write`);
 }
@@ -74,6 +88,9 @@ export function parseResponse(provider, data) {
   } else if (provider === 'ollama') {
     text = typeof data.message?.content === 'string' ? data.message.content : '';
   }
+  // An answer cut off at the length limit isn't used: it would replace whole text with part of it.
+  const cut = { claude: data.stop_reason === 'max_tokens', openai: data.choices?.[0]?.finish_reason === 'length', gemini: data.candidates?.[0]?.finishReason === 'MAX_TOKENS', ollama: data.done_reason === 'length' }[provider];
+  if (cut) throw new Error('The answer was too long and got cut off. Try a shorter text, or a shorter request.');
   if (!text.trim()) throw new Error('The answer came back empty. Try again.');
   return text;
 }
@@ -142,10 +159,15 @@ export function cleanWriting(answer, original = '') {
   s = s.replace(/^<text>\s*/i, '').replace(/\s*<\/text>$/i, '').trim();
   // "Here's a shorter version:" and the like.
   const lines = s.split('\n');
-  if (lines.length > 1 && /^(here|sure|okay|ok|certainly)\b[^\n]*:$/i.test(lines[0].trim())) s = lines.slice(1).join('\n').trim();
+  // (Unless the text itself starts that way: "Here is the menu:".)
+  // Only a line about the answer itself ("Here's a shorter version:"), not a heading of it.
+  const about = /^(here([’']s| is| are)|sure|okay|ok|certainly)\b.*\b(version|rewrite|rewritten|translation|translated|text|revised|corrected|shorter|longer|edit(ed)?)\b[^\n]*:$/i;
+  if (lines.length > 1 && about.test(lines[0].trim()) && !String(original).trim().startsWith(lines[0].trim())) s = lines.slice(1).join('\n').trim();
   const pairs = [['"', '"'], ['“', '”'], ["'", "'"], ['«', '»']];
   for (const [a, b] of pairs) {
-    if (s.length > 1 && s.startsWith(a) && s.endsWith(b) && !(original.startsWith(a) && original.endsWith(b))) s = s.slice(a.length, -b.length).trim();
+    // (Only quotes around all of it: not two quoted words at either end.)
+    const inner = s.slice(a.length, -b.length);
+    if (s.length > 1 && s.startsWith(a) && s.endsWith(b) && !inner.includes(a) && !inner.includes(b) && !(original.startsWith(a) && original.endsWith(b))) s = inner.trim();
   }
   return s;
 }
