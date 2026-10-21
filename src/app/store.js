@@ -155,7 +155,14 @@ export async function loadDesign(id) {
 
 export async function listDesigns() {
   const rows = await all('designs');
-  return rows.map(({ doc, ...meta }) => meta).sort((a, b) => b.updatedAt - a.updatedAt);
+  // The newest preview is the one kept on its own (the design's copy can lag).
+  const kept = await getMany('settings', rows.map((r) => thumbKey(r.id)));
+  return rows.map(({ doc, ...meta }, i) => ({ ...meta, thumb: kept[i] ?? meta.thumb })).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+/** Keep a design's new preview (without saving the design again). */
+export async function saveThumb(id, thumb) {
+  await put('settings', thumbKey(id), thumb);
 }
 
 export async function deleteDesign(id) {

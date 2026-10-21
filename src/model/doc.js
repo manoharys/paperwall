@@ -462,6 +462,11 @@ export function validateDesign(doc) {
     if (!kind || typeof a.dataUrl !== 'string' || !a.dataUrl.startsWith(`data:${kind}/`)) delete doc.assets[id];
     else if (a.type === 'font') a.family = String(a.family || 'My font').replace(/[^\w\s-]/g, '').trim() || 'My font';
     else if (a.type === 'video' && !(typeof a.poster === 'string' && a.poster.startsWith('data:image/'))) a.poster = undefined;
+    // Sizes and lengths from a file are numbers (or left out).
+    if (a && doc.assets[id]) {
+      for (const k of ['width', 'height']) if (a[k] !== undefined) a[k] = clampNum(a[k], 1, 100000, undefined);
+      if (a.duration !== undefined) a.duration = clampNum(a.duration, 0, 86400, undefined);
+    }
   }
   // The soundtrack: a sound the design has, at a volume from 0 to 1.
   if (doc.audio !== undefined) {

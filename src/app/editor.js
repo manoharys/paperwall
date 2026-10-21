@@ -205,7 +205,8 @@ export class Editor {
       // Reused by a version saved soon after, if it's known to show that state
       // (nothing changed while it was drawn).
       if (this.doc.updatedAt === at) this.lastThumb = { url, at };
-      await store.saveDesign(this.doc, url);
+      // Just the preview: the design itself is saved by persist.
+      await store.saveThumb(this.doc.id, url);
     } catch {
       /* thumbnails are optional */
     }
