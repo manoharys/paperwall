@@ -844,6 +844,33 @@ export class Editor {
     return cleared / (canvas.width * canvas.height);
   }
 
+  /**
+   * Put a remade picture in an image element, as one undo step (`key` merges
+   * steps, like a slider's). make(rgba, w, h) changes the pixels of the
+   * picture at `dataUrl` in place, and may take its time. Returns the new
+   * asset's id, or null if the element was changed or removed meanwhile.
+   */
+  async remakeImage(elId, dataUrl, make, { key = null, name = 'image' } = {}) {
+    const before = locate(this.doc, elId)?.el?.assetId;
+    const img = await loadImage(dataUrl);
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const g = canvas.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0);
+    const pixels = g.getImageData(0, 0, canvas.width, canvas.height);
+    await make(pixels.data, canvas.width, canvas.height);
+    g.putImageData(pixels, 0, 0);
+    const out = canvas.toDataURL('image/png');
+    const now = locate(this.doc, elId)?.el;
+    if (!now || now.assetId !== before || this.closed) return null;
+    let id = null;
+    this.change(() => {
+      id = now.assetId = addAsset(this.doc, { mime: 'image/png', dataUrl: out, width: canvas.width, height: canvas.height, name });
+    }, { key });
+    return id;
+  }
+
   setImageAsBackground() {
     const el = this.single;
     if (!el || el.type !== 'image' || !el.assetId) return;
