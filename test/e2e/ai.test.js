@@ -182,7 +182,10 @@ test('[ON-03] AI writing shows progress, can be cancelled, and says what went wr
   const { page, context, errors } = await newDesign('square');
   let release;
   let mode = 'hang';
-  await mockProviders(context, () => (mode === 'hang' ? new Promise((ok) => (release = ok)).then(() => 'Too late') : { status: 401, body: { type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } } }));
+  await mockProviders(context, () => {
+    if (mode === 'hang') return new Promise((ok) => (release = ok)).then(() => 'Too late');
+    return typeof mode === 'object' ? mode : { status: 401, body: { type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } } };
+  });
   const t = await addText(page, 'heading');
   await page.click('[data-testid="ai-settings"]');
   await setUp(page, 'claude', 'sk-ant-wrong');
@@ -203,7 +206,20 @@ test('[ON-03] AI writing shows progress, can be cancelled, and says what went wr
   const msg = await page.locator('[data-testid="ai-error"]').textContent();
   assert.match(msg, /didn't accept the key/);
   assert.equal((await textEl(page, t.id)).text, 'Add a heading');
-  assert.deepEqual(errors.filter((e) => !/401|Failed to load resource/.test(e)), []);
+  // A request turned down: the model-name hint only when the provider's own words are about the model.
+  const turnedDown = async (detail) => {
+    mode = { status: 400, body: { type: 'error', error: { type: 'invalid_request_error', message: detail } } };
+    await page.click('[data-testid="ai-menu"]');
+    await page.click('[data-testid="ai-rewrite"]');
+    await page.waitForFunction((d) => document.querySelector('[data-testid="ai-error"]')?.textContent.includes(d), detail.slice(0, 40));
+    return page.locator('[data-testid="ai-error"]').textContent();
+  };
+  assert.doesNotMatch(await turnedDown('max_tokens is too large'), /Check the model name/);
+  assert.match(await turnedDown('model: claude-nope not found'), /Check the model name/);
+  // (Said after the part of the provider's words that's shown, still read.)
+  assert.match(await turnedDown(`The request was turned down for this reason: ${'and that reason, '.repeat(12)}which is the model.`), /Check the model name/);
+  assert.equal((await textEl(page, t.id)).text, 'Add a heading');
+  assert.deepEqual(errors.filter((e) => !/401|400|Failed to load resource/.test(e)), []);
   await context.close();
 });
 
