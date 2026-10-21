@@ -51,13 +51,18 @@ async function canvasPng(canvas) {
   return blobBytes(await toBlob(canvas, 'image/png'));
 }
 
-/** Draw a picture (a data: URL) into a canvas, no bigger than `max` on a side. */
-async function decode(src, max = MAX_PHOTO_SIDE) {
+/**
+ * Draw a picture (a data: URL) into a canvas, never bigger than its own
+ * size: no bigger than MAX_PHOTO_SIDE on a side, or, given `cover` (output
+ * px), than it takes to cover that, within the canvas limits.
+ */
+async function decode(src, cover = null) {
   const img = await loadImage(src);
   if (img.decode) await img.decode().catch(() => null);
   const w = img.naturalWidth || img.width || 1;
   const h = img.naturalHeight || img.height || 1;
-  const s = Math.min(1, max / Math.max(w, h));
+  const want = cover?.w > 0 && cover?.h > 0 ? Math.max(cover.w / w, cover.h / h) : MAX_PHOTO_SIDE / Math.max(w, h);
+  const s = Math.min(1, want, canvasScale(w, h, 1));
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(w * s));
   canvas.height = Math.max(1, Math.round(h * s));
@@ -90,9 +95,14 @@ async function decodeSvg(src, bytes, shown) {
   return canvas;
 }
 
-/** A picture to draw again (not as its file): SVGs at the size they're shown, others at their own. */
-function redraw({ url, bytes, mime, shown }) {
-  return /^image\/svg\+xml\b/i.test(mime) ? decodeSvg(url, bytes, shown) : decode(url);
+/**
+ * A picture to draw again (not as its file): SVGs at the size they're shown,
+ * others at their own (up to MAX_PHOTO_SIDE; for print, as much of it as
+ * 300 DPI needs where it's shown).
+ */
+function redraw({ url, bytes, mime, shown }, { print = false } = {}) {
+  if (/^image\/svg\+xml\b/i.test(mime)) return decodeSvg(url, bytes, shown);
+  return decode(url, print ? shown : null);
 }
 
 /**
@@ -151,10 +161,10 @@ async function readPictures(doc, pages, check, scale, encode) {
 }
 
 /** For the PDF: JPEGs as they are, anything else decoded and deflated. */
-async function pdfPicture(p) {
+async function pdfPicture(p, opts) {
   const { bytes, jpeg } = p;
   if (jpeg) return { kind: 'jpeg', bytes, width: jpeg.width, height: jpeg.height, components: jpeg.components, inverted: jpeg.inverted };
-  return { kind: 'flate', ...(await canvasPixels(await redraw(p))) };
+  return { kind: 'flate', ...(await canvasPixels(await redraw(p, opts))) };
 }
 
 /** For PowerPoint: JPEG and PNG files as they are, others as PNG. */
@@ -229,7 +239,7 @@ export async function exportVectorPdf(doc0, pages0, { print = false, signal, onP
   const [doc, pages] = await onPaper(doc0, pages0);
   const fonts = await designFontFiles(doc);
   check();
-  const images = await readPictures(doc, pages, check, rasterScale(doc, { print }), pdfPicture);
+  const images = await readPictures(doc, pages, check, rasterScale(doc, { print }), (p) => pdfPicture(p, { print }));
   const env = { fonts, images, measure, print, title: doc.name };
   const wants = planVectorPdf(doc, pages, env);
   const rasters = new Map();
