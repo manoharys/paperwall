@@ -284,7 +284,8 @@ export function frameAt(doc, tl, t) {
 export function pageFrame(doc, index, local, from, fromLocal = null) {
   const tr = transitionOf(doc.pages[index]);
   if (from !== null && from !== undefined && tr.type !== 'none' && local < tr.duration) {
-    const left = Math.min(fromLocal ?? Infinity, pageDuration(doc.pages[from]));
+    // As it was left (presenting: maybe early, maybe late), else at its end.
+    const left = fromLocal ?? pageDuration(doc.pages[from]);
     return { index, local, from: { index: from, local: left }, transition: { type: tr.type, progress: easeOut(clamp01(local / tr.duration)) } };
   }
   return { index, local, from: null, transition: null };

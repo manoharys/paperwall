@@ -89,7 +89,7 @@ export class GifEncoder {
     } else {
       const exact = exactColors(px, room, same);
       palette = exact ? exact.palette : buildPalette([same ? changedOnly(px, same) : px], room);
-      idx = exact ? exact.idx : indexFrame(px, box.w, box.h, paletteMapper(palette), this.dither, box.x, box.y);
+      idx = exact ? exact.idx : indexFrame(px, box.w, box.h, paletteMapper(palette), this.dither, box.x, box.y, same);
       if (same) {
         palette = [[0, 0, 0], ...palette];
         for (let p = 0; p < idx.length; p++) idx[p] = same[p] ? 0 : idx[p] + 1;
@@ -303,11 +303,12 @@ function paletteMapper(palette) {
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v / 16 - 0.47) * 10);
 
 /** Palette indexes for RGBA pixels. (ox, oy): where they sit, so the dither lines up across frames. */
-function indexFrame(data, width, height, map, dither, ox = 0, oy = 0) {
+function indexFrame(data, width, height, map, dither, ox = 0, oy = 0, skip = null) {
   const idx = new Uint8Array(width * height);
   const clamp = (v) => (v < 0 ? 0 : v > 255 ? 255 : v | 0);
   for (let y = 0, p = 0; y < height; y++) {
     for (let x = 0; x < width; x++, p++) {
+      if (skip && skip[p]) continue; // (left 0: see-through, set by the caller)
       const n = dither ? BAYER[(((y + oy) & 3) << 2) | ((x + ox) & 3)] : 0;
       const q = p * 4;
       idx[p] = map(clamp(data[q] + n), clamp(data[q + 1] + n), clamp(data[q + 2] + n));

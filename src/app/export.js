@@ -263,6 +263,8 @@ export function exportDialog(editor) {
         const signal = stopper.signal;
         let note = null;
         let audio = null;
+        // (Whether video can be made here is known before the sound is decoded for it.)
+        if (state.format !== 'gif' && !canMakeVideo()) throw new Error("This browser can't make videos. Try a recent Chrome, Edge, Safari or Firefox.");
         if (state.format !== 'gif' && still.audio) {
           audio = await soundtrackBuffer(still).catch(() => null);
           if (!audio) note = "The soundtrack couldn't be read here, so the video is silent.";
