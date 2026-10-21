@@ -257,6 +257,7 @@ export const fr = {
   'newText.docBullets': "Un point\nUn autre point",
   'newText.docNumbers': "Premier\nDeuxième",
   'newText.note': "Note",
+  'newText.boardNote': "Les idées vont ici",
   'newText.pairHeading': "Faites-en le vôtre",
   'newText.pairHeadingWedding': "Réservez la date",
   'newText.pairBody': "Ajoutez quelques mots pour dire de quoi il s’agit.",

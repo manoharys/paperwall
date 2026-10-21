@@ -664,10 +664,12 @@ test('[DOC-09] opening a file, a repeated element id gets a new one and its conn
 });
 
 test('a blank design takes its name (and a document its title) in other words', () => {
-  const doc = createDesignFromPreset('doc', { name: 'Unbenanntes Dokument', title: 'Unbenanntes Dokument' });
+  const doc = createDesignFromPreset('doc', { name: 'Unbenanntes Dokument', title: 'Unbenanntes Dokument', body: 'Hier schreiben.' });
   assert.equal(doc.name, 'Unbenanntes Dokument');
-  assert.equal(doc.pages[0].elements[0].text, 'Unbenanntes Dokument');
-  assert.equal(createDesignFromPreset('whiteboard', { name: 'Tableau' }).name, 'Tableau');
+  assert.deepEqual(doc.pages[0].elements.map((el) => el.text), ['Unbenanntes Dokument', 'Hier schreiben.']);
+  const board = createDesignFromPreset('whiteboard', { name: 'Tableau', note: 'Les idées vont ici' });
+  assert.deepEqual([board.name, board.pages[0].elements[0].text], ['Tableau', 'Les idées vont ici']);
+  assert.equal(createDesignFromPreset('whiteboard').pages[0].elements[0].text, 'Ideas go here');
   assert.equal(createDesignFromPreset('square', { name: 'Sin título' }).name, 'Sin título');
   // Without: English, as before.
   assert.equal(createDesignFromPreset('doc').pages[0].elements[0].text, 'Untitled document');

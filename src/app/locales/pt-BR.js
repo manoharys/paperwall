@@ -258,6 +258,7 @@ export const ptBR = {
   'newText.docBullets': "Um ponto\nOutro ponto",
   'newText.docNumbers': "Primeiro\nSegundo",
   'newText.note': "Nota",
+  'newText.boardNote': "As ideias vão aqui",
   'newText.pairHeading': "Deixe com a sua cara",
   'newText.pairHeadingWedding': "Reserve a data",
   'newText.pairBody': "Adicione algumas palavras dizendo do que se trata.",

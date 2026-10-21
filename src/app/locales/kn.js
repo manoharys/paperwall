@@ -257,6 +257,7 @@ export const kn = {
   'newText.docBullets': "ಒಂದು ಅಂಶ\nಇನ್ನೊಂದು ಅಂಶ",
   'newText.docNumbers': "ಮೊದಲನೆಯದು\nಎರಡನೆಯದು",
   'newText.note': "ಟಿಪ್ಪಣಿ",
+  'newText.boardNote': "ಆಲೋಚನೆಗಳು ಇಲ್ಲಿ",
   'newText.pairHeading': "ಇದನ್ನು ನಿಮ್ಮದಾಗಿಸಿ",
   'newText.pairHeadingWedding': "ದಿನಾಂಕ ನೆನಪಿಡಿ",
   'newText.pairBody': "ಇದು ಯಾವುದರ ಬಗ್ಗೆ ಎಂದು ಹೇಳುವ ಕೆಲವು ಪದಗಳನ್ನು ಸೇರಿಸಿ.",

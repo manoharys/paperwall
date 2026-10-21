@@ -59,13 +59,15 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, changeLan
     }
   };
 
-  // A new design's placeholder name (and a new document's title) in the
-  // person's language; a document titled in other words has its text measured again.
+  // A new design's placeholder words (its name, a document's title and first
+  // paragraph, a whiteboard's first note) in the person's language; a document
+  // in other words than English has its text measured again.
   const newBlank = (p) => {
     const name = { doc: t('common.untitledDoc'), whiteboard: t('common.untitledBoard') }[p.id] || t('common.untitled');
     const title = t('common.untitledDoc');
-    const doc = createDesignFromPreset(p.id, { name, title });
-    return newDesign(doc, doc.document && title !== DOC_STYLES.title.text ? { fit: true } : undefined);
+    const body = t('newText.docBody');
+    const doc = createDesignFromPreset(p.id, { name, title, body, note: t('newText.boardNote') });
+    return newDesign(doc, doc.document && (title !== DOC_STYLES.title.text || body !== DOC_STYLES.body.text) ? { fit: true } : undefined);
   };
 
   const custom = customSizeForm((w, hgt, unit) => newDesign(createDesign({ width: w, height: hgt, unit, name: t('common.untitled') })));

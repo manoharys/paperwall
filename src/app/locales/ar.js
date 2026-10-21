@@ -258,6 +258,7 @@ export const ar = {
   'newText.docBullets': "نقطة\nنقطة أخرى",
   'newText.docNumbers': "أولًا\nثانيًا",
   'newText.note': "ملاحظة",
+  'newText.boardNote': "ضع الأفكار هنا",
   'newText.pairHeading': "اجعله لك",
   'newText.pairHeadingWedding': "احفظ الموعد",
   'newText.pairBody': "أضف بضع كلمات تقول عمّا يدور الأمر.",

@@ -257,6 +257,7 @@ export const hi = {
   'newText.docBullets': "एक बिंदु\nएक और बिंदु",
   'newText.docNumbers': "पहला\nदूसरा",
   'newText.note': "नोट",
+  'newText.boardNote': "विचार यहाँ लिखें",
   'newText.pairHeading': "इसे अपना बनाएँ",
   'newText.pairHeadingWedding': "तारीख याद रखें",
   'newText.pairBody': "कुछ शब्द जोड़ें जो बताएँ कि यह किस बारे में है।",

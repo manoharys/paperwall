@@ -75,6 +75,9 @@ test('[APP-08] switching language changes the interface at once and is kept afte
   await waitForEditor(page);
   // Focus is back on the More button, in the editor drawn again.
   await page.waitForFunction(() => document.activeElement?.dataset.testid === 'main');
+  // The text added is saved before the reload. (Switching language no longer
+  // reopens the design, which used to save it; saves otherwise wait 400 ms.)
+  await page.evaluate(() => window.paperwall.editor.flush());
   await page.reload();
   await waitForEditor(page);
   assert.equal(await page.getAttribute('html', 'lang'), 'fr');
@@ -82,6 +85,23 @@ test('[APP-08] switching language changes the interface at once and is kept afte
   assert.deepEqual(await rawKeys(page), []);
   // The design's own text isn't translated: it stays as written.
   assert.equal(await page.evaluate(() => window.paperwall.editor.doc.pages[0].elements[0].text), say('de', 'newText.heading'));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('[APP-08] a new document and whiteboard start in the language', async () => {
+  const { page, context, errors } = await openApp();
+  await pick(page, 'es');
+  await page.click('[data-testid="preset-doc"]');
+  await waitForEditor(page);
+  const texts = () => page.evaluate(() => window.paperwall.editor.doc.pages[0].elements.map((el) => el.text));
+  assert.deepEqual(await texts(), [say('es', 'common.untitledDoc'), say('es', 'newText.docBody')]);
+  await page.click('[data-testid="home-link"]');
+  await page.waitForSelector('[data-testid="presets"]');
+  await page.click('[data-testid="preset-whiteboard"]');
+  await page.waitForFunction(() => window.paperwall?.editor?.doc.board);
+  assert.deepEqual(await texts(), [say('es', 'newText.boardNote')]);
+  assert.equal(await page.evaluate(() => window.paperwall.editor.doc.name), say('es', 'common.untitledBoard'));
   assert.deepEqual(errors, []);
   await context.close();
 });

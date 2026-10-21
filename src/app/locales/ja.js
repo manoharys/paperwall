@@ -257,6 +257,7 @@ export const ja = {
   'newText.docBullets': "項目\n別の項目",
   'newText.docNumbers': "1つ目\n2つ目",
   'newText.note': "メモ",
+  'newText.boardNote': "アイデアはここに",
   'newText.pairHeading': "あなたらしく",
   'newText.pairHeadingWedding': "日程のお知らせ",
   'newText.pairBody': "どんな内容か、ひとこと添えましょう。",

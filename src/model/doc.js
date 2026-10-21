@@ -86,13 +86,16 @@ export function createDesign({ width = 1080, height = 1080, name = 'Untitled des
   };
 }
 
-/** A blank design of a preset's size. `name` (and a document's `title`) in the person's language, else English. */
-export function createDesignFromPreset(presetId, { name, title } = {}) {
+/**
+ * A blank design of a preset's size. Its words in the person's language,
+ * else English: `name`; a document's `title` and `body`; a whiteboard's `note`.
+ */
+export function createDesignFromPreset(presetId, { name, title, body, note } = {}) {
   const p = presetById(presetId);
   if (!p) throw new Error(`Unknown size preset: ${presetId}`);
   const doc = createDesign({ width: p.w, height: p.h, unit: p.unit || 'px', ...(name ? { name } : {}) });
-  if (p.id === 'doc') makeDocument(doc, { name, title });
-  if (p.id === 'whiteboard') makeBoard(doc, { name });
+  if (p.id === 'doc') makeDocument(doc, { name, title, body });
+  if (p.id === 'whiteboard') makeBoard(doc, { name, note });
   return doc;
 }
 
@@ -114,11 +117,11 @@ export const DOC_STYLES = {
 };
 
 /** A design that flows as a document (see flow.js), started with a title and a paragraph. */
-export function makeDocument(doc, { name = 'Untitled document', title = DOC_STYLES.title.text } = {}) {
+export function makeDocument(doc, { name = 'Untitled document', title = DOC_STYLES.title.text, body = DOC_STYLES.body.text } = {}) {
   const { margin, gap, dpi } = DOCUMENT;
   doc.document = { pageHeight: doc.height, margin, gap, dpi };
   doc.name = name;
-  doc.pages[0].elements.push(createText({ ...DOC_STYLES.title, text: title, y: 0 }), createText({ ...DOC_STYLES.body, y: 1 }));
+  doc.pages[0].elements.push(createText({ ...DOC_STYLES.title, text: title, y: 0 }), createText({ ...DOC_STYLES.body, text: body, y: 1 }));
   // (Laid out as text is measured once open; roughly right till then.)
   const m = doc.document.margin;
   let y = m;
@@ -130,11 +133,11 @@ export function makeDocument(doc, { name = 'Untitled document', title = DOC_STYL
 }
 
 /** A design that's a whiteboard: a canvas that grows (see flow.js), with a first sticky note. */
-export function makeBoard(doc, { name = 'Untitled whiteboard' } = {}) {
+export function makeBoard(doc, { name = 'Untitled whiteboard', note = 'Ideas go here' } = {}) {
   doc.board = true;
   doc.name = name;
   doc.pages[0].background = { type: 'color', color: '#f6f6f2' };
-  doc.pages[0].elements.push(createSticky(NOTE_COLORS[0], { x: 600, y: 600, text: 'Ideas go here' }));
+  doc.pages[0].elements.push(createSticky(NOTE_COLORS[0], { x: 600, y: 600, text: note }));
   return doc;
 }
 
