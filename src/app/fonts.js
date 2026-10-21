@@ -140,7 +140,12 @@ export async function designFontFiles(doc) {
     }
   }
   for (const a of Object.values(doc.assets || {})) {
-    if (a.type === 'font') out.set(`${a.family}|*`, dataUrlToBytes(a.dataUrl).bytes);
+    if (a.type !== 'font') continue;
+    try {
+      out.set(`${a.family}|*`, dataUrlToBytes(a.dataUrl).bytes);
+    } catch {
+      /* its file is gone: its text comes as a picture */
+    }
   }
   return out;
 }
