@@ -2,6 +2,10 @@
 
 import { concat } from './bytes.js';
 
+// Every file is dated 1 January 1980, the first day a zip can say (an
+// all-zero date isn't a real day, and some readers object).
+const DOS_DATE = (0 << 9) | (1 << 5) | 1;
+
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
@@ -33,6 +37,7 @@ export function buildZip(files) {
     local.setUint16(4, 20, true);
     local.setUint16(6, 0x0800, true); // UTF-8 names
     local.setUint16(8, 0, true); // stored
+    local.setUint16(12, DOS_DATE, true);
     local.setUint32(14, crc, true);
     local.setUint32(18, size, true);
     local.setUint32(22, size, true);
@@ -43,6 +48,7 @@ export function buildZip(files) {
     central.setUint16(4, 20, true);
     central.setUint16(6, 20, true);
     central.setUint16(8, 0x0800, true);
+    central.setUint16(14, DOS_DATE, true);
     central.setUint32(16, crc, true);
     central.setUint32(20, size, true);
     central.setUint32(24, size, true);

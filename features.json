@@ -252,7 +252,10 @@
         { "id": "EXP-09", "title": "No watermark, ever" },
         { "id": "EXP-10", "title": "Exported SVG carries its fonts, so it looks the same anywhere" },
         { "id": "EXP-11", "title": "Copy the design to the clipboard as an image" },
-        { "id": "EXP-12", "title": "PDF with real, selectable and searchable text" }
+        { "id": "EXP-12", "title": "PDF with real, selectable and searchable text" },
+        { "id": "EXP-13", "title": "Vector PDF with embedded fonts: shapes, gradients and pictures stay sharp, text stays real" },
+        { "id": "EXP-14", "title": "Print PDF with bleed and crop marks" },
+        { "id": "EXP-15", "title": "Download as PowerPoint (.pptx) with editable text, shapes and pictures" }
       ]
     },
     {

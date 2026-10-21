@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.7.0 (unreleased): Pro export
+
+- Vector PDF, now the default PDF: shapes, lines, gradients and photos stay
+  sharp at any size, and text is set in the design's own fonts, embedded as
+  subsets, so it can be selected, searched and copied. Shadows, glows, photo
+  filters, curved text and letters a font doesn't have come as a picture of
+  just that element.
+- Print PDF: the page grows by a 3 mm bleed so backgrounds and photos run
+  past the edge, with trim and bleed boxes, crop marks, and pictures at
+  300 DPI.
+- The picture-per-page PDF stays, as PDF (flattened).
+- Download as PowerPoint (.pptx): a slide per page at the design's size,
+  with editable text boxes, shapes, cropped and framed photos, and speaker
+  notes. Effects, charts, icons and stickers come as pictures. Opens in
+  PowerPoint, Keynote and LibreOffice.
+- Documents come as their sheets in every PDF (vector, flattened and print)
+  and as a slide a sheet in PowerPoint. Sticky notes stay notes of their
+  color with editable text, and videos show their full-size still.
+- Written from the public specs: deflate, a Brotli decoder and a WOFF2 font
+  reader (to embed the bundled fonts), a TrueType subsetter, and the PDF and
+  PowerPoint writers.
+
 ## 0.6.0 (unreleased): Online extras, all opt-in
 
 Nothing here goes online until you turn it on, and each one talks only to

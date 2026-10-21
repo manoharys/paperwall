@@ -116,7 +116,7 @@ function imageFilter(ctx, fl) {
 
 // ---------- elements ----------
 
-function transformOf(el) {
+export function transformOf(el) {
   const cx = el.x + el.w / 2;
   const cy = el.y + el.h / 2;
   const sx = el.flipX ? -1 : 1;
@@ -146,6 +146,33 @@ function renderLine(ctx, el) {
   if (el.endCap === 'arrow') out += `<path d="M${f(el.w)} ${f(y)} L${f(el.w - head)} ${f(y - head * 0.6)} L${f(el.w - head)} ${f(y + head * 0.6)} Z" fill="${color}"/>`;
   if (el.startCap === 'arrow') out += `<path d="M0 ${f(y)} L${f(head)} ${f(y - head * 0.6)} L${f(head)} ${f(y + head * 0.6)} Z" fill="${color}"/>`;
   return out;
+}
+
+/**
+ * How far past its box an element can draw (page px): strokes, outlines,
+ * the room around letters, shadows. For pictures of single elements. A
+ * group's is as far as its elements reach past its box (each padded, and
+ * turned as it is, in the group's own terms), then its own shadow.
+ */
+export function effectPad(el) {
+  // (Lines and connectors draw 4 wide when they don't say.)
+  const lined = el.type === 'line' || el.type === 'connector';
+  const sw = el.strokeWidth || (lined ? 4 : 0);
+  let pad = 2 + sw + (el.outline?.width || 0) * 2;
+  if (el.type === 'text') pad += (el.size || 16) * 0.8;
+  // An arrowhead reaches 0.6 of its size (3.2 × the stroke) to either side of
+  // its line, past the box where the line runs along it; its tip stays at the end.
+  if (lined && (el.startCap === 'arrow' || el.endCap === 'arrow')) pad += sw * 3.2 * 0.6;
+  if (el.type === 'group') {
+    for (const c of el.children || []) {
+      if (c.hidden) continue;
+      const p = effectPad(c);
+      const b = boundsOf({ x: c.x - p, y: c.y - p, w: c.w + p * 2, h: c.h + p * 2, rotation: c.rotation });
+      pad = Math.max(pad, -b.x, -b.y, b.x + b.w - el.w, b.y + b.h - el.h);
+    }
+  }
+  if (el.shadow) pad += Math.abs(el.shadow.x ?? 0) + Math.abs(el.shadow.y ?? 8) + (el.shadow.blur ?? 16) * 1.5;
+  return pad;
 }
 
 function renderImage(ctx, el) {
@@ -305,7 +332,9 @@ function textEffect(ctx, el, draw) {
   const off = (fx.offset ?? 0.08) * s;
   const thick = Math.max(1, (fx.thickness ?? 0.035) * s);
   const hollow = ` fill="none" stroke="${esc(el.color)}" stroke-width="${f(thick)}" stroke-linejoin="round"`;
-  const at = (dx, dy, paint, extra = '') => `<g transform="translate(${f(dx)} ${f(dy)})"${extra}>${draw(paint)}</g>`;
+  // An offset copy, for looks only: marked so writers of text (the PDF) know
+  // it isn't the words themselves.
+  const at = (dx, dy, paint, extra = '') => `<g transform="translate(${f(dx)} ${f(dy)})" data-copy="1"${extra}>${draw(paint)}</g>`;
   const glowFilter = (blur, strength) => {
     const id = ctx.id('glow');
     const blurs = strength > 1 ? `<feGaussianBlur in="SourceAlpha" stdDeviation="${f(blur)}" result="b1"/><feGaussianBlur in="SourceAlpha" stdDeviation="${f(blur / 3)}" result="b2"/>` : `<feGaussianBlur in="SourceAlpha" stdDeviation="${f(blur)}" result="b1"/>`;
@@ -555,7 +584,8 @@ function renderBackground(ctx, bg, w, h) {
 /**
  * Render one page as a complete SVG document.
  * opts: measure, assetHref, fontCss (embedded @font-face rules), transparent,
- * editor (adds data-id attributes), idPrefix, scale (output size multiplier).
+ * editor (adds data-id attributes), idPrefix, scale (output size multiplier),
+ * bleed (page px the background runs past each edge, as the print PDF's does).
  */
 export function renderPage(doc, pageIndex, opts = {}) {
   const page = doc.pages[pageIndex];
@@ -566,12 +596,16 @@ export function renderPage(doc, pageIndex, opts = {}) {
   return svgDocument(ctx, pageBody(ctx, page, w, h, opts), w, h, opts);
 }
 
-/** The outer SVG around a page's (or frame's) contents: size, fonts, definitions. */
+/**
+ * The outer SVG around a page's (or frame's) contents: size, fonts, definitions.
+ * opts.view ({ x, y, w, h } in page px) shows just that part of the page.
+ */
 function svgDocument(ctx, body, w, h, opts, extra = '') {
   const style = opts.fontCss ? `<style>${opts.fontCss}</style>` : '';
   const scale = opts.scale || 1;
-  const size = opts.noSize ? '' : ` width="${f(w * scale)}" height="${f(h * scale)}"`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"${size} viewBox="0 0 ${w} ${h}"${extra}>` +
+  const v = opts.view || { x: 0, y: 0, w, h };
+  const size = opts.noSize ? '' : ` width="${f(v.w * scale)}" height="${f(v.h * scale)}"`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"${size} viewBox="${opts.view ? `${f(v.x)} ${f(v.y)} ${f(v.w)} ${f(v.h)}` : `0 0 ${w} ${h}`}"${extra}>` +
     `<defs>${style}${ctx.defs.join('')}</defs>${body}</svg>`;
 }
 
@@ -580,7 +614,8 @@ function svgDocument(ctx, body, w, h, opts, extra = '') {
  * began), animated elements are drawn where they are at that moment.
  */
 function pageBody(ctx, page, w, h, opts) {
-  const bg = opts.transparent ? '' : renderBackground(ctx, page.background, w, h);
+  const b = opts.bleed || 0;
+  const bg = opts.transparent ? '' : b > 0 ? `<g transform="translate(${f(-b)} ${f(-b)})">${renderBackground(ctx, page.background, f(w + b * 2), f(h + b * 2))}</g>` : renderBackground(ctx, page.background, w, h);
   if (opts.time === undefined) return bg + page.elements.map((el) => renderElement(ctx, el)).join('');
   const before = ctx.motion;
   ctx.motion = { page, order: readingOrder(page), time: opts.time, size: Math.min(w, h) };
@@ -683,6 +718,24 @@ export function renderFrame(doc, frame, opts = {}) {
   return svgDocument(ctx, `<rect width="${f(w)}" height="${f(h)}" fill="#ffffff"/>${body}`, w, h, opts, ' overflow="hidden"');
 }
 
+/**
+ * One element's markup as the page draws it (in page px, with its own
+ * turn, opacity and shadow), and the definitions it needs. For writers of
+ * other formats (vector PDF, PowerPoint), which read it back.
+ */
+export function elementMarkup(doc, el, opts = {}) {
+  const ctx = makeCtx(doc, opts);
+  const markup = renderElement(ctx, el);
+  return { markup, defs: ctx.defs.join('') };
+}
+
+/** A page's background as markup, filling w × h (the page, or more for print bleed). */
+export function backgroundMarkup(doc, page, w, h, opts = {}) {
+  const ctx = makeCtx(doc, opts);
+  const markup = renderBackground(ctx, page.background, f(w), f(h));
+  return { markup, defs: ctx.defs.join('') };
+}
+
 /** Render a single element on its own, for previews (layers list, thumbnails). */
 export function renderElementOnly(doc, el, opts = {}) {
   const ctx = makeCtx(doc, opts);
@@ -697,44 +750,54 @@ export function renderElementOnly(doc, el, opts = {}) {
 export function textRuns(doc, pageIndex, measure = approxMeasure) {
   const runs = [];
   const visit = (els, ox, oy) => {
-    for (const el0 of els) {
-      if (el0.hidden) continue;
-      if (el0.type === 'group') {
-        if (!el0.rotation) visit(el0.children, ox + el0.x, oy + el0.y);
+    for (const el of els) {
+      if (el.hidden) continue;
+      if (el.type === 'group') {
+        if (!el.rotation) visit(el.children, ox + el.x, oy + el.y);
         continue;
       }
-      if (el0.type !== 'text') continue;
-      // A sticky note's words sit inside its edges (the same middle, so it turns the same).
-      const el = el0.note ? noteInner(el0) : el0;
-      const x0 = ox + el.x;
-      const y0 = oy + el.y;
-      const cx = x0 + el.w / 2;
-      const cy = y0 + el.h / 2;
-      const rot = ((el.rotation || 0) * Math.PI) / 180;
-      const place = (lx, ly) => {
-        const dx = x0 + lx - cx;
-        const dy = y0 + ly - cy;
-        return { x: cx + dx * Math.cos(rot) - dy * Math.sin(rot), y: cy + dx * Math.sin(rot) + dy * Math.cos(rot) };
-      };
-      if (el.curve) {
-        const text = displayText(el).replace(/\s*\n\s*/g, ' ');
-        const p = place(0, el.h * 0.6);
-        runs.push({ text, x: p.x, y: p.y, size: el.size, width: el.w, angle: el.rotation || 0 });
-        continue;
-      }
-      const { lines, lineHeight } = layoutText(el, measure);
-      const pad = el.highlight ? el.highlight.padding ?? 0 : 0;
-      lines.forEach((line, i) => {
-        if (!line.text) return;
-        const baseline = pad + i * lineHeight + (lineHeight - el.size) / 2 + el.size * 0.8;
-        let x = line.indent;
-        if (el.align === 'center') x = line.indent + (el.w - line.indent - line.width) / 2;
-        else if (el.align === 'right') x = el.w - line.width;
-        const p = place(x, baseline);
-        runs.push({ text: (line.prefix ? line.prefix.trim() + ' ' : '') + line.text, x: p.x, y: p.y, size: el.size, width: line.width, angle: el.rotation || 0 });
-      });
+      runs.push(...textRunsOf(el, measure, ox, oy));
     }
   };
   visit(doc.pages[pageIndex].elements, 0, 0);
+  return runs;
+}
+
+/**
+ * Where the lines of one text element sit, as textRuns has them, in its
+ * parent's terms (moved by ox, oy). Nothing for anything else.
+ */
+export function textRunsOf(el0, measure = approxMeasure, ox = 0, oy = 0) {
+  const runs = [];
+  if (el0.hidden || el0.type !== 'text') return runs;
+  // A sticky note's words sit inside its edges (the same middle, so it turns the same).
+  const el = el0.note ? noteInner(el0) : el0;
+  const x0 = ox + el.x;
+  const y0 = oy + el.y;
+  const cx = x0 + el.w / 2;
+  const cy = y0 + el.h / 2;
+  const rot = ((el.rotation || 0) * Math.PI) / 180;
+  const place = (lx, ly) => {
+    const dx = x0 + lx - cx;
+    const dy = y0 + ly - cy;
+    return { x: cx + dx * Math.cos(rot) - dy * Math.sin(rot), y: cy + dx * Math.sin(rot) + dy * Math.cos(rot) };
+  };
+  if (el.curve) {
+    const text = displayText(el).replace(/\s*\n\s*/g, ' ');
+    const p = place(0, el.h * 0.6);
+    runs.push({ text, x: p.x, y: p.y, size: el.size, width: el.w, angle: el.rotation || 0 });
+    return runs;
+  }
+  const { lines, lineHeight } = layoutText(el, measure);
+  const pad = el.highlight ? el.highlight.padding ?? 0 : 0;
+  lines.forEach((line, i) => {
+    if (!line.text) return;
+    const baseline = pad + i * lineHeight + (lineHeight - el.size) / 2 + el.size * 0.8;
+    let x = line.indent;
+    if (el.align === 'center') x = line.indent + (el.w - line.indent - line.width) / 2;
+    else if (el.align === 'right') x = el.w - line.width;
+    const p = place(x, baseline);
+    runs.push({ text: (line.prefix ? line.prefix.trim() + ' ' : '') + line.text, x: p.x, y: p.y, size: el.size, width: line.width, angle: el.rotation || 0 });
+  });
   return runs;
 }

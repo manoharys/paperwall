@@ -67,9 +67,9 @@ picked. No ads, accounts or paid tiers.
 
 ## v0.7 Pro export
 
-- [ ] Vector PDF with embedded fonts
-- [ ] Print PDF with bleed and crop marks
-- [ ] PowerPoint (.pptx) download
+- [x] Vector PDF with embedded fonts (EXP-13)
+- [x] Print PDF with bleed and crop marks (EXP-14)
+- [x] PowerPoint (.pptx) download (EXP-15)
 
 ## v0.8 Everyone
 

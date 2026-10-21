@@ -2,7 +2,8 @@
 // in exports. In the one-file build the font files are inlined as data URLs.
 
 import { FONTS, fontFiles, fontsUsed, nearestWeight } from '../model/fonts.js';
-import { bytesToBase64 } from './ui.js';
+import { bytesToBase64, dataUrlToBytes } from './ui.js';
+import { onPaper as sheetsOf } from '../model/flow.js';
 
 const inlined = () => globalThis.PAPERWALL_ASSETS?.fonts || null;
 const dataCache = new Map();
@@ -57,6 +58,17 @@ export function fontLoaded(name, weight = 400) {
 /** Every font a design uses, ready before its text is measured. */
 export async function ensureDesignFonts(doc) {
   await Promise.all(fontsUsed(doc).map(({ font, weight }) => ensureFont(font.name, weight)));
+}
+
+/**
+ * On paper (every PDF, printing, PowerPoint), a document is sheets, split
+ * between its blocks; anything else is as it is. Split once its fonts are
+ * in: they decide where lines break. Returns [design, page indexes].
+ */
+export async function onPaper(doc, pages) {
+  if (!doc.document) return [doc, pages]; // (nothing to split: no fonts to wait for)
+  await ensureDesignFonts(doc);
+  return sheetsOf(doc, pages, measure);
 }
 
 /** Boot: register everything, load the interface font. */
@@ -123,6 +135,31 @@ async function fileAsDataUrl(file) {
   const url = `data:font/woff2;base64,${bytesToBase64(bytes)}`;
   dataCache.set(file, url);
   return url;
+}
+
+/**
+ * The font files a design's text uses, as bytes, for writers that embed
+ * them (the vector PDF): "Family|weight" for bundled fonts (their main,
+ * Latin file), "Family|*" for fonts stored in the design.
+ */
+export async function designFontFiles(doc) {
+  const out = new Map();
+  for (const { font, weight } of fontsUsed(doc)) {
+    try {
+      out.set(`${font.name}|${weight}`, dataUrlToBytes(await fileAsDataUrl(fontFiles(font, weight)[0].file)).bytes);
+    } catch {
+      /* a font that can't be read: its text comes as a picture */
+    }
+  }
+  for (const a of Object.values(doc.assets || {})) {
+    if (a.type !== 'font') continue;
+    try {
+      out.set(`${a.family}|*`, dataUrlToBytes(a.dataUrl).bytes);
+    } catch {
+      /* its file is gone: its text comes as a picture */
+    }
+  }
+  return out;
 }
 
 /** Every distinct character of text in a design, as code points. */

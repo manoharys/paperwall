@@ -35,7 +35,10 @@ All of it. Including the things other tools put behind a subscription:
 - **Transparent PNGs**, and PNGs at 2x and 3x size
 - **Resize a design** to another format in one click (post → story → slides)
 - **A brand kit**: your colors and fonts, applied in one click
-- **Multi-page PDF with selectable text**, SVG with fonts inside, JPG, a zip of pages, print
+- **Vector PDF with your fonts embedded**: sharp at any size, with real, searchable text
+- **Print PDF with bleed and crop marks**, ready for a print shop
+- **PowerPoint (.pptx)** with editable text, shapes and pictures
+- SVG with fonts inside, JPG, a flattened PDF, a zip of pages, print
 - **Charts, tables, QR codes**, and removing plain backgrounds, all on your device
 - **No watermark, ever**, and no account
 
@@ -46,7 +49,7 @@ end-to-end test in a real browser** or listed as **not done yet**. This table
 is generated from the test run, never written by hand.
 
 <!-- scoreboard:start -->
-**175 of 175 features verified** by browser tests · 0 not done yet · [full scoreboard](SCOREBOARD.md)
+**178 of 178 features verified** by browser tests · 0 not done yet · [full scoreboard](SCOREBOARD.md)
 
 | Area | Verified |
 | --- | --- |
@@ -64,7 +67,7 @@ is generated from the test run, never written by hand.
 | Templates | 9 / 9 |
 | Documents and whiteboards | 5 / 5 |
 | Motion | 8 / 8 |
-| Export | 12 / 12 |
+| Export | 15 / 15 |
 | Online extras (opt-in) | 5 / 5 |
 | The app | 6 / 6 |
 
@@ -94,9 +97,11 @@ end-to-end tests use Playwright.
 - **One renderer.** The page you edit and every file you download come from
   the same SVG renderer, so what you see is what you get.
 - **Everything on your device.** Designs, uploads and your brand kit live in
-  your browser's storage. PNG, JPG, PDF and zip files are made in the page.
-  There's a QR code generator, a PDF writer and a zip writer in here, all
-  small and tested.
+  your browser's storage. PNG, JPG, PDF, PowerPoint and zip files are made
+  in the page. There's a QR code generator, two PDF writers (vector with
+  embedded font subsets, and flattened), a PowerPoint writer, a zip writer,
+  deflate, a Brotli decoder and a WOFF2 font reader in here, all small,
+  written from the public specs, and tested.
 - **Library:** 397 templates in 44 categories (each one passes a quality
   check in a real browser: no overflow, no broken words, readable contrast),
   92 open-license font families (SIL OFL / Apache 2.0) loaded only when used,

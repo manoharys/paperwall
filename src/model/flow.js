@@ -90,7 +90,10 @@ export function paginate(doc, measure = approxMeasure) {
     const reshaped = new Set(); // blocks split over sheets or made smaller
     const bottomOf = (sh) => sh.elements.reduce((b, e) => Math.max(b, e.y + e.h), 0);
     const start = (y) => {
+      const first = !sheet;
       sheet = { ...page, id: `${page.id}-${out.pages.length + 1}`, elements: [] };
+      // (A page's speaker notes go with its first sheet, not again on each.)
+      if (!first) delete sheet.notes;
       out.pages.push(sheet);
       top = y - opts.margin;
     };
@@ -141,6 +144,17 @@ export function paginate(doc, measure = approxMeasure) {
     }
   }
   return out;
+}
+
+/**
+ * On paper (every kind of PDF, printing, PowerPoint slides), a document is
+ * its sheets, split between its blocks; anything else is as it is. Returns
+ * [design, page indexes] for these pages of `doc`.
+ */
+export function onPaper(doc, pages, measure = approxMeasure) {
+  if (!doc.document) return [doc, pages];
+  const sheets = paginate({ ...doc, pages: pages.map((i) => doc.pages[i]) }, measure);
+  return [sheets, sheets.pages.map((_, i) => i)];
 }
 
 /** A copy of a block made smaller as a whole (a group's insides, a table's text too), kept centred. */
