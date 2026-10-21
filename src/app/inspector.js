@@ -5,7 +5,7 @@ import { h, icon, iconButton, clear, toast, pickFile, readFileAsDataUrl, dialog,
 import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover, popoverOpen, PALETTES, fontPicker, gradientEditor } from './widgets.js';
 import { FONTS, FONT_KINDS } from '../model/fonts.js';
 import { ANIMATIONS, PAGE_ANIMATIONS, TRANSITIONS, DEFAULT_ANIM_DURATION, DEFAULT_STAGGER, DEFAULT_TRANSITION_DURATION, LIMITS, pageDuration } from '../model/motion.js';
-import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, isEmptyFrame, parseChartData, chartDataText, parseTable, tableText, soundtrackOf, KEEPS_RATIO } from '../model/doc.js';
+import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, isEmptyFrame, parseChartData, chartDataText, parseTable, tableText, soundtrackOf, KEEPS_RATIO, NOTE_COLORS } from '../model/doc.js';
 import { collectColors, cropZoom } from '../model/commands.js';
 import { renderElementOnly, TEXT_EFFECTS } from '../model/render.js';
 import { measure, addCustomFont, customFontNames, ensureFont, fontSettled } from './fonts.js';
@@ -328,6 +328,11 @@ export class Inspector {
     } }, 'Use your own font…');
     const bold = (el.weight || 400) >= 600;
     return [
+      // A sticky note: its color.
+      el.note ? section('Sticky note', h('div', { class: 'note-grid', 'data-testid': 'note-colors-edit' }, NOTE_COLORS.map((c, i) => h('button', {
+        type: 'button', class: `note-swatch${c === el.note ? ' on' : ''}`, style: { background: c }, 'aria-label': `Note color ${i + 1}`, 'aria-pressed': String(c === el.note), 'data-testid': `note-color-${i}`,
+        onClick: () => this.up({ note: c }),
+      })))) : null,
       section('Text',
         fontSelect,
         upload,

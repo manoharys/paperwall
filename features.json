@@ -213,6 +213,17 @@
       ]
     },
     {
+      "id": "DW",
+      "name": "Documents and whiteboards",
+      "features": [
+        { "id": "DW-01", "title": "Documents: headings, paragraphs and lists that flow down the page as you write" },
+        { "id": "DW-02", "title": "Pictures in documents, and moving a block by dragging it above or below another" },
+        { "id": "DW-03", "title": "Documents download as PDF and print on sheets of paper, split between blocks" },
+        { "id": "DW-04", "title": "Whiteboards: a canvas that grows as you add to it" },
+        { "id": "DW-05", "title": "Sticky notes in six colors, connected with lines" }
+      ]
+    },
+    {
       "id": "MOT",
       "name": "Motion",
       "features": [

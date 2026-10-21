@@ -12,6 +12,7 @@ import { gridLines, marginSize, bleedSize } from '../model/view.js';
 import { endsOf, setEnds, isLine, lineHit } from '../model/connectors.js';
 import { measure } from './fonts.js';
 import { mediaKind, blobUrlFor } from './media.js';
+import { notePad } from '../model/text-layout.js';
 import { h, toast, pickFile } from './ui.js';
 import * as store from './store.js';
 
@@ -752,6 +753,11 @@ export class Canvas {
     ta.addEventListener('input', () => {
       el.text = ta.value;
       ed.fitText(el);
+      // (A document's later blocks move down as this one grows.)
+      if (ed.doc.document) {
+        ed.arrange();
+        this.layout();
+      }
       this.positionTextarea();
       ed.emit('live');
     });
@@ -776,6 +782,8 @@ export class Canvas {
     if (!el || !this.textarea) return;
     const z = ed.zoom;
     const pad = el.highlight ? (el.highlight.padding ?? 0) : 0;
+    // A sticky note's text sits inside its edges.
+    const inset = notePad(el);
     Object.assign(this.textarea.style, {
       left: `${el.x * z}px`,
       top: `${el.y * z}px`,
@@ -787,7 +795,11 @@ export class Canvas {
       color: el.color,
       textAlign: el.align,
       textTransform: el.caps ? 'uppercase' : 'none',
-      paddingTop: `${pad * z}px`,
+      paddingTop: `${(pad + inset) * z}px`,
+      paddingLeft: `${inset * z}px`,
+      paddingRight: `${inset * z}px`,
+      background: el.note || '',
+      boxSizing: 'border-box',
       transform: `rotate(${el.rotation || 0}deg)${el.flipX ? ' scaleX(-1)' : ''}${el.flipY ? ' scaleY(-1)' : ''}`,
     });
   }

@@ -17,6 +17,8 @@ export const PRESETS = [
   { id: 'thumbnail', name: 'Video thumbnail', group: 'Social', w: 1280, h: 720 },
   { id: 'banner', name: 'Web banner', group: 'Social', w: 1500, h: 500 },
   { id: 'slides', name: 'Presentation', group: 'Work', w: 1920, h: 1080 },
+  { id: 'doc', name: 'Document', group: 'Work', w: 1240, h: 1754 },
+  { id: 'whiteboard', name: 'Whiteboard', group: 'Work', w: 3600, h: 2400 },
   { id: 'a4', name: 'A4 document', group: 'Print', w: 2480, h: 3508, unit: 'mm' },
   { id: 'letter', name: 'US Letter', group: 'Print', w: 2550, h: 3300, unit: 'in' },
   { id: 'poster', name: 'Poster (18 × 24 in)', group: 'Print', w: 5400, h: 7200, unit: 'in' },
@@ -93,7 +95,44 @@ export function createDesign({ width = 1080, height = 1080, name = 'Untitled des
 export function createDesignFromPreset(presetId) {
   const p = presetById(presetId);
   if (!p) throw new Error(`Unknown size preset: ${presetId}`);
-  return createDesign({ width: p.w, height: p.h, unit: p.unit || 'px' });
+  const doc = createDesign({ width: p.w, height: p.h, unit: p.unit || 'px' });
+  if (p.id === 'doc') makeDocument(doc);
+  if (p.id === 'whiteboard') makeBoard(doc);
+  return doc;
+}
+
+/** Sizes of a document's text: a heading, a smaller heading, body and lists. */
+export const DOC_STYLES = {
+  title: { text: 'Untitled document', size: 64, weight: 700, lineHeight: 1.15 },
+  heading: { text: 'A heading', size: 40, weight: 700, lineHeight: 1.2 },
+  body: { text: 'Start writing here.', size: 24, weight: 400, lineHeight: 1.5 },
+  bullets: { text: 'A point\nAnother point', size: 24, weight: 400, lineHeight: 1.5, list: 'bullet' },
+  numbers: { text: 'First\nSecond', size: 24, weight: 400, lineHeight: 1.5, list: 'number' },
+};
+
+/** A design that flows as a document (see flow.js), started with a title and a paragraph. */
+export function makeDocument(doc) {
+  doc.document = { pageHeight: doc.height, margin: 120, gap: 28 };
+  doc.name = 'Untitled document';
+  doc.pages[0].elements.push(createText({ ...DOC_STYLES.title, y: 0 }), createText({ ...DOC_STYLES.body, y: 1 }));
+  return doc;
+}
+
+/** A design that's a whiteboard: a canvas that grows (see flow.js), with a first sticky note. */
+export function makeBoard(doc) {
+  doc.board = true;
+  doc.name = 'Untitled whiteboard';
+  doc.pages[0].background = { type: 'color', color: '#f6f6f2' };
+  doc.pages[0].elements.push(createSticky(NOTE_COLORS[0], { x: 200, y: 200, text: 'Ideas go here' }));
+  return doc;
+}
+
+/** Sticky note colors. */
+export const NOTE_COLORS = ['#ffe58a', '#ffb3c7', '#a8e6cf', '#a7c7ff', '#ffd1a1', '#d7c4ff'];
+
+/** A sticky note: text on a square of color. */
+export function createSticky(color = NOTE_COLORS[0], props = {}) {
+  return createText({ text: 'Note', note: color, w: 320, h: 320, size: 32, weight: 500, lineHeight: 1.3, ...props });
 }
 
 function base(type, props) {
@@ -451,6 +490,8 @@ export function validateDesign(doc) {
     }
     // ({ type: 'none' } is kept: it keeps an element still while its page animates.)
     if (el.anim !== undefined) el.anim = el.anim?.type === 'none' ? { type: 'none' } : cleanMotion(el.anim, ANIMATIONS, { duration: LIMITS.duration, delay: LIMITS.delay });
+    // A sticky note's color (text only): a hex color, else a plain text box.
+    if (el.note !== undefined) el.note = el.type === 'text' && typeof el.note === 'string' && /^#[0-9a-f]{3,8}$/i.test(el.note) ? el.note : undefined;
     if (el.type === 'video') {
       el.trim = { start: Math.max(0, Number.isFinite(+el.trim?.start) ? +el.trim.start : 0) };
       el.loop = el.loop !== false;
@@ -491,6 +532,14 @@ export function validateDesign(doc) {
     }
   }
   // The soundtrack: a sound the design has, at a volume from 0 to 1.
+  // A document's flow, a whiteboard's growing: numbers in range, else plain.
+  if (doc.document !== undefined) {
+    const d = doc.document;
+    doc.document = d && typeof d === 'object'
+      ? { pageHeight: clampNum(d.pageHeight, 200, 20000, 1754), margin: clampNum(d.margin, 0, 1000, 120), gap: clampNum(d.gap, 0, 400, 28) }
+      : undefined;
+  }
+  if (doc.board !== undefined) doc.board = doc.board === true || undefined;
   if (doc.audio !== undefined) {
     const a = soundtrackOf(doc);
     doc.audio = a && a.type === 'audio' ? { assetId: doc.audio.assetId, volume: clampNum(doc.audio.volume, 0, 1, 1) } : undefined;

@@ -45,7 +45,7 @@ end-to-end test in a real browser** or listed as **not done yet**. This table
 is generated from the test run, never written by hand.
 
 <!-- scoreboard:start -->
-**164 of 165 features verified** by browser tests · 1 not done yet · [full scoreboard](SCOREBOARD.md)
+**169 of 170 features verified** by browser tests · 1 not done yet · [full scoreboard](SCOREBOARD.md)
 
 | Area | Verified |
 | --- | --- |
@@ -61,6 +61,7 @@ is generated from the test run, never written by hand.
 | Color | 5 / 5 |
 | Brand kit | 3 / 3 |
 | Templates | 9 / 9 |
+| Documents and whiteboards | 5 / 5 |
 | Motion | 8 / 8 |
 | Export | 12 / 12 |
 | The app | 6 / 6 |

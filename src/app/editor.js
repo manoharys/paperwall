@@ -8,6 +8,7 @@ import {
   TEXT_STYLES, versionSnapshot, isEmptyFrame,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
+import { flowDocument, growBoard } from '../model/flow.js';
 import { curveGeometry } from '../model/render.js';
 import { unionBounds, pointInBox, toLocal, refitGroup } from '../model/geometry.js';
 import { gridBoxes } from '../model/grids.js';
@@ -172,6 +173,7 @@ export class Editor {
     // Mid-drag, outside change() (text refitted as a font loads): after the
     // drag, which it mustn't cut short.
     if (this.isDragging?.() && !this.changing) return void this.whenIdle(() => this.afterChange(quiet, { edit }));
+    this.arrange();
     // Connectors on every page follow what they're attached to (pages
     // without connectors return at once).
     this.syncAllConnectors();
@@ -357,8 +359,19 @@ export class Editor {
 
   // ---------- adding things ----------
 
+  /** A document's blocks flow down its page; a whiteboard grows to hold what's on it (see flow.js). */
+  arrange() {
+    if (this.doc.document) flowDocument(this.doc, measure);
+    else if (this.doc.board) growBoard(this.doc);
+  }
+
   insert(el, { center = true } = {}) {
     if (el.type === 'text') this.fitText(el);
+    // In a document, something new goes at the end (where it flows to).
+    if (this.doc.document) {
+      center = false;
+      el.y = Number.MAX_SAFE_INTEGER;
+    }
     this.change(() => cmd.addElement(this.doc, this.page, el, { center }));
     this.select([el.id]);
     return el;

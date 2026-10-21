@@ -4,7 +4,7 @@
 import { shapePath, dashArray, maskPath, drawPath } from './shapes.js';
 import { connectorGeometry, arrowHead } from './connectors.js';
 import { hexToRgb, mixHex, sortedStops } from './color.js';
-import { layoutText, displayText, approxMeasure, measureWith } from './text-layout.js';
+import { layoutText, displayText, approxMeasure, measureWith, notePad } from './text-layout.js';
 import { iconById, stickerById } from './graphics.js';
 import { qrMatrix, qrPath } from './qr.js';
 import { animationOf, motionAt, readingOrder, transitionAt } from './motion.js';
@@ -333,6 +333,15 @@ function textEffect(ctx, el, draw) {
 }
 
 function renderText(ctx, el) {
+  if (el.note) {
+    // A sticky note: its square of color (lifted a little off the page), and
+    // the text inside its edges.
+    const p = notePad(el);
+    const inner = renderText(ctx, { ...el, note: null, w: Math.max(1, el.w - p * 2), h: Math.max(1, el.h - p * 2) });
+    const r = Math.min(8, el.w * 0.02);
+    return `<rect x="0" y="${f(el.h * 0.012 + 2)}" width="${f(el.w)}" height="${f(el.h)}" rx="${f(r)}" fill="#000" fill-opacity="0.12"/>` +
+      `<rect width="${f(el.w)}" height="${f(el.h)}" rx="${f(r)}" fill="${esc(el.note)}"/><g transform="translate(${f(p)} ${f(p)})">${inner}</g>`;
+  }
   if (el.curve) return renderCurvedText(ctx, el);
   const { lines, lineHeight } = layoutText(el, ctx.measure);
   const pad = el.highlight ? el.highlight.padding ?? 0 : 0;

@@ -34,7 +34,14 @@ function breakWord(word, width, m) {
  * Returns lines with their text, left offset (x, for list indents) and width,
  * plus the line height and the total height.
  */
+/** How far a sticky note's text sits in from its edges (0 for plain text). */
+export function notePad(el) {
+  return el.note ? Math.round(Math.max(16, el.size * 0.6)) : 0;
+}
+
 export function layoutText(el, measure) {
+  // A sticky note's text wraps inside its edges.
+  if (el.note) return layoutText({ ...el, note: null, w: Math.max(1, el.w - notePad(el) * 2) }, measure);
   const m = measureWith(measure, el);
   const lineHeight = el.size * (el.lineHeight || 1.2);
   const lines = [];
@@ -90,6 +97,8 @@ export function layoutText(el, measure) {
 export function fitHeight(el, measure) {
   const { height } = layoutText(el, measure);
   const pad = el.highlight ? (el.highlight.padding ?? 0) * 2 : 0;
+  // A sticky note keeps its size, and grows only when its words need more.
+  if (el.note) return Math.max(Math.ceil(height + notePad(el) * 2), el.h || el.w);
   return Math.ceil(height + pad);
 }
 
