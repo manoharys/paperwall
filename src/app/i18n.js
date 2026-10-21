@@ -88,11 +88,13 @@ export function ltr(text) {
 
 /** A date (and maybe a time) in this language. */
 export function formatDate(at, opts = { day: 'numeric', month: 'short', year: 'numeric' }) {
+  if (!Number.isFinite(new Date(at).getTime())) return ''; // (no time known)
   return format('date', opts, () => new Intl.DateTimeFormat(lang, opts)).format(new Date(at));
 }
 
 /** "3 minutes ago", "yesterday": how long ago, in this language. */
 export function formatAgo(at, now = Date.now()) {
+  if (!Number.isFinite(+at) || at === null) return ''; // (no time known: say nothing, rather than fail)
   const rtf = format('ago', {}, () => new Intl.RelativeTimeFormat(lang, { numeric: 'auto', style: 'short' }));
   const s = Math.min(0, Math.round((at - now) / 1000)); // (a clock a little ahead: just now)
   if (Math.abs(s) < 60) return rtf.format(0, 'second');

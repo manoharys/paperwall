@@ -56,6 +56,15 @@ test('[DOC-09] a saved design survives a round trip through JSON', () => {
   assert.equal(back.pages[0].elements[0].text, 'Hello');
   assert.throws(() => validateDesign({ version: 99 }), /Unsupported/);
   assert.throws(() => validateDesign(null), /not a Paperwall design/);
+  // A file that doesn't say when it was made or changed: now, then.
+  const bare = JSON.parse(JSON.stringify(doc));
+  delete bare.updatedAt;
+  bare.createdAt = 'yesterday';
+  const t0 = Date.now();
+  const fixed = validateDesign(bare);
+  assert.ok(fixed.updatedAt >= t0 && fixed.createdAt === fixed.updatedAt);
+  const kept = validateDesign(JSON.parse(JSON.stringify(doc)));
+  assert.deepEqual([kept.createdAt, kept.updatedAt], [doc.createdAt, doc.updatedAt]);
 });
 
 test('[SEL-05] moving skips locked elements', () => {

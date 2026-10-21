@@ -496,6 +496,9 @@ export function validateDesign(doc) {
   doc.width = Number(doc.width);
   doc.height = Number(doc.height);
   if (typeof doc.name !== 'string') doc.name = 'Untitled design';
+  // (A file made elsewhere may not say when: now, then.)
+  if (!Number.isFinite(doc.updatedAt)) doc.updatedAt = Date.now();
+  if (!Number.isFinite(doc.createdAt)) doc.createdAt = doc.updatedAt;
   if (doc.version !== FORMAT_VERSION) throw new Error(`Unsupported design version: ${doc.version}`);
   if (!(doc.width > 0 && doc.height > 0)) throw new Error('This design has no size');
   if (!Array.isArray(doc.pages) || !doc.pages.length) throw new Error('This design has no pages');

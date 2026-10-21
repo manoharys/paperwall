@@ -119,6 +119,11 @@ test('time ago: a time a little ahead is just now; formats follow the language',
     assert.match(formatAgo(now - 3 * 60e3, now), /vor 3 Min/);
     assert.notEqual(formatDate(now), date);
     assert.notEqual(languageName('fr'), name);
+    // No time known (a design from elsewhere): nothing said, nothing thrown.
+    for (const at of [undefined, null, NaN, 'soon', Infinity]) {
+      assert.equal(formatAgo(at, now), '', String(at));
+      if (at !== null) assert.equal(formatDate(at), '', String(at));
+    }
   } finally {
     setLanguage('en');
   }
