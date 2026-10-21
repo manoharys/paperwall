@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { openApp, newDesign, waitForEditor, state, elements, addText, teardown, setup, distFile, mod, openTab, makePng, uploadImages } from './helpers.js';
+import { onlineHosts } from '../../src/model/providers.js';
 
 after(teardown);
 
@@ -210,7 +211,10 @@ test('[APP-05] makes no network requests after loading, enforced by the browser'
   assert.deepEqual(network, []);
   // And the page's security policy forbids it outright.
   const csp = await page.getAttribute('meta[http-equiv="Content-Security-Policy"]', 'content');
-  assert.match(csp, /connect-src 'none'/);
+  // (Only the opt-in online extras' providers, each by its exact address.)
+  const connect = csp.match(/connect-src ([^;]*)/)[1].trim().split(/\s+/);
+  assert.deepEqual(connect.sort(), onlineHosts().sort());
+  assert.ok(connect.every((h) => /^https?:\/\/[a-z0-9.-]+(:\d+)?$/.test(h)), 'no wildcards');
   assert.match(csp, /default-src 'none'/);
   const blocked = await page.evaluate(() => fetch('https://example.com/').then(() => 'sent', () => 'blocked'));
   assert.equal(blocked, 'blocked');
