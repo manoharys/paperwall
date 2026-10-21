@@ -490,3 +490,20 @@ test('[EXP-13] [EXP-15] the PDF and PowerPoint are of the design as it was when 
   }
   await context.close();
 });
+
+test('[EXP-13] a glowing heading drawn as a picture is still selectable and searchable text, once', async () => {
+  const { page, context } = await newDesign('a4');
+  await addText(page);
+  await page.evaluate(() => window.paperwall.editor.update({ text: 'Lanterns over the harbour', effect: { type: 'glow', color: '#ffcc00' } }));
+  const doc = await state(page);
+  assert.deepEqual(planVectorPdf(doc, [0], {}).map((w) => w.key), [doc.pages[0].elements[0].id], 'drawn as a picture');
+  for (const kind of ['vector', 'print']) {
+    const { bytes } = await downloadVia(page, pdfKind(page, kind));
+    if (!has('pdftotext', ['-v'])) break;
+    const dir = mkdtempSync(join(tmpdir(), 'paperwall-vpdf-'));
+    writeFileSync(join(dir, 'a.pdf'), bytes);
+    const text = execFileSync('pdftotext', ['-enc', 'UTF-8', join(dir, 'a.pdf'), '-']).toString().replace(/\s+/g, ' ');
+    assert.equal(text.match(/Lanterns over the harbour/g)?.length, 1, `${kind}: ${text}`);
+  }
+  await context.close();
+});
