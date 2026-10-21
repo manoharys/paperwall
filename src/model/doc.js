@@ -400,8 +400,8 @@ export function usedAssetIds(doc) {
 
 /** Remove images that no element or background uses any more. */
 export function pruneAssets(doc) {
-  const used = usedAssetIds(doc);
-  for (const id of Object.keys(doc.assets)) if (!used.has(id)) delete doc.assets[id];
+  // The same rule as what's saved (see keptAssets): fonts stay.
+  doc.assets = keptAssets(doc).assets;
   return doc;
 }
 

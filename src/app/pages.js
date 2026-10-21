@@ -235,6 +235,7 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     at = to;
     drawn = 0;
     live = false;
+    taken.clear(); // a page's videos start afresh: no picture from an earlier visit
     const page = doc.pages[shown[at]];
     info = { end: animationsEnd(page), keeps: keepsMoving(page, doc.assets), loops: hasLoop(page), videos: videosOn(doc, [shown[at]]) };
     videos.pauseAll();
@@ -243,10 +244,12 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     // (as if Play had started there), so later pages meet it where they did.
     if (tl.parts[at].start < soundFrom) soundFrom = tl.parts[at].start;
     if (!auto) sound?.seek(tl.parts[at].start - soundFrom);
-    if (sound && at === shown.length - 1) {
-      // The sound fades over the end, as in a download of these pages.
+    if (sound) {
+      // The sound fades over the end of the show (as in a download of these
+      // pages), which may begin a page or more before the last.
       const fade = soundFade(tl.total - soundFrom);
-      fading = setTimeout(() => sound.fadeOut(fade), Math.max(0, started + (pageDuration(page) - fade) * 1000 - performance.now()));
+      const end = started + (tl.total - tl.parts[at].start) * 1000;
+      fading = setTimeout(() => sound.fadeOut(Math.max(0.05, (end - performance.now()) / 1000)), Math.max(0, end - fade * 1000 - performance.now()));
     }
     slide.style.aspectRatio = `${doc.width} / ${doc.height}`;
     counter.textContent = `${at + 1} / ${shown.length}`;

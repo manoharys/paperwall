@@ -253,7 +253,8 @@ export class Inspector {
         // A whole replacement (updates merge into objects).
         onClick: () => this.up({ anim: type === 'none' ? null : { type, duration: now().duration ?? DEFAULT_ANIM_DURATION, delay: now().delay ?? 0 } }),
       }, name))),
-      a.type === 'none' && pageAnim && pageAnim !== 'none' ? h('p', { class: 'hint' }, `Comes in with the page's ${ANIMATIONS[pageAnim].name.toLowerCase()} animation.`) : null,
+      // (Inside a group, the group comes in as one: the page's animation is the group's.)
+      a.type === 'none' && pageAnim && pageAnim !== 'none' && ed.pageData.elements.some((e) => e.id === el.id) ? h('p', { class: 'hint' }, `Comes in with the page's ${ANIMATIONS[pageAnim].name.toLowerCase()} animation.`) : null,
       a.type !== 'none' ? h('div', { class: 'sub' },
         slider({ label: 'Duration', value: a.duration ?? DEFAULT_ANIM_DURATION, min: LIMITS.duration[0], max: LIMITS.duration[1], step: 0.1, unit: 's', testid: 'anim-duration', onChange: (v, l) => this.up({ anim: { ...now(), duration: v } }, l ? 'anim' : null) }),
         slider({ label: 'Delay', value: a.delay ?? 0, min: LIMITS.delay[0], max: LIMITS.delay[1], step: 0.1, unit: 's', testid: 'anim-delay', onChange: (v, l) => this.up({ anim: { ...now(), delay: v } }, l ? 'anim' : null) })) : null,
