@@ -296,6 +296,7 @@ export function exportDialog(editor) {
           download(new Blob([buildZip(files)], { type: 'application/zip' }), `${name}.zip`);
         }
       }
+      state.busy = false; // done: closing now isn't stopping anything
       toast('Downloaded');
       d.close();
     } catch (e) {
@@ -308,7 +309,16 @@ export function exportDialog(editor) {
   };
   draw();
   const stopper = new AbortController();
-  const d = dialog('Download', body, { testid: 'export-dialog', onClose: () => stopper.abort() });
+  // While a download is being made, only Close or Escape stop it (not a
+  // stray click beside the dialog), and stopping it says so.
+  const d = dialog('Download', body, {
+    testid: 'export-dialog',
+    steady: () => state.busy,
+    onClose: () => {
+      if (state.busy) toast('Download stopped');
+      stopper.abort();
+    },
+  });
   return d;
 }
 

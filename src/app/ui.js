@@ -175,8 +175,11 @@ export function toast(message, kind = 'info') {
   setTimeout(() => t.remove(), 3000);
 }
 
-/** A modal dialog. Returns { el, close }. */
-export function dialog(title, body, { onClose, wide = false, testid } = {}) {
+/**
+ * A modal dialog. Returns { el, close }. `steady()`: while it says so, a
+ * click beside the dialog doesn't close it (Close and Escape still do).
+ */
+export function dialog(title, body, { onClose, wide = false, testid, steady = null } = {}) {
   const backdrop = h('div', { class: 'backdrop' });
   const close = () => {
     backdrop.remove();
@@ -194,7 +197,7 @@ export function dialog(title, body, { onClose, wide = false, testid } = {}) {
     h('div', { class: 'dialog-body' }, body));
   backdrop.append(box);
   backdrop.addEventListener('pointerdown', (e) => {
-    if (e.target === backdrop) close();
+    if (e.target === backdrop && !steady?.()) close();
   });
   document.addEventListener('keydown', onKey, true);
   document.body.append(backdrop);
