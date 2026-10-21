@@ -11,8 +11,8 @@ import { clone, DRAW_TOOLS, pxPerUnit, isEmptyFrame, restroke, KEEPS_RATIO } fro
 import { gridLines, marginSize, bleedSize } from '../model/view.js';
 import { endsOf, setEnds, isLine, lineHit } from '../model/connectors.js';
 import { measure } from './fonts.js';
-import { mediaKind } from './media.js';
-import { h, dataUrlToBlob, toast, pickFile } from './ui.js';
+import { mediaKind, blobUrlFor } from './media.js';
+import { h, toast, pickFile } from './ui.js';
 import * as store from './store.js';
 
 const PAD = 64;
@@ -182,7 +182,7 @@ export class Canvas {
     const key = part === 'poster' ? `${assetId}|poster` : assetId;
     let entry = this.urls.get(key);
     if (!entry || entry.dataUrl !== dataUrl) {
-      entry = { dataUrl, url: URL.createObjectURL(dataUrlToBlob(dataUrl)) };
+      entry = { dataUrl, url: blobUrlFor(dataUrl) };
       this.urls.set(key, entry);
     }
     return entry.url;

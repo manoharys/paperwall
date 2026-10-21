@@ -41,7 +41,19 @@ export class GifEncoder {
     // Just the box's pixels.
     const px = new Uint8ClampedArray(box.w * box.h * 4);
     for (let y = 0; y < box.h; y++) px.set(data.subarray(((box.y + y) * this.width + box.x) * 4, ((box.y + y) * this.width + box.x + box.w) * 4), y * box.w * 4);
-    this.pending = { box, px, delay };
+    // Inside the box, the pixels that haven't changed are left see-through,
+    // so what's already there shows (a photo behind a moving title doesn't
+    // shimmer from being matched to a new palette each frame).
+    let same = null;
+    if (this.prev) {
+      same = new Uint8Array(box.w * box.h);
+      const a32 = new Uint32Array(this.prev.buffer, this.prev.byteOffset, this.width * this.height);
+      const b32 = new Uint32Array(data.buffer, data.byteOffset, this.width * this.height);
+      for (let y = 0, p = 0; y < box.h; y++) {
+        for (let x = 0, q = (box.y + y) * this.width + box.x; x < box.w; x++, p++, q++) same[p] = a32[q] === b32[q] ? 1 : 0;
+      }
+    }
+    this.pending = { box, px, delay, same };
     this.prev = data;
   }
 
@@ -65,13 +77,28 @@ export class GifEncoder {
     const o = this.out;
     // 256 colors or fewer (a flat design): each exactly, with no dither to
     // speckle flat areas. More (photos, gradients): the nearest of 256, dithered.
-    const exact = f.hold ? { palette: [[0, 0, 0]], idx: Uint8Array.of(0) } : exactColors(px, 256);
-    const palette = exact ? exact.palette : buildPalette([px], 256);
+    // With unchanged pixels (`same`), color 0 is see-through and the colors
+    // come from the changed pixels only.
+    const same = f.hold ? null : f.same;
+    const room = same ? 255 : 256;
+    let palette;
+    let idx;
+    if (f.hold) {
+      palette = [[0, 0, 0]];
+      idx = Uint8Array.of(0);
+    } else {
+      const exact = exactColors(px, room, same);
+      palette = exact ? exact.palette : buildPalette([same ? changedOnly(px, same) : px], room);
+      idx = exact ? exact.idx : indexFrame(px, box.w, box.h, paletteMapper(palette), this.dither, box.x, box.y);
+      if (same) {
+        palette = [[0, 0, 0], ...palette];
+        for (let p = 0; p < idx.length; p++) idx[p] = same[p] ? 0 : idx[p] + 1;
+      }
+    }
     const bits = Math.max(1, Math.ceil(Math.log2(Math.max(2, palette.length))));
-    const idx = exact ? exact.idx : indexFrame(px, box.w, box.h, paletteMapper(palette), this.dither, box.x, box.y);
     // Graphic control: keep what's there (only this box is drawn over it);
-    // a hold frame's one pixel is see-through (color 0), so nothing changes.
-    o.bytes([0x21, 0xf9, 0x04, f.hold ? 0x05 : 0x04]);
+    // color 0 is see-through for a hold frame and around unchanged pixels.
+    o.bytes([0x21, 0xf9, 0x04, f.hold || same ? 0x05 : 0x04]);
     o.u16(Math.max(2, Math.round(delay / 10)));
     o.bytes([0x00, 0x00]);
     // The box, with its own palette.
@@ -215,12 +242,25 @@ export function buildPalette(datas, max = 256) {
   });
 }
 
-/** Every pixel's color as a palette index, when there are at most `max` colors (else null). */
-function exactColors(px, max) {
+/** The pixels not marked in `same`, as RGBA. */
+function changedOnly(px, same) {
+  let n = 0;
+  for (let p = 0; p < same.length; p++) if (!same[p]) n++;
+  const out = new Uint8ClampedArray(Math.max(1, n) * 4);
+  for (let p = 0, k = 0; p < same.length; p++) if (!same[p]) out.set(px.subarray(p * 4, p * 4 + 4), (k++) * 4);
+  return out;
+}
+
+/**
+ * Every pixel's color as a palette index, when there are at most `max`
+ * colors (else null). Pixels marked in `skip` don't count (their index is left 0).
+ */
+function exactColors(px, max, skip = null) {
   const seen = new Map();
   const palette = [];
   const idx = new Uint8Array(px.length / 4);
   for (let i = 0, p = 0; i < px.length; i += 4, p++) {
+    if (skip && skip[p]) continue;
     const c = (px[i] << 16) | (px[i + 1] << 8) | px[i + 2];
     let k = seen.get(c);
     if (k === undefined) {

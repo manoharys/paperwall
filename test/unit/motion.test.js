@@ -117,6 +117,7 @@ function readGif(bytes) {
   const screen = new Array(width * height).fill(null); // the picture so far, as [r, g, b]
   const frames = [];
   let delay = 0;
+  let trans = -1; // the see-through color of the next frame, if any
   let loop = null;
   for (;;) {
     const b = u8();
@@ -128,7 +129,10 @@ function readGif(bytes) {
         blocks.push(bytes.slice(p, p + n));
         p += n;
       }
-      if (label === 0xf9) delay = (blocks[0][1] | (blocks[0][2] << 8)) * 10;
+      if (label === 0xf9) {
+        delay = (blocks[0][1] | (blocks[0][2] << 8)) * 10;
+        trans = blocks[0][0] & 1 ? blocks[0][3] : -1;
+      }
       if (label === 0xff && blocks[1]) loop = blocks[1][1] | (blocks[1][2] << 8);
       continue;
     }
@@ -184,7 +188,7 @@ function readGif(bytes) {
       prev = entry;
       if (dict.length === 1 << size && size < 12) size++;
     }
-    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) screen[(y + j) * width + x + i] = colors[out[j * w + i]];
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (out[j * w + i] !== trans) screen[(y + j) * width + x + i] = colors[out[j * w + i]];
     frames.push({ x, y, w, h, delay, pixels: out.length, image: screen.slice() });
   }
   return { sig, width, height, gct, frames, loop };
@@ -479,4 +483,28 @@ test('[CLR-05] a gradient stop with no position is drawn at 0, never NaN', async
   const svg = renderPage(doc, 0);
   assert.doesNotMatch(svg, /NaN/);
   assert.match(svg, /<stop offset="0" stop-color="#ff0000"/);
+});
+
+test('[MOT-05] GIF: a photo behind something moving doesn\'t shimmer', async () => {
+  const { encodeGif } = await import('../../src/model/gif.js');
+  const W = 64;
+  const H = 64;
+  // A "photo": far more than 256 colors.
+  const photo = () => {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let i = 0; i < W * H; i++) d.set([(i * 37) & 255, (i * 91) & 255, (i * 13 + (i >> 6) * 7) & 255, 255], i * 4);
+    return d;
+  };
+  const withSquare = (x0) => {
+    const d = photo();
+    for (let y = 20; y < 30; y++) for (let x = x0; x < x0 + 10; x++) d.set([255, 0, 0, 255], (y * W + x) * 4);
+    return d;
+  };
+  const gif = readGif(encodeGif([{ data: withSquare(5), delay: 100 }, { data: withSquare(40), delay: 100 }], { width: W, height: H }));
+  const [a, b] = gif.frames.map((f) => f.image);
+  // A pixel inside the changed box that didn't change: the same on screen in both frames.
+  const p = 25 * W + 30;
+  assert.ok(gif.frames[1].x <= 30 && gif.frames[1].x + gif.frames[1].w > 30, 'inside the second frame\'s box');
+  assert.deepEqual(b[p], a[p], 'unchanged pixel keeps its color');
+  assert.deepEqual(b[25 * W + 45], [255, 0, 0], 'the square moved');
 });
