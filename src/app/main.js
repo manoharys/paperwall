@@ -184,9 +184,9 @@ async function openEditor(id, run) {
   const editor = new Editor(doc, {
     onOpenDesign: (newId) => (location.hash = `#/d/${newId}`),
     // (From smaller copies of its photos: quicker, and just as sharp that small.)
-    // (Its pages copied first: a drag starting while its pictures are made
-    // smaller doesn't land half-done in the preview.)
-    makeThumb: async (d) => thumbnail(await withSmallPictures({ ...d, pages: clone(d.pages) })),
+    // (What it shows copied first: a drag starting while its pictures are
+    // made smaller doesn't land half-done in the preview.)
+    makeThumb: async (d) => thumbnail(await withSmallPictures(firstLook(d))),
   });
   if (pendingFit) {
     editor.refitAllText();
@@ -205,6 +205,18 @@ async function openEditor(id, run) {
   // (Just its preview: not every design, videos and all.)
   if (!hasThumb) editor.thumb();
   current = { editor, unbind: drawEditor(editor) };
+}
+
+/**
+ * A copy of just what a design's preview shows: its first page, or a
+ * document's first sheet (the elements that start on it). Copying the
+ * whole of a long document would leave none of its text's laid-out lines
+ * to reuse, and its every paragraph measured again.
+ */
+function firstLook(doc) {
+  const { elements, ...page } = doc.pages[0];
+  const sheet = doc.document ? Math.min(doc.height, doc.document.pageHeight) : Infinity;
+  return { ...doc, pages: [{ ...clone(page), elements: clone(elements.filter((el) => el.y < sheet)) }] };
 }
 
 /**

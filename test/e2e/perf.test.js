@@ -148,6 +148,30 @@ test('[APP-07] typing in a 200-paragraph document stays quick', async () => {
   assert.ok(median < 100, `a keystroke: median ${Math.round(median)} ms (${times.map(Math.round).join(', ')})`);
   const redrawn = await page.evaluate(() => [...document.querySelectorAll('[data-testid="page"] svg > g[data-id]')].filter((n) => !n.kept).length);
   assert.ok(redrawn <= 4, `${redrawn} blocks drawn again`);
+  // Its preview (made after typing stops) draws the first sheet only, without measuring the whole document again:
+  // quick on its own, and typing stays quick while one is being made.
+  const thumbs = await page.evaluate(async () => {
+    const ed = window.paperwall.editor;
+    const ta = document.querySelector('[data-testid="text-editor"]');
+    let t0 = performance.now();
+    await ed.makeThumb(ed.doc);
+    const alone = performance.now() - t0;
+    t0 = performance.now();
+    const making = ed.makeThumb(ed.doc);
+    const keys = [];
+    for (let i = 0; i < 10; i++) {
+      const t = performance.now();
+      ta.value += 'y';
+      ta.dispatchEvent(new Event('input'));
+      await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+      keys.push(performance.now() - t);
+    }
+    await making;
+    return { alone, keys: keys.sort((a, b) => a - b) };
+  });
+  assert.ok(thumbs.alone < 400, `a preview: ${Math.round(thumbs.alone)} ms`);
+  const typing = thumbs.keys[thumbs.keys.length >> 1];
+  assert.ok(typing < 100, `a keystroke while a preview is made: median ${Math.round(typing)} ms (${thumbs.keys.map(Math.round).join(', ')})`);
   await page.keyboard.press('Escape');
   const text = await page.evaluate((i) => window.paperwall.editor.pageData.elements.find((e) => e.id === i).text, id);
   assert.match(text, /xxxx xxxx/);
@@ -323,10 +347,19 @@ test('[APP-07] a video still waits longer for its picture; one too slow is tried
     window.slowUntil = Infinity;
     window.unstub = () => Object.defineProperty(HTMLMediaElement.prototype, 'readyState', ready);
     Object.defineProperty(HTMLMediaElement.prototype, 'readyState', { configurable: true, get() { const r = ready.get.call(this); return performance.now() < window.slowUntil ? Math.min(1, r) : r; } });
+    // (Each time a still is taken, counted.)
+    const ed = window.paperwall.editor;
+    const take = ed.takeStill.bind(ed);
+    window.takes = 0;
+    ed.takeStill = (id) => (window.takes++, take(id));
   });
   await addClip(page, { x: 0, y: 0, w: 1080, h: 810 });
+  // A change while its still is being taken: tried again once that one's done.
+  await page.waitForFunction(() => window.takes === 1);
+  await page.evaluate(() => window.paperwall.editor.update({ y: 5 }, null, ['clip-el']));
+  await page.waitForFunction(() => window.takes === 2, null, { timeout: 15000 });
   // Its still: too slow, so not taken, but not given up on either.
-  await page.waitForFunction(() => window.paperwall.editor.stillLate?.has('clip-el'), null, { timeout: 15000 });
+  await page.waitForFunction(() => window.paperwall.editor.stillLate?.get('clip-el') === window.paperwall.editor.looks, null, { timeout: 15000 });
   assert.deepEqual(await page.evaluate(() => {
     const ed = window.paperwall.editor;
     return [!!ed.find('clip-el').still, ed.stillFailed.has('clip-el')];

@@ -556,11 +556,12 @@ export class Editor {
     const found = locate(this.doc, id, this.pageData.id);
     if (found?.el.type !== 'video') return;
     const start = found.el.trim?.start || 0;
+    const looks = this.looks; // (as it starts: a change made while it's taken gets it tried again)
     const frames = new VideoFrames(this.doc, { patient: true });
     try {
       const url = await frames.seek(found.el, 0, 1920 / Math.max(found.el.w, found.el.h));
       // Too slow this time (a busy device): tried again after the next change, not given up on.
-      if (!url && frames.late) this.stillLate?.set(id, this.looks);
+      if (!url && frames.late) this.stillLate?.set(id, looks);
       else if (!url) this.stillFailed?.set(id, start);
       if (!url || this.closed) return;
       const img = await loadImage(url);
