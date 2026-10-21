@@ -271,6 +271,8 @@ export const kn = {
   'common.units': "ಮಾನಕ",
   'common.customSize': "ನಿಮ್ಮದೇ ಗಾತ್ರ",
   'common.untitled': "ಹೆಸರಿಲ್ಲದ ವಿನ್ಯಾಸ",
+  'common.untitledDoc': "ಹೆಸರಿಲ್ಲದ ದಾಖಲೆ",
+  'common.untitledBoard': "ಹೆಸರಿಲ್ಲದ ವೈಟ್‌ಬೋರ್ಡ್",
   'common.save': "ಉಳಿಸಿ",
   'common.size': "ಗಾತ್ರ",
   'common.linkOrText': "ಲಿಂಕ್ ಅಥವಾ ಪಠ್ಯ",

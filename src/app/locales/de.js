@@ -271,6 +271,8 @@ export const de = {
   'common.units': "Einheit",
   'common.customSize': "Eigene Größe",
   'common.untitled': "Unbenanntes Design",
+  'common.untitledDoc': "Unbenanntes Dokument",
+  'common.untitledBoard': "Unbenanntes Whiteboard",
   'common.save': "Speichern",
   'common.size': "Größe",
   'common.linkOrText': "Link oder Text",

@@ -273,6 +273,8 @@ export const en = {
   'common.units': 'Units',
   'common.customSize': 'Custom size',
   'common.untitled': 'Untitled design',
+  'common.untitledDoc': 'Untitled document',
+  'common.untitledBoard': 'Untitled whiteboard',
   'common.save': 'Save',
   'common.size': 'Size',
   'common.linkOrText': 'Link or text',

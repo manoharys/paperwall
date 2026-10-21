@@ -5,7 +5,7 @@ import { History } from '../model/history.js';
 import * as cmd from '../model/commands.js';
 import {
   createText, createShape, createLine, createImage, createVideo, createFrame, createDrawing, thinPoints, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
-  TEXT_STYLES, versionSnapshot, isEmptyFrame, DOCUMENT, stillIsCurrent, presetById, documentSettings,
+  TEXT_STYLES, versionSnapshot, isEmptyFrame, DOCUMENT, stillIsCurrent, presetById, documentSettings, KEEPS_RATIO,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
 import { flowDocument, growBoard } from '../model/flow.js';
@@ -1095,6 +1095,30 @@ export class Editor {
     const ids = this.movable;
     if (!ids.length) return;
     this.change(() => cmd.moveElements(this.doc, this.page, ids, dx, dy), { key: `nudge:${ids.join(',')}` });
+  }
+
+  /**
+   * Make the one selected element wider or narrower (dw) and taller or
+   * shorter (dh), from the keyboard. Its top left stays put; pictures, icons
+   * and groups keep their proportions, and text stays as tall as its words.
+   */
+  resizeBy(dw, dh) {
+    const el = this.single;
+    if (!el || el.locked || el.type === 'connector' || el.type === 'line' || (!dw && !dh)) return;
+    this.change(() => {
+      const e = cmd.findElement(this.pageData, el.id);
+      let w = Math.max(1, e.w + dw);
+      let h = Math.max(1, e.h + dh);
+      if (KEEPS_RATIO.includes(e.type) || e.type === 'group') {
+        const r = e.w / e.h;
+        if (dw) h = Math.max(1, w / r);
+        else w = Math.max(1, h * r);
+      }
+      if (e.type === 'text') {
+        cmd.resizeElement(e, { x: e.x, y: e.y, w, h: e.h });
+        this.fitText(e);
+      } else cmd.resizeElement(e, { x: e.x, y: e.y, w, h }, { scaleContent: e.type === 'group' || e.type === 'qr' });
+    }, { key: `resize:${el.id}` });
   }
 
   selectionBounds() {

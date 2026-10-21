@@ -4,7 +4,7 @@ import { h, dialog, clear, toast, lazily, forget } from './ui.js';
 import { renderPage } from '../model/render.js';
 import { measure, ensureDesignFonts } from './fonts.js';
 import * as store from './store.js';
-import { t, formatNumber, formatDate } from './i18n.js';
+import { t, formatNumber, formatDate, ltr } from './i18n.js';
 import { versionLabel } from './names.js';
 
 function when(at) {
@@ -46,7 +46,7 @@ export function historyDialog(editor) {
         img,
         h('div', { class: 'version-meta' },
           h('b', null, when(v.at)),
-          h('small', null, `${v.label ? `${versionLabel(v.label)} · ` : ''}${t('common.pages', { n: v.pages })} · ${formatNumber(v.width)} × ${formatNumber(v.height)}`)),
+          h('small', null, `${v.label ? `${versionLabel(v.label)} · ` : ''}${t('common.pages', { n: v.pages })} · ${ltr(`${formatNumber(v.width)} × ${formatNumber(v.height)}`)}`)),
         h('button', { type: 'button', class: 'btn small', 'data-testid': 'version-restore', onClick: async () => {
           try {
             const doc = await store.versionDoc(v);

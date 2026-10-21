@@ -2,7 +2,8 @@
 // animations, template categories...), in the person's language. Anything
 // without a translation keeps the model's own English name.
 
-import { t, hasKey, formatNumber, languageName } from './i18n.js';
+import { t, hasKey, formatNumber, languageName, ltr } from './i18n.js';
+import { iconById, stickerById } from '../model/graphics.js';
 
 /** A key made from a name: "Tips & lists" → "tips-lists". */
 export function slug(s) {
@@ -20,9 +21,9 @@ export const presetName = (p) => named('preset', p.id, p.name);
 /** A preset's size in its own units: "1080 × 1080 px", "210 × 297 mm". */
 export function presetSize(p) {
   const n = (v) => formatNumber(v);
-  if (p.unit === 'mm') return `${n(Math.round((p.w / 300) * 25.4))} × ${n(Math.round((p.h / 300) * 25.4))} mm`;
-  if (p.unit === 'in') return `${n(p.w / 300)} × ${n(p.h / 300)} in`;
-  return `${n(p.w)} × ${n(p.h)} px`;
+  if (p.unit === 'mm') return ltr(`${n(Math.round((p.w / 300) * 25.4))} × ${n(Math.round((p.h / 300) * 25.4))} mm`);
+  if (p.unit === 'in') return ltr(`${n(p.w / 300)} × ${n(p.h / 300)} in`);
+  return ltr(`${n(p.w)} × ${n(p.h)} px`);
 }
 
 export const shapeName = (shape) => named('shape', shape);
@@ -49,6 +50,21 @@ export function maskName(mask) {
   if (mask === 'circle') return t('shape.ellipse');
   if (mask === 'polygon') return t('shape.hexagon');
   return shapeName(mask);
+}
+
+/** What an element is called (the panel's title, what's said when it's selected). */
+export function elementName(el) {
+  if (el.type === 'shape') return shapeName(el.shape);
+  if (el.type === 'icon') return iconById(el.iconId)?.name || typeName('icon');
+  if (el.type === 'sticker') return stickerById(el.stickerId)?.name || typeName('sticker');
+  return typeName(el.type);
+}
+
+/** A layer's name: a text's first words, else what it is. */
+export function layerName(el) {
+  if (el.type === 'text') return el.text.split('\n')[0].slice(0, 40) || typeName('text');
+  if (el.type === 'icon') return iconById(el.iconId)?.name || typeName('icon');
+  return el.type === 'shape' ? shapeName(el.shape) : typeName(el.type);
 }
 
 /** A template's size, like "Story", or its pixels when it has no named format. */

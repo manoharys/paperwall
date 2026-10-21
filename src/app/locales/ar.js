@@ -272,6 +272,8 @@ export const ar = {
   'common.units': "الوحدة",
   'common.customSize': "حجم مخصّص",
   'common.untitled': "تصميم بلا عنوان",
+  'common.untitledDoc': "مستند بلا عنوان",
+  'common.untitledBoard': "سبورة بيضاء بلا عنوان",
   'common.save': "حفظ",
   'common.size': "الحجم",
   'common.linkOrText': "رابط أو نص",

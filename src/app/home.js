@@ -9,7 +9,7 @@ import { readProjectFile } from './export.js';
 import { aiDesignBlock } from './ai-design.js';
 import { openOnlineSettings } from './online-settings.js';
 import { languagePicker } from './widgets.js';
-import { t, tn, formatNumber, formatAgo } from './i18n.js';
+import { t, tn, formatNumber, formatAgo, ltr } from './i18n.js';
 import { presetName, presetSize } from './names.js';
 
 export function renderHome(root, { openDesign, newDesign, toggleTheme, changeLanguage, installPrompt }) {
@@ -41,7 +41,7 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, changeLan
           h('span', { class: 'design-img', style: { aspectRatio: `${row.width} / ${row.height}` } }, row.thumb ? h('img', { src: row.thumb, alt: '' }) : icon('page', 32))),
         h('div', { class: 'design-meta' },
           h('b', { class: 'design-name', title: row.name }, row.name),
-          h('small', null, t('home.cardMeta', { size: `${formatNumber(row.width)} × ${formatNumber(row.height)}`, pages: t('common.pages', { n: row.pages }), when: formatAgo(row.updatedAt) }))),
+          h('small', null, t('home.cardMeta', { size: ltr(`${formatNumber(row.width)} × ${formatNumber(row.height)}`), pages: t('common.pages', { n: row.pages }), when: formatAgo(row.updatedAt) }))),
         h('div', { class: 'design-actions' },
           iconButton('text', t('home.rename'), () => renameDialog(row, fillDesigns), { 'data-testid': 'design-rename' }),
           iconButton('dup', t('common.duplicate'), async () => {
@@ -59,7 +59,22 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, changeLan
     }
   };
 
-  const custom = customSizeForm((w, hgt, unit) => newDesign(createDesign({ width: w, height: hgt, unit })));
+  // A new design's placeholder name (and a new document's title) in the
+  // person's language; a retitled document has its text measured again.
+  const newBlank = (doc) => {
+    const names = { 'Untitled design': t('common.untitled'), 'Untitled document': t('common.untitledDoc'), 'Untitled whiteboard': t('common.untitledBoard') };
+    if (names[doc.name]) doc.name = names[doc.name];
+    let retitled = false;
+    for (const el of doc.pages[0]?.elements || []) {
+      if (el.type === 'text' && el.text === 'Untitled document' && t('common.untitledDoc') !== el.text) {
+        el.text = t('common.untitledDoc');
+        retitled = true;
+      }
+    }
+    return newDesign(doc, retitled ? { fit: true } : undefined);
+  };
+
+  const custom = customSizeForm((w, hgt, unit) => newDesign(createDesign({ width: w, height: hgt, unit, name: t('common.untitled') })));
 
   const install = installPrompt() ? h('button', { type: 'button', class: 'btn', 'data-testid': 'install', onClick: () => installPrompt()?.prompt() }, icon('download'), t('home.install')) : null;
 
@@ -90,7 +105,7 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, changeLan
         h('p', { class: 'lead' }, t('home.lead'))),
       h('section', { class: 'block' },
         h('h2', null, t('home.create')),
-        h('div', { class: 'preset-grid', 'data-testid': 'presets' }, PRESETS.map((p) => h('button', { type: 'button', class: 'preset', 'data-testid': `preset-${p.id}`, onClick: () => newDesign(createDesignFromPreset(p.id)) },
+        h('div', { class: 'preset-grid', 'data-testid': 'presets' }, PRESETS.map((p) => h('button', { type: 'button', class: 'preset', 'data-testid': `preset-${p.id}`, onClick: () => newBlank(createDesignFromPreset(p.id)) },
           h('span', { class: 'preset-shape', style: { aspectRatio: `${p.w} / ${p.h}` } }),
           h('b', null, presetName(p)),
           h('small', null, presetSize(p))))),

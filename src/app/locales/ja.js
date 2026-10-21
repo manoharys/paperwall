@@ -271,6 +271,8 @@ export const ja = {
   'common.units': "単位",
   'common.customSize': "カスタムサイズ",
   'common.untitled': "無題のデザイン",
+  'common.untitledDoc': "無題のドキュメント",
+  'common.untitledBoard': "無題のホワイトボード",
   'common.save': "保存",
   'common.size': "サイズ",
   'common.linkOrText': "リンクまたはテキスト",

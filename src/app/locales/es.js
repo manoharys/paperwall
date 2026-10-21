@@ -271,6 +271,8 @@ export const es = {
   'common.units': "Unidades",
   'common.customSize': "Tamaño personalizado",
   'common.untitled': "Diseño sin título",
+  'common.untitledDoc': "Documento sin título",
+  'common.untitledBoard': "Pizarra sin título",
   'common.save': "Guardar",
   'common.size': "Tamaño",
   'common.linkOrText': "Enlace o texto",

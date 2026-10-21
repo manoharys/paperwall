@@ -1,7 +1,7 @@
 // Paperwall: boot, routing between the home screen and the editor, and the
 // editor's top bar.
 
-import { h, icon, iconButton, clear, toast, mod, forget } from './ui.js';
+import { h, icon, iconButton, clear, toast, mod, forget, announce, liveRegions } from './ui.js';
 import { Editor } from './editor.js';
 import { Canvas } from './canvas.js';
 import { Inspector, resizeDialog } from './inspector.js';
@@ -20,6 +20,7 @@ import { historyDialog } from './history.js';
 import { openOnlineSettings } from './online-settings.js';
 import { api as cutoutApi, forgetCuts } from './cutout.js';
 import { withSmallPictures } from './media.js';
+import { elementName } from './names.js';
 import { t, setLanguage, pickLanguage } from './i18n.js';
 
 const root = document.getElementById('app');
@@ -237,9 +238,12 @@ async function openEditor(id) {
   insert.el.querySelector('.insert-panel .sheet-close').addEventListener('click', () => setSheet('none'));
   forget(root);
   clear(root);
-  root.append(h('div', { class: 'editor' }, top, workspace, strip.el));
+  // First in the tab order: straight to the canvas, past the top bar and panels.
+  const skip = h('button', { type: 'button', class: 'skip-link', 'data-testid': 'skip-to-canvas', onClick: () => canvas.el.focus() }, t('a11y.skip'));
+  root.append(h('div', { class: 'editor' }, skip, top, workspace, strip.el));
   const unbindKeys = bindShortcuts(editor, canvas, { exportDialog: () => exportDialog(editor), findDialog: () => findDialog(editor) });
   const offTop = editor.on(syncTop);
+  const offSay = editor.on(sayChanges(editor));
   const onResize = () => canvas.layout();
   window.addEventListener('resize', onResize);
   syncTop();
@@ -270,6 +274,7 @@ async function openEditor(id) {
       document.fonts.removeEventListener('loadingdone', onFontsLoaded);
       unbindKeys();
       offTop();
+      offSay();
       window.removeEventListener('resize', onResize);
     },
   };
@@ -292,7 +297,32 @@ document.addEventListener('visibilitychange', () => {
   editor.maybeSaveVersion(60_000, { quick: true });
 });
 
+/**
+ * What screen readers hear as the editor changes under them: what's
+ * selected (its name, and where it is among the page's elements) and which
+ * page is showing. The same words aren't said twice in a row.
+ */
+function sayChanges(editor) {
+  let last = '';
+  const say = (words) => {
+    if (words === last) return;
+    last = words;
+    announce(words);
+  };
+  return (what) => {
+    if (what === 'page') return say(t('a11y.page', { n: editor.page + 1, total: editor.doc.pages.length }));
+    if (what !== 'selection') return;
+    const sel = editor.selected;
+    if (!sel.length) return say(t('a11y.nothing'));
+    if (sel.length > 1) return say(t('a11y.selectedMany', { n: sel.length }));
+    const els = editor.pageData.elements.filter((el) => !el.hidden);
+    const name = elementName(sel[0]);
+    say(t('a11y.selected', { name: sel[0].locked ? t('a11y.locked', { name }) : name, n: els.indexOf(sel[0]) + 1 || 1, total: els.length || 1 }));
+  };
+}
+
 async function boot() {
+  liveRegions();
   await applyTheme();
   await applyLanguage();
   await loadFonts();

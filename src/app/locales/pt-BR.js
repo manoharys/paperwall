@@ -272,6 +272,8 @@ export const ptBR = {
   'common.units': "Unidades",
   'common.customSize': "Tamanho personalizado",
   'common.untitled': "Design sem título",
+  'common.untitledDoc': "Documento sem título",
+  'common.untitledBoard': "Quadro branco sem título",
   'common.save': "Salvar",
   'common.size': "Tamanho",
   'common.linkOrText': "Link ou texto",

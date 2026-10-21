@@ -271,6 +271,8 @@ export const hi = {
   'common.units': "इकाई",
   'common.customSize': "अपना आकार",
   'common.untitled': "बिना नाम का डिज़ाइन",
+  'common.untitledDoc': "बिना नाम का दस्तावेज़",
+  'common.untitledBoard': "बिना नाम का व्हाइटबोर्ड",
   'common.save': "सेव करें",
   'common.size': "आकार",
   'common.linkOrText': "लिंक या टेक्स्ट",

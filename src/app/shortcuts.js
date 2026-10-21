@@ -13,6 +13,8 @@ export const SHORTCUTS = [
   ['shortcut.selectAll', () => `${mod}+A`],
   ['shortcut.deselect', () => 'Esc'],
   ['shortcut.nudge', () => t('keys.arrows')],
+  ['shortcut.resize', () => t('keys.altArrows')],
+  ['shortcut.cycle', () => t('keys.tab')],
   ['shortcut.group', () => `${mod}+G / ${mod}+Shift+G`],
   ['shortcut.lock', () => `${mod}+L`],
   ['shortcut.order', () => '] / ['],
@@ -52,6 +54,9 @@ export function bindShortcuts(editor, canvas, actions) {
   const onKey = (e) => {
     // (Presenting, or the presenter view: keys move the slides, never edit.)
     if (typing(e) || document.querySelector('.backdrop, .presenter, .presenter-view')) return;
+    // Enter and Space press the button that has focus (they don't edit the
+    // selected text from there).
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.closest?.('button, a[href], [role="button"], [role="tab"]')) return;
     // While a drag is going it holds parts of the design: keys wait (and a
     // cancelled drag then puts back exactly what it changed).
     if (editor.isDragging?.()) {
@@ -107,6 +112,8 @@ export function bindShortcuts(editor, canvas, actions) {
       const step = e.shiftKey ? 10 : 1;
       const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
       const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+      // With Alt the selection grows or shrinks instead (right and down: bigger).
+      if (e.altKey) return editor.resizeBy(dx, dy);
       return editor.nudge(dx, dy);
     }
     if (e.key === 'Enter') {

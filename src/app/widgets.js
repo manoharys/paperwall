@@ -21,6 +21,7 @@ let openPopover = null;
 export function closePopover() {
   if (!openPopover) return;
   openPopover.cleanup?.();
+  openPopover.opener?.setAttribute('aria-expanded', 'false');
   openPopover.remove();
   openPopover = null;
   document.dispatchEvent(new Event('paperwall:popover-closed'));
@@ -34,10 +35,13 @@ function showPopover(pop, btn, { alignRight = false } = {}) {
   pop.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       e.stopPropagation();
-      closePopover();
+      // Focus first: a panel redrawn as it closes finds it there, and keeps it.
       btn.focus();
+      closePopover();
     }
   });
+  pop.opener = btn;
+  btn.setAttribute('aria-expanded', 'true');
   document.body.append(pop);
   const r = btn.getBoundingClientRect();
   const left = alignRight ? r.left - pop.offsetWidth + r.width : r.left;
@@ -63,7 +67,7 @@ document.addEventListener('pointerdown', (e) => {
  * getContext() returns { used: [], brand: [] }.
  */
 export function colorButton({ label, value, onChange, getContext = () => ({}), testid }) {
-  const btn = h('button', { type: 'button', class: 'swatch-btn', title: label, 'aria-label': label, 'data-testid': testid });
+  const btn = h('button', { type: 'button', class: 'swatch-btn', title: label, 'aria-label': label, 'aria-haspopup': 'true', 'aria-expanded': 'false', 'data-testid': testid });
   const paint = (v) => {
     btn.style.setProperty('--swatch', v || 'transparent');
     btn.classList.toggle('empty', !v);
@@ -111,6 +115,9 @@ export function colorButton({ label, value, onChange, getContext = () => ({}), t
       row(t('common.brandKit'), ctx.brand),
       PALETTES.map((p) => row(paletteName(p.name), p.colors)));
     showPopover(pop, btn, { alignRight: true });
+    // Straight into the hex code, so a color can be typed with no mouse.
+    hexInput.focus();
+    hexInput.select();
   });
   return btn;
 }
@@ -203,7 +210,7 @@ function clamp(v, a, b) {
  * list where every name is drawn in its own font (loaded as it scrolls by).
  */
 export function fontPicker({ label = t('font.label'), value, fonts, kinds, onChange, testid, extra = [] }) {
-  const btn = h('button', { type: 'button', class: 'font-btn', 'aria-label': `${label}: ${value}`, 'data-testid': testid, style: { fontFamily: `"${value}"` } }, value, icon('down', 16));
+  const btn = h('button', { type: 'button', class: 'font-btn', 'aria-label': `${label}: ${value}`, 'aria-haspopup': 'listbox', 'aria-expanded': 'false', 'data-testid': testid, style: { fontFamily: `"${value}"` } }, value, icon('down', 16));
   btn.addEventListener('click', () => {
     if (openPopover?.dataset.for === label) return closePopover();
     closePopover();
@@ -327,7 +334,8 @@ export function menuButton({ iconName, label, testid, content }) {
     closePopover();
     const pop = h('div', { class: 'popover menu-pop', 'data-for': label, 'data-testid': `${testid}-menu` }, content());
     showPopover(pop, btn, { alignRight: true });
-  }, { 'data-testid': testid, class: 'icon-btn menu-btn' });
+    pop.querySelector('button, input, select')?.focus();
+  }, { 'data-testid': testid, class: 'icon-btn menu-btn', 'aria-haspopup': 'true', 'aria-expanded': 'false' });
   return btn;
 }
 

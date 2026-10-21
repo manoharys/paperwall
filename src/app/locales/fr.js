@@ -271,6 +271,8 @@ export const fr = {
   'common.units': "Unités",
   'common.customSize': "Taille personnalisée",
   'common.untitled': "Design sans titre",
+  'common.untitledDoc': "Document sans titre",
+  'common.untitledBoard': "Tableau blanc sans titre",
   'common.save': "Enregistrer",
   'common.size': "Taille",
   'common.linkOrText': "Lien ou texte",

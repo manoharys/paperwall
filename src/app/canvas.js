@@ -49,7 +49,14 @@ export class Canvas {
     this.rulerY = h('div', { class: 'ruler y', 'data-testid': 'ruler-y', title: t('canvas.rulerY') });
     this.wrap = h('div', { class: 'page-wrap', 'data-testid': 'page' }, this.svgHost, this.overlay, this.rulerX, this.rulerY);
     this.board = h('div', { class: 'board' }, this.wrap);
-    this.el = h('div', { class: 'stage', 'data-testid': 'stage', tabindex: '-1' }, this.board);
+    // The canvas takes keyboard focus: Tab picks elements one at a time (see
+    // cycleSelection), the arrow keys move them (shortcuts.js).
+    const help = h('p', { id: 'canvas-help', class: 'sr-only' }, t('canvas.help'));
+    this.el = h('div', { class: 'stage', 'data-testid': 'stage', tabindex: '0', role: 'application', 'aria-label': t('canvas.label'), 'aria-describedby': help.id }, this.board, help);
+    this.el.addEventListener('keydown', (e) => {
+      if (e.target !== this.el || e.key !== 'Tab' || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (this.cycleSelection(e.shiftKey ? -1 : 1)) e.preventDefault();
+    });
     this.textarea = null;
     this.frame = 0;
 
@@ -169,6 +176,22 @@ export class Canvas {
       this.frame = 0;
       this.render();
     });
+  }
+
+  /**
+   * Select the next (dir 1) or previous (-1) element on the page, back to
+   * front, for the keyboard. Past either end it returns false: Tab then
+   * leaves the canvas as usual, and the selection stays.
+   */
+  cycleSelection(dir) {
+    const ed = this.ed;
+    const els = ed.pageData.elements.filter((el) => !el.hidden);
+    if (!els.length) return false;
+    const at = ed.selection.length === 1 ? els.findIndex((el) => el.id === ed.selection[0]) : -1;
+    const next = at < 0 ? (dir > 0 ? 0 : els.length - 1) : at + dir;
+    if (next < 0 || next >= els.length) return false;
+    ed.select([els[next].id]);
+    return true;
   }
 
   // ---------- drawing ----------
@@ -846,6 +869,8 @@ export class Canvas {
       if (e.key === 'Escape' || ((e.metaKey || e.ctrlKey) && e.key === 'Enter')) {
         e.preventDefault();
         this.finishTextEdit();
+        // Done from the keyboard: back on the canvas, the text still selected.
+        this.el.focus({ preventScroll: true });
       }
     });
     ta.addEventListener('blur', () => this.finishTextEdit());

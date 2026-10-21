@@ -74,6 +74,14 @@ export function formatNumber(n, opts = {}) {
   return numbers.get(key).format(n);
 }
 
+/**
+ * Text that must read left to right whatever the language ("1080 × 1080 px"),
+ * kept in one piece inside right-to-left sentences.
+ */
+export function ltr(text) {
+  return isRtl() ? `⁦${text}⁩` : text;
+}
+
 /** A date (and maybe a time) in this language. */
 export function formatDate(at, opts = { day: 'numeric', month: 'short', year: 'numeric' }) {
   return new Intl.DateTimeFormat(lang, opts).format(new Date(at));

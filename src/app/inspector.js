@@ -9,13 +9,12 @@ import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAU
 import { collectColors, cropZoom } from '../model/commands.js';
 import { renderElementOnly, TEXT_EFFECTS } from '../model/render.js';
 import { measure, addCustomFont, customFontNames, ensureFont, fontSettled } from './fonts.js';
-import { iconById, stickerById } from '../model/graphics.js';
 import { getSetting } from './store.js';
 import { aiWritingSection } from './ai-writing.js';
 import { creditSection } from './photos.js';
 import { smartRemoveBackground, cutoutOf, refineCutout } from './cutout.js';
-import { t, formatNumber, language } from './i18n.js';
-import { shapeName, typeName, maskName, effectName, animName, transitionName, paletteName, duotoneName, presetName } from './names.js';
+import { t, formatNumber, language, ltr } from './i18n.js';
+import { shapeName, maskName, effectName, animName, transitionName, paletteName, duotoneName, presetName, elementName, layerName } from './names.js';
 
 const DUOTONES = [
   ['Ink', '#1a1a2e', '#f7f4ef'], ['Ocean', '#0b2a45', '#7fd1c7'], ['Sunset', '#5b1a6e', '#ffb36b'], ['Berry', '#3b1426', '#ff8fa3'],
@@ -52,7 +51,7 @@ export class Inspector {
     this.onPlay = onPlay;
     this.tab = 'edit';
     this.brand = { colors: [] };
-    this.body = h('div', { class: 'inspector-body' });
+    this.body = h('div', { class: 'inspector-body', role: 'tabpanel' });
     this.tabs = h('div', { class: 'tabs', role: 'tablist' },
       this.tabButton('edit', t('inspector.edit')),
       this.tabButton('layers', t('inspector.layers')));
@@ -90,6 +89,13 @@ export class Inspector {
   colorContext = () => ({ used: collectColors(this.ed.doc).slice(0, 12), brand: this.brand.colors || [] });
 
   render() {
+    // Drawn again under the keyboard: focus goes back to the same control.
+    const keep = this.focusKey();
+    this.draw();
+    this.refocus(keep);
+  }
+
+  draw() {
     this.stale = false;
     closePopover();
     for (const b of this.tabs.children) b.setAttribute('aria-selected', String(b.dataset.tab === this.tab));
@@ -100,6 +106,20 @@ export class Inspector {
     if (!sel.length) return this.body.append(...this.pagePanel().filter(Boolean));
     if (sel.length > 1) return this.body.append(...this.multiPanel(sel));
     this.body.append(...this.elementPanel(sel[0]).filter(Boolean));
+  }
+
+  /** Which control has focus, as something to find again once the panel is redrawn. */
+  focusKey() {
+    const a = document.activeElement;
+    if (!a || !this.body.contains(a)) return null;
+    return { testid: a.dataset.testid, label: a.getAttribute('aria-label'), layer: a.closest('[data-id]')?.dataset.id };
+  }
+
+  refocus(key) {
+    if (!key || (!key.testid && !key.label)) return;
+    const same = (el) => (key.testid ? el.dataset.testid === key.testid : el.getAttribute('aria-label') === key.label)
+      && (!key.layer || el.closest('[data-id]')?.dataset.id === key.layer);
+    [...this.body.querySelectorAll('button, input, select, textarea')].find(same)?.focus();
   }
 
   // ---------- helpers ----------
@@ -625,7 +645,7 @@ export class Inspector {
     const doc = ed.doc;
     const bg = ed.pageData.background || { type: 'color', color: '#ffffff' };
     const unit = doc.unit || 'px';
-    const size = unit === 'px' ? `${formatNumber(doc.width)} × ${formatNumber(doc.height)} px` : `${formatNumber(fromPx(doc.width, unit))} × ${formatNumber(fromPx(doc.height, unit))} ${unit}`;
+    const size = ltr(unit === 'px' ? `${formatNumber(doc.width)} × ${formatNumber(doc.height)} px` : `${formatNumber(fromPx(doc.width, unit))} × ${formatNumber(fromPx(doc.height, unit))} ${unit}`);
     const grad = bg.type === 'gradient' ? bg.gradient : null;
     const notesAt = ed.page; // (the page this panel was made for)
     return [
@@ -669,20 +689,24 @@ export class Inspector {
     const ed = this.ed;
     const els = [...ed.pageData.elements].reverse();
     if (!els.length) return h('p', { class: 'empty-note' }, t('layers.empty'));
-    const list = h('ol', { class: 'layers', 'data-testid': 'layers' });
+    const list = h('ol', { class: 'layers', 'data-testid': 'layers', 'aria-label': t('layers.list') });
     els.forEach((el, i) => {
       const index = ed.pageData.elements.length - 1 - i;
-      const thumb = h('span', { class: 'layer-thumb', html: renderElementOnly(ed.doc, el.type === 'text' ? { ...el } : el, { measure, idPrefix: `ly${i}` }) });
+      const thumb = h('span', { class: 'layer-thumb', 'aria-hidden': 'true', html: renderElementOnly(ed.doc, el.type === 'text' ? { ...el } : el, { measure, idPrefix: `ly${i}` }) });
       const name = layerName(el);
+      const on = ed.selection.includes(el.id);
       const item = h('li', {
-        class: `layer${ed.selection.includes(el.id) ? ' on' : ''}${el.hidden ? ' hidden' : ''}`,
+        class: `layer${on ? ' on' : ''}${el.hidden ? ' hidden' : ''}`,
         draggable: 'true',
         'data-id': el.id,
         'data-testid': 'layer',
         onClick: (e) => ed.select([el.id], { add: e.shiftKey }),
       },
       thumb,
-      h('span', { class: 'layer-name' }, name),
+      // The name is a button, so the list works from the keyboard (its click
+      // reaches the row, which selects); pressed says it's selected.
+      h('button', { type: 'button', class: 'layer-name', 'aria-pressed': String(on), 'data-testid': 'layer-select' },
+        el.locked ? t('a11y.locked', { name }) : name),
       el.locked ? icon('lock', 16) : null,
       iconButton(el.hidden ? 'eyeOff' : 'eye', el.hidden ? t('layers.show') : t('layers.hide'), (e) => {
         e.stopPropagation();
@@ -707,21 +731,6 @@ export class Inspector {
     });
     return h('div', null, h('p', { class: 'hint' }, t('layers.hint')), list);
   }
-}
-
-/** What an element is called in the panel's title. */
-function elementName(el) {
-  if (el.type === 'shape') return shapeName(el.shape);
-  if (el.type === 'icon') return iconById(el.iconId)?.name || typeName('icon');
-  if (el.type === 'sticker') return stickerById(el.stickerId)?.name || typeName('sticker');
-  return typeName(el.type);
-}
-
-/** A layer's name: a text's first words, else what it is. */
-function layerName(el) {
-  if (el.type === 'text') return el.text.split('\n')[0].slice(0, 40) || typeName('text');
-  if (el.type === 'icon') return iconById(el.iconId)?.name || typeName('icon');
-  return el.type === 'shape' ? shapeName(el.shape) : typeName(el.type);
 }
 
 function styleBtn(name, label, on, onClick, testid) {
@@ -749,7 +758,7 @@ export function resizeDialog(editor) {
     toast(t('resize.done'));
   };
   const presets = h('div', { class: 'preset-grid' }, PRESETS.map((p) => h('button', { type: 'button', class: 'preset', 'data-testid': `resize-preset-${p.id}`, onClick: () => go(p.w, p.h, `${doc.name} (${presetName(p)})`, p) },
-    h('span', { class: 'preset-shape', style: { aspectRatio: `${p.w} / ${p.h}` } }), h('b', null, presetName(p)), h('small', null, `${formatNumber(p.w)} × ${formatNumber(p.h)}`))));
+    h('span', { class: 'preset-shape', style: { aspectRatio: `${p.w} / ${p.h}` } }), h('b', null, presetName(p)), h('small', null, ltr(`${formatNumber(p.w)} × ${formatNumber(p.h)}`)))));
   const custom = h('form', { class: 'custom-size', onSubmit: (e) => {
     e.preventDefault();
     const w = toPx(+wIn.value, unit);

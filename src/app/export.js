@@ -13,7 +13,7 @@ import { exportGif, exportVideo, canMakeVideo } from './motion-export.js';
 import { exportVectorPdf, exportPptx } from './pro-export.js';
 import { designMoves, startsTooLate, timeline } from '../model/motion.js';
 import { onPaper as sheetsOf } from '../model/flow.js';
-import { t, formatNumber } from './i18n.js';
+import { t, formatNumber, ltr } from './i18n.js';
 import { pageLabel } from './names.js';
 
 const MAX_SIDE = 16000;
@@ -233,7 +233,7 @@ export function exportDialog(editor) {
       state.format === 'png' || state.format === 'jpg' ? section(t('common.size'), segmented({ label: t('common.size'), value: state.scale, testid: 'export-scale', onChange: (v) => {
         state.scale = v;
         draw();
-      }, options: [1, 2, 3].map((s) => ({ value: s, label: `${formatNumber(s)}x`, text: `${formatNumber(s)}x · ${formatNumber(Math.round(doc.width * maxScale(doc, s)))} × ${formatNumber(Math.round(doc.height * maxScale(doc, s)))}` })) })) : null,
+      }, options: [1, 2, 3].map((s) => ({ value: s, label: `${formatNumber(s)}x`, text: ltr(`${formatNumber(s)}x · ${formatNumber(Math.round(doc.width * maxScale(doc, s)))} × ${formatNumber(Math.round(doc.height * maxScale(doc, s)))}`) })) })) : null,
       state.format === 'png' || state.format === 'svg' ? toggle({ label: t('export.transparent'), checked: state.transparent, testid: 'export-transparent', onChange: (v) => (state.transparent = v) }) : null,
       state.format === 'jpg' ? slider({ label: t('export.quality'), value: state.quality, min: 40, max: 100, unit: '%', testid: 'export-quality', onChange: (v) => (state.quality = v) }) : null,
       doc.pages.length > 1 ? section(t('export.pages'), h('div', { class: 'page-picks', 'data-testid': 'export-pages' }, doc.pages.map((_, i) => {

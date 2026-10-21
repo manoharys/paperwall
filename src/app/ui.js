@@ -167,33 +167,80 @@ export function debounce(fn, ms) {
 
 // ---------- toasts and dialogs ----------
 
-export function toast(message, kind = 'info') {
+/**
+ * The page's live regions, made at start so screen readers are listening
+ * before anything is said: toasts, and quieter notes (what's selected).
+ */
+export function liveRegions() {
   let host = document.getElementById('toasts');
   if (!host) {
     host = h('div', { id: 'toasts', role: 'status', 'aria-live': 'polite' });
     document.body.append(host);
   }
-  const t = h('div', { class: `toast ${kind}` }, message);
-  host.append(t);
-  setTimeout(() => t.classList.add('out'), 2600);
-  setTimeout(() => t.remove(), 3000);
+  let note = document.getElementById('announcer');
+  if (!note) {
+    note = h('div', { id: 'announcer', class: 'sr-only', role: 'status', 'aria-live': 'polite', 'data-testid': 'announcer' });
+    document.body.append(note);
+  }
+  return { host, note };
+}
+
+export function toast(message, kind = 'info') {
+  const { host } = liveRegions();
+  // (An error is said at once, over whatever else is being read.)
+  const item = h('div', { class: `toast ${kind}`, role: kind === 'error' ? 'alert' : null }, message);
+  host.append(item);
+  setTimeout(() => item.classList.add('out'), 2600);
+  setTimeout(() => item.remove(), 3000);
+}
+
+/** Tell screen reader users about a change away from where they are. */
+export function announce(message) {
+  const { note } = liveRegions();
+  // (The same words twice are still said twice: emptied first.)
+  note.textContent = '';
+  setTimeout(() => (note.textContent = message), 30);
+}
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** What Tab can reach inside `root`, in order (shown ones only). */
+export function focusables(root) {
+  return [...root.querySelectorAll(FOCUSABLE)].filter((el) => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden');
 }
 
 /**
  * A modal dialog. Returns { el, close }. `steady()`: while it says so, a
  * click beside the dialog doesn't close it (Close and Escape still do).
+ * Tab stays inside it, and closing it puts focus back where it was.
  */
 export function dialog(title, body, { onClose, wide = false, testid, steady = null } = {}) {
+  const opener = document.activeElement;
   const backdrop = h('div', { class: 'backdrop' });
+  let closed = false;
   const close = () => {
+    if (closed) return;
+    closed = true;
     backdrop.remove();
     document.removeEventListener('keydown', onKey, true);
     onClose?.();
+    // Back to what opened it, if it's still there and nothing else took focus.
+    const now = document.activeElement;
+    if (opener?.isConnected && opener !== document.body && (!now || now === document.body)) opener.focus();
   };
   const onKey = (e) => {
+    // Only the dialog on top listens (another may have opened over this one).
+    if ([...document.querySelectorAll('.backdrop')].at(-1) !== backdrop) return;
     if (e.key === 'Escape') {
       e.stopPropagation();
       close();
+    } else if (e.key === 'Tab') {
+      const items = focusables(box);
+      if (!items.length) return;
+      const at = items.indexOf(document.activeElement);
+      const next = e.shiftKey ? (at <= 0 ? items.length - 1 : at - 1) : (at < 0 || at === items.length - 1 ? 0 : at + 1);
+      e.preventDefault();
+      items[next].focus();
     }
   };
   const box = h('div', { class: `dialog${wide ? ' wide' : ''}`, role: 'dialog', 'aria-modal': 'true', 'aria-label': title, 'data-testid': testid },
@@ -205,7 +252,7 @@ export function dialog(title, body, { onClose, wide = false, testid, steady = nu
   });
   document.addEventListener('keydown', onKey, true);
   document.body.append(backdrop);
-  const first = box.querySelector('input, select, button:not(.icon-btn)');
+  const first = box.querySelector('input, select, button:not(.icon-btn)') || box.querySelector('button');
   first?.focus();
   return { el: box, close };
 }
