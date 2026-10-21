@@ -14,9 +14,10 @@ import { loadFonts, registerDesignFonts, ensureDesignFonts, clearMeasureCache } 
 import * as store from './store.js';
 import { validateDesign, versionSnapshot } from '../model/doc.js';
 import { fontsUsed } from '../model/fonts.js';
-import { menuButton, toggle, segmented } from './widgets.js';
+import { menuButton, toggle, segmented, closePopover } from './widgets.js';
 import { findDialog } from './find.js';
 import { historyDialog } from './history.js';
+import { openOnlineSettings } from './online-settings.js';
 
 const root = document.getElementById('app');
 let current = null; // { editor, unbind }
@@ -168,6 +169,7 @@ async function openEditor(id) {
       iconButton('history', 'Version history', () => historyDialog(editor), { 'data-testid': 'history-btn' }),
       menuButton({ iconName: 'ruler', label: 'View: rulers, guides, grid', testid: 'view', content: () => viewMenu(editor) }),
       iconButton('keyboard', 'Keyboard shortcuts (?)', () => cheatSheet(), { 'data-testid': 'shortcuts-btn' }),
+      menuButton({ iconName: 'more', label: 'More', testid: 'main', content: mainMenu }),
       iconButton('moon', 'Dark mode', toggleTheme, { 'data-testid': 'theme-toggle' }),
       h('button', { type: 'button', class: 'btn primary', 'data-testid': 'download', onClick: () => exportDialog(editor) }, icon('download'), h('span', null, 'Download'))));
 
@@ -257,6 +259,16 @@ async function boot() {
 }
 
 boot();
+
+/** The top bar's More menu: settings that aren't about this design. */
+function mainMenu() {
+  const item = (label, testid, run) => h('button', { type: 'button', class: 'btn small wide', 'data-testid': testid, onClick: () => {
+    closePopover();
+    run();
+  } }, label);
+  return h('div', { class: 'stack' },
+    item('Online extras…', 'menu-online', () => openOnlineSettings()));
+}
 
 /** Rulers, guides, grid, margins and bleed: how the page is shown, not part of the design. */
 function viewMenu(editor) {
