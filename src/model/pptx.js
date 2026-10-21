@@ -306,27 +306,31 @@ class Slide {
       `<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="${pad}" rIns="0" bIns="${pad}" rtlCol="0" anchor="t"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paras}</p:txBody></p:sp>`;
   }
 
+  /** The slide's background fill: its color or gradient (a photo's color behind it). */
   background(page) {
     const bg = page.background;
     if (!bg) return '';
-    let f;
-    if (bg.type === 'color') f = fill(bg.color);
-    else if (bg.type === 'gradient') f = fill(bg.gradient);
-    else if (bg.type === 'image') {
-      const m = this.media(`asset:${bg.assetId}:file`);
-      if (!m) f = fill(bg.color || '#ffffff');
-      else {
-        // Cover the slide, cropping the picture's overflow evenly (as the page does).
-        const iw = m.width || 1;
-        const ih = m.height || 1;
-        const s = Math.max(this.doc.width / iw, this.doc.height / ih);
-        const cx = (1 - this.doc.width / (iw * s)) / 2;
-        const cy = (1 - this.doc.height / (ih * s)) / 2;
-        const p = (v) => Math.round(v * 100000);
-        f = `<a:blipFill dpi="0" rotWithShape="1"><a:blip r:embed="${this.imageRel(m.name)}"/><a:srcRect l="${p(cx)}" t="${p(cy)}" r="${p(cx)}" b="${p(cy)}"/><a:stretch><a:fillRect/></a:stretch></a:blipFill>`;
-      }
-    } else return '';
-    return `<p:bg><p:bgPr>${f}<a:effectLst/></p:bgPr></p:bg>`;
+    const f = bg.type === 'color' ? fill(bg.color) : bg.type === 'gradient' ? fill(bg.gradient) : bg.type === 'image' ? fill(bg.color || '#ffffff') : null;
+    return f ? `<p:bg><p:bgPr>${f}<a:effectLst/></p:bgPr></p:bg>` : '';
+  }
+
+  /**
+   * A background photo: a locked picture filling the slide behind everything,
+   * its overflow cropped evenly as the page does. (Slide backgrounds can't be
+   * cropped in every app; pictures can.)
+   */
+  backgroundPicture(page) {
+    const bg = page.background;
+    const m = bg?.type === 'image' ? this.media(`asset:${bg.assetId}:file`) : null;
+    if (!m) return '';
+    const { width: W, height: H } = this.doc;
+    const s = Math.max(W / (m.width || 1), H / (m.height || 1));
+    const cx = (1 - W / ((m.width || 1) * s)) / 2;
+    const cy = (1 - H / ((m.height || 1) * s)) / 2;
+    const p = (v) => Math.round(v * 100000);
+    return `<p:pic><p:nvPicPr><p:cNvPr id="${this.id()}" name="Background"/><p:cNvPicPr><a:picLocks noGrp="1" noSelect="1" noRot="1" noChangeAspect="1" noMove="1" noResize="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>` +
+      `<p:blipFill><a:blip r:embed="${this.imageRel(m.name)}"/><a:srcRect l="${p(cx)}" t="${p(cy)}" r="${p(cx)}" b="${p(cy)}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>` +
+      `<p:spPr>${xfrm({ x: 0, y: 0, w: W, h: H }, this.emu)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
   }
 }
 
@@ -414,6 +418,7 @@ export function buildPptx(doc, pages, env = {}) {
     const page = doc.pages[index];
     const s = new Slide(doc, emu, media);
     s.rel(`${REL}/slideLayout`, '../slideLayouts/slideLayout1.xml');
+    const behind = s.backgroundPicture(page);
     const shapes = page.elements.filter((el) => !el.hidden).map((el) => {
       const key = `${index}:${el.id}`;
       if (plan.has(key)) {
@@ -426,7 +431,7 @@ export function buildPptx(doc, pages, env = {}) {
       return s.element(el);
     }).join('');
     if (notesOf(page)) s.rel(`${REL}/notesSlide`, `../notesSlides/notesSlide${withNotes.indexOf(index) + 1}.xml`);
-    const xml = `${XML}<p:sld ${NS}><p:cSld>${s.background(page)}<p:spTree>${GROUP_ROOT}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
+    const xml = `${XML}<p:sld ${NS}><p:cSld>${s.background(page)}<p:spTree>${GROUP_ROOT}${behind}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
     return { xml, rels: s.rels, n: n + 1, index };
   });
   const cx = Math.round(doc.width * emu);
