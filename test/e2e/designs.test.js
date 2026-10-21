@@ -2,7 +2,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { openApp, newDesign, waitForEditor, state, elements, addText, teardown, setup, distFile, mod, openTab } from './helpers.js';
+import { openApp, newDesign, waitForEditor, state, elements, addText, teardown, setup, distFile, mod, openTab, makePng, uploadImages } from './helpers.js';
 
 after(teardown);
 
@@ -89,6 +89,38 @@ test('[DOC-08] reopen a design exactly as you left it after closing the tab', as
   const after = await state(again);
   assert.deepEqual(after.pages, before.pages);
   assert.equal(after.pages[0].elements[0].id, t.id);
+  await context.close();
+});
+
+test('[DOC-07] [DOC-08] pictures are kept apart from the saved design, and come back with it', async () => {
+  const { page, context, url } = await newDesign();
+  await uploadImages(page, [await makePng(page, { w: 300, h: 200 })]);
+  await page.waitForFunction(() => window.paperwall.editor.pageData.elements.some((e) => e.type === 'image'));
+  await page.waitForTimeout(800);
+  const hash = await page.evaluate(() => location.hash);
+  const stored = await page.evaluate(async () => {
+    const req = indexedDB.open('paperwall');
+    const db = await new Promise((ok) => (req.onsuccess = () => ok(req.result)));
+    const all = (store) => new Promise((ok) => (db.transaction(store).objectStore(store).getAll().onsuccess = (e) => ok(e.target.result)));
+    const rows = await all('designs');
+    const media = await all('media');
+    db.close();
+    const id = window.paperwall.editor.doc.id;
+    const row = rows.find((r) => r.id === id);
+    return { inline: JSON.stringify(row.doc).includes('data:image'), files: media.filter((m) => typeof m === 'string' && m.startsWith('data:image')).length };
+  });
+  assert.equal(stored.inline, false, 'no picture inside the saved design');
+  assert.ok(stored.files >= 1, 'the picture is in its own row');
+  await page.close();
+  const again = await context.newPage();
+  await again.goto(url + hash);
+  await waitForEditor(again);
+  const back = await again.evaluate(() => {
+    const ed = window.paperwall.editor;
+    const img = ed.pageData.elements.find((e) => e.type === 'image');
+    return img && ed.doc.assets[img.assetId]?.dataUrl?.startsWith('data:image/png');
+  });
+  assert.ok(back, 'the picture comes back');
   await context.close();
 });
 

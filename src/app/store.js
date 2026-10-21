@@ -4,8 +4,11 @@
 import { keptAssets } from '../model/doc.js';
 
 const DB_NAME = 'paperwall';
-const DB_VERSION = 2;
-const STORES = ['designs', 'uploads', 'settings', 'versions'];
+const DB_VERSION = 3;
+// media: each design's pictures, videos, sounds and fonts, one row per file
+// ("<designId>|<assetId>"), apart from the design, so saving an edit doesn't
+// rewrite them and listing designs doesn't read them.
+const STORES = ['designs', 'uploads', 'settings', 'versions', 'media'];
 
 let dbPromise = null;
 const memory = Object.fromEntries(STORES.map((s) => [s, new Map()]));
@@ -159,12 +162,59 @@ export async function saveDesign(doc, thumb) {
       else thumb = newer;
     }
   }
-  // Without files nothing uses any more (a deleted video, a replaced soundtrack).
-  await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: doc.height, pages: doc.pages.length, thumb: thumb ?? null, doc: keptAssets(doc) });
+  // Without files nothing uses any more (a deleted video, a replaced
+  // soundtrack). Each file goes in its own row, written once; the design
+  // keeps only where to find it.
+  const kept = keptAssets(doc);
+  const assets = {};
+  const writes = [];
+  for (const [id, a] of Object.entries(kept.assets)) {
+    const key = mediaKey(doc.id, id);
+    const { dataUrl, ...details } = a;
+    if (written.get(a) !== key) writes.push([key, dataUrl, a]);
+    assets[id] = { ...details, stored: key };
+  }
+  if (writes.length) {
+    await batch('media', writes.map(([key, dataUrl]) => [key, dataUrl]));
+    for (const [key, , a] of writes) written.set(a, key);
+  }
+  await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: doc.height, pages: doc.pages.length, thumb: thumb ?? null, doc: { ...kept, assets } });
+  // Files this design no longer uses go (when the set of files has changed).
+  const ids = Object.keys(assets).sort().join(',');
+  if (lastFiles.get(doc.id) !== ids) {
+    lastFiles.set(doc.id, ids);
+    const keep = new Set(Object.values(assets).map((a) => a.stored));
+    const stale = (await mediaKeys(doc.id)).filter((k) => !keep.has(k));
+    if (stale.length) await batch('media', stale.map((k) => [k, undefined]));
+  }
 }
 
+const mediaKey = (designId, assetId) => `${designId}|${assetId}`;
+// Files already in the media store, by the asset object that holds them
+// (assets never change once added), so they aren't written again.
+const written = new WeakMap();
+const lastFiles = new Map(); // design id → its file ids at the last save
+
+function mediaKeys(designId) {
+  const [lo, hi] = range(`${designId}|`);
+  return run('media', 'readonly', (s) => s.getAllKeys(IDBKeyRange.bound(lo, hi)), () => [...memory.media.keys()].filter((k) => k >= lo && k <= hi));
+}
+
+/** A saved design, whole: its files read back in from the media store. */
 export async function loadDesign(id) {
-  return (await get('designs', id))?.doc || null;
+  const doc = (await get('designs', id))?.doc || null;
+  if (!doc?.assets) return doc;
+  // (A design saved before files were kept apart has them inline already.)
+  const refs = Object.values(doc.assets).filter((a) => a && typeof a.stored === 'string');
+  const data = await getMany('media', refs.map((a) => a.stored));
+  refs.forEach((a, i) => {
+    if (typeof data[i] === 'string') {
+      a.dataUrl = data[i];
+      written.set(a, a.stored);
+    }
+    delete a.stored;
+  });
+  return doc;
 }
 
 export async function listDesigns() {
@@ -187,6 +237,8 @@ export async function deleteDesign(id) {
   deleted.add(id);
   await del('settings', thumbKey(id)).catch(() => null);
   await del('designs', id);
+  await mediaKeys(id).then((keys) => batch('media', keys.map((k) => [k, undefined]))).catch(() => null);
+  lastFiles.delete(id);
   // The design is gone either way; its history is cleaned up as well as it can be.
   await deleteVersions(id).catch(() => null);
 }
