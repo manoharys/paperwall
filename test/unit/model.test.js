@@ -646,3 +646,19 @@ test('[EDIT-12] align with a locked element: the others line up with it, it stay
   assert.equal(a.x, 300);
   assert.equal(locked.x, 300);
 });
+
+test('[DOC-09] opening a file, a repeated element id gets a new one and its connector follows', async () => {
+  const { createPage } = await import('../../src/model/doc.js');
+  const doc = design();
+  doc.pages.push(createPage());
+  const a = rect({ id: 'same' });
+  const b = rect({ id: 'same' });
+  addElement(doc, 0, a);
+  addElement(doc, 1, b);
+  doc.pages[1].elements.push({ id: 'c1', type: 'connector', x: 0, y: 0, w: 1, h: 1, start: { id: 'same' }, end: { x: 5, y: 5 } });
+  validateDesign(doc);
+  const renamedId = doc.pages[1].elements[0].id;
+  assert.notEqual(renamedId, 'same');
+  assert.equal(doc.pages[0].elements[0].id, 'same');
+  assert.equal(doc.pages[1].elements[1].start.id, renamedId);
+});

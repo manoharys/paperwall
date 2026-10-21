@@ -432,9 +432,15 @@ export function validateDesign(doc) {
   const NUMERIC = ['x', 'y', 'w', 'h', 'rotation', 'opacity', 'size', 'weight', 'lineHeight', 'letterSpacing', 'curve', 'strokeWidth', 'radius', 'sides', 'innerRatio'];
   // Every element its own id, across all pages (videos, connectors and
   // downloads tell elements apart by it): a repeat gets a new one.
+  // (Connectors on the same page then follow the new id: `renamed`.)
   const seenIds = new Set();
+  let renamed = new Map();
   const clean = (els) => els.filter((el) => el && typeof el === 'object' && typeof el.type === 'string' && typeof el.id === 'string').map((el) => {
-    if (seenIds.has(el.id)) el.id = uid('e');
+    if (seenIds.has(el.id)) {
+      const id = uid('e');
+      renamed.set(el.id, id);
+      el.id = id;
+    }
     seenIds.add(el.id);
     for (const k of NUMERIC) if (k in el && el[k] !== null) el[k] = Number.isFinite(+el[k]) ? +el[k] : 0;
     if (el.type === 'group') el.children = Array.isArray(el.children) ? clean(el.children) : [];
@@ -453,7 +459,17 @@ export function validateDesign(doc) {
   });
   for (const p of doc.pages) {
     if (!p || !Array.isArray(p.elements)) throw new Error('A page in this design is damaged');
+    renamed = new Map();
     p.elements = clean(p.elements);
+    if (renamed.size) {
+      const relink = (els) => {
+        for (const el of els) {
+          for (const end of [el.start, el.end]) if (end && typeof end === 'object' && renamed.has(end.id)) end.id = renamed.get(end.id);
+          if (el.type === 'group') relink(el.children);
+        }
+      };
+      relink(p.elements);
+    }
     if (p.title !== undefined) p.title = typeof p.title === 'string' ? p.title.slice(0, 120) : undefined;
     if (p.hidden !== undefined) p.hidden = p.hidden === true || undefined;
     if (p.guides !== undefined) p.guides = (Array.isArray(p.guides) ? p.guides : []).filter((g) => g && (g.axis === 'x' || g.axis === 'y') && Number.isFinite(+g.pos)).map((g) => ({ axis: g.axis, pos: +g.pos }));
