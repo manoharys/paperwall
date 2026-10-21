@@ -187,7 +187,11 @@ export function glRunner({ software = false } = {}) {
     return null;
   }
   const gl = canvas.getContext('webgl2', { antialias: false, depth: false, stencil: false, alpha: true, premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
-  if (!gl || !gl.getExtension('EXT_color_buffer_float')) return null;
+  if (!gl) return null;
+  if (!gl.getExtension('EXT_color_buffer_float')) {
+    gl.getExtension('WEBGL_lose_context')?.loseContext(); // (not kept: browsers allow only a few)
+    return null;
+  }
   if (!software && isSoftware(gl)) {
     gl.getExtension('WEBGL_lose_context')?.loseContext();
     return null;
@@ -535,12 +539,13 @@ class GlRunner {
   async run(model, feeds, { onProgress, signal, pause } = {}) {
     const { graph } = model;
     const missing = unsupported(model);
-    if (missing.length) throw new Error(`This model uses operations Paperwall can't run yet: ${missing.join(', ')}`);
-    const values = new Map(graph.initializers);
-    for (const i of graph.inputs) {
-      if (!feeds[i.name]) throw new Error(`The model needs an input called ${i.name}`);
-      values.set(i.name, feeds[i.name]);
+    const absent = graph.inputs.find((i) => !feeds[i.name]);
+    if (missing.length || absent) {
+      this.destroy(); // (its graphics context goes too: browsers keep only a few)
+      throw new Error(missing.length ? `This model uses operations Paperwall can't run yet: ${missing.join(', ')}` : `The model needs an input called ${absent.name}`);
     }
+    const values = new Map(graph.initializers);
+    for (const i of graph.inputs) values.set(i.name, feeds[i.name]);
     const uses = new Map();
     const lastUse = new Map();
     graph.nodes.forEach((n, i) => n.inputs.forEach((name) => {

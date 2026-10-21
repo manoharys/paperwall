@@ -22,6 +22,8 @@ async function pictureBlob(provider, url) {
   return new Blob([blob], { type: mime });
 }
 
+let listening = null; // the Photos view showing now, told when online settings change
+
 /**
  * The Photos view of the Uploads tab. `state` lives on the insert panel, so
  * results stay while other tabs are open.
@@ -46,7 +48,7 @@ export function photosView(ed, state) {
     if (state.provider !== provider) {
       // Another provider: its own results.
       forgetPreviews();
-      Object.assign(state, { provider, results: [], page: 0, more: false, error: '' });
+      Object.assign(state, { provider, results: [], page: 0, more: false, error: '', search: (state.search || 0) + 1 });
     }
     const settings = h('button', { type: 'button', class: 'link-btn', 'data-testid': 'photos-settings', onClick: () => openOnlineSettings('photos') }, 'Online extras…');
     if (!on) {
@@ -123,13 +125,15 @@ export function photosView(ed, state) {
     };
 
     const search = async (page) => {
-      const query = input.value.trim();
+      // (More of the same search, whatever's been typed in the box since.)
+      const query = page > 1 ? state.query : input.value.trim();
       if (!query) return;
       if (page === 1) {
         forgetPreviews();
-        Object.assign(state, { query, results: [], page: 0, more: false });
+        Object.assign(state, { query, results: [], page: 0, more: false, search: (state.search || 0) + 1 });
         grid.replaceChildren();
       }
+      const mine = state.search; // (more of an earlier search, answering late, isn't mixed in)
       status.textContent = 'Searching…';
       more.disabled = true;
       try {
@@ -137,11 +141,12 @@ export function photosView(ed, state) {
         const res = await providerFetch(provider, searchUrl(provider, query, page), { headers: authHeaders(provider, key) });
         const { photos, more: hasMore } = readResults(provider, await res.json(), page);
         // (A later search may have started meanwhile.)
-        if (state.query !== query || state.provider !== provider) return;
+        if (state.query !== query || state.provider !== provider || state.search !== mine) return;
         const seen = new Set(state.results.map((r) => r.id));
         Object.assign(state, { results: [...state.results, ...photos.filter((r) => !seen.has(r.id))], page, more: hasMore, error: '' });
       } catch (e) {
-        state.error = e.message;
+        // (An earlier search failing late doesn't put its error on this one.)
+        if (state.search === mine) state.error = e.message;
       } finally {
         more.disabled = false;
       }
@@ -200,7 +205,10 @@ export function photosView(ed, state) {
   };
 
   // Settings changed elsewhere (the Online extras dialog): show them, while this is on screen.
+  // (One view listens at a time: an older one, replaced, stops.)
+  window.removeEventListener('paperwall:online-changed', listening);
   const onChange = () => (wrap.isConnected ? fill() : window.removeEventListener('paperwall:online-changed', onChange));
+  listening = onChange;
   window.addEventListener('paperwall:online-changed', onChange);
   fill();
   return wrap;

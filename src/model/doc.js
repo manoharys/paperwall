@@ -441,7 +441,13 @@ export function addAsset(doc, { mime, dataUrl, width, height, name = '', kind = 
   // The same file used the same way is stored once (a sound and a video of
   // the same bytes stay apart: each kind is checked as its own when loaded).
   for (const [id, a] of Object.entries(doc.assets)) {
-    if (a.dataUrl === dataUrl && (a.type || 'image') === kind) return id;
+    if (a.dataUrl !== dataUrl || (a.type || 'image') !== kind) continue;
+    // (Already here without a credit: a stock photo's credit still goes with it.)
+    if (!a.credit && credit) {
+      const cleaned = cleanCredit(credit);
+      if (cleaned) a.credit = cleaned;
+    }
+    return id;
   }
   const id = uid('a');
   // (A stock photo keeps its credit: who made it, its license, where it's from.)

@@ -18,7 +18,7 @@ import { menuButton, toggle, segmented, closePopover } from './widgets.js';
 import { findDialog } from './find.js';
 import { historyDialog } from './history.js';
 import { openOnlineSettings } from './online-settings.js';
-import { api as cutoutApi } from './cutout.js';
+import { api as cutoutApi, forgetCuts } from './cutout.js';
 
 const root = document.getElementById('app');
 let current = null; // { editor, unbind }
@@ -74,6 +74,7 @@ async function closeEditor() {
   editor.endDrag?.();
   editor.closed = true;
   editor.stopStills();
+  forgetCuts();
   unbind();
   window.paperwall = null;
   // Save the design and its thumbnail first; then, if it changed, keep a

@@ -53,8 +53,12 @@ export async function ollamaUrl() {
   return (await getSetting('online|ollama', 'http://localhost:11434')) || 'http://localhost:11434';
 }
 
+/** Keep Ollama's address, if it's one Paperwall can reach (returns whether it was kept). */
 export async function setOllamaUrl(url) {
-  await setSetting('online|ollama', String(url || '').trim().replace(/\/+$/, ''));
+  const clean = String(url || '').trim().replace(/\/+$/, '');
+  if (!PROVIDERS.ollama.hosts.includes(clean)) return false;
+  await setSetting('online|ollama', clean);
+  return true;
 }
 
 /**
@@ -70,8 +74,20 @@ export async function providerFetch(id, url, init = {}) {
   } catch {
     throw new Error(id === 'ollama' ? "Couldn't reach Ollama. Is it running, with OLLAMA_ORIGINS set to allow this page?" : `Couldn't reach ${p.name}. Are you online?`);
   }
-  if (res.status === 401 || res.status === 403) throw new Error(`${p.name} didn't accept the key. Check it in Settings → Online extras.`);
+  if ((res.status === 401 || res.status === 403) && p.key) throw new Error(`${p.name} didn't accept the key. Check it in Settings → Online extras.`);
+  if (res.status === 403 && id === 'ollama') throw new Error('Ollama turned this page away. Start it with OLLAMA_ORIGINS set to allow this page.');
   if (res.status === 429) throw new Error(`${p.name} says too many requests. Try again in a little while.`);
-  if (!res.ok) throw new Error(`${p.name} answered ${res.status}.`);
+  if (!res.ok) {
+    // (The provider's own reason, when it gives one: a low balance, too long a request.)
+    const detail = await res.text().then((t) => {
+      try {
+        const j = JSON.parse(t);
+        return j?.error?.message || j?.message || (typeof j?.error === 'string' ? j.error : '');
+      } catch {
+        return '';
+      }
+    }, () => '');
+    throw new Error(`${p.name} answered ${res.status}${detail ? `: ${String(detail).slice(0, 200)}` : '.'}`);
+  }
   return res;
 }

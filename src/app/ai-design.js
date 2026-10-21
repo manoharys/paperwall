@@ -31,12 +31,14 @@ export function aiDesignBlock({ newDesign }) {
       controller = null;
       return say(aiSetup('design', { onDone: () => (say(), make()), onCancel: () => say() }));
     }
+    const providerId = await providerFor('design');
+    if (job.signal.aborted) return void (controller = null); // (stopped meanwhile: AI setup was opened)
     const preset = presetById(size.value);
     const n = +count.value;
     go.disabled = true;
     say(h('div', { class: 'ai-progress', role: 'status', 'data-testid': 'ai-design-progress' },
       h('span', { class: 'ai-spinner', 'aria-hidden': 'true' }),
-      h('span', null, `Designing with ${PROVIDERS[await providerFor('design')].name}…`),
+      h('span', null, `Designing with ${PROVIDERS[providerId].name}…`),
       h('button', { type: 'button', class: 'btn small', 'data-testid': 'ai-design-cancel', onClick: () => job.abort() }, 'Cancel')));
     try {
       const { system, prompt } = designPrompt(description, { width: preset.w, height: preset.h, count: n });
@@ -53,7 +55,7 @@ export function aiDesignBlock({ newDesign }) {
           onClick: () => newDesign(doc, { fit: true }),
         }, h('span', { class: 'ai-choice-img', style: { aspectRatio: `${doc.width} / ${doc.height}` }, html: renderPage(doc, 0, { measure, noSize: true, idPrefix: `ai${i}-` }) }), h('small', null, doc.name)))));
     } catch (e) {
-      if (isAbort(e)) return say();
+      if (isAbort(e)) return void (status.querySelector('.ai-progress') && say()); // (AI setup may be showing instead)
       say(h('p', { class: 'ai-error', role: 'alert', 'data-testid': 'ai-design-error' }, e.message));
       toast(e.message, 'error');
     } finally {
@@ -64,7 +66,10 @@ export function aiDesignBlock({ newDesign }) {
 
   return h('section', { class: 'block', 'data-testid': 'ai-design' },
     h('div', { class: 'block-head' }, h('h2', null, 'Describe a design'),
-      h('button', { type: 'button', class: 'link-btn', 'data-testid': 'ai-design-settings', onClick: () => say(aiSetup('design', { onDone: () => say(), onCancel: () => say() })) }, 'AI setup')),
+      h('button', { type: 'button', class: 'link-btn', 'data-testid': 'ai-design-settings', onClick: () => {
+        controller?.abort(); // (a design on its way stops first: its Cancel is about to go)
+        say(aiSetup('design', { onDone: () => say(), onCancel: () => say() }));
+      } }, 'AI setup')),
     h('form', { class: 'ai-design-form', onSubmit: (e) => {
       e.preventDefault();
       if (!controller) make();
