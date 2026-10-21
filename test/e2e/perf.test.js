@@ -226,6 +226,34 @@ test('[APP-07] a video download draws what is still once, with the video and wha
   await context.close();
 });
 
+test('[APP-07] a video seeks again and again without waiting out a timeout', async () => {
+  const { page, context, errors } = await newDesign('square');
+  await addClip(page, { x: 0, y: 0, w: 1080, h: 810 });
+  const out = await page.evaluate(async () => {
+    const ed = window.paperwall.editor;
+    const el = ed.find('clip-el');
+    const frames = new window.paperwall.VideoFrames(ed.doc);
+    const took = [];
+    let shown = 0;
+    try {
+      // Back and forth, then frame by frame: each seek waits for its picture there.
+      for (const at of [0.9, 0.1, 0.5, 0.2, 0.8, ...Array.from({ length: 20 }, (_, i) => i / 30)]) {
+        const t0 = performance.now();
+        if (await frames.at(el, at)) shown++;
+        took.push(performance.now() - t0);
+      }
+    } finally {
+      frames.dispose();
+    }
+    return { shown, slowest: Math.max(...took.slice(1)), stuck: !!frames.stuck };
+  });
+  assert.equal(out.shown, 25, 'a picture each time');
+  assert.equal(out.stuck, false);
+  assert.ok(out.slowest < 2000, `no seek waits out the 5 s timeout: slowest ${Math.round(out.slowest)} ms`);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('[MOT-07] in Safari, a presented video plays live over the slide, where it is on the page', async () => {
   const safari = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15';
   const { page, context } = await newDesign('square', { userAgent: safari });
@@ -264,7 +292,7 @@ test('[MOT-07] in Safari, a presented video plays live over the slide, where it 
   await context.close();
 });
 
-test('[APP-07] a picture whose file changes under the same id lets its old blob: URL go', async () => {
+test('[APP-07] a picture whose file changes under the same id lets its old blob: URL go, and going home lets them all go', async () => {
   const { page, context } = await newDesign('square');
   const gone = await page.evaluate(async () => {
     const { editor: ed, canvas } = window.paperwall;
@@ -281,6 +309,7 @@ test('[APP-07] a picture whose file changes under the same id lets its old blob:
     const again = canvas.assetHref('swap');
     ed.doc.assets.swap = { ...ed.doc.assets.swap, dataUrl: png('#0000ff') };
     const second = canvas.assetHref('swap');
+    window.lastHref = second;
     const loads = (url) => new Promise((ok) => {
       const img = new Image();
       img.onload = () => ok(true);
@@ -290,5 +319,14 @@ test('[APP-07] a picture whose file changes under the same id lets its old blob:
     return { same: first === again, changed: first !== second, oldLoads: await loads(first), newLoads: await loads(second) };
   });
   assert.deepEqual(gone, { same: true, changed: true, oldLoads: false, newLoads: true });
+  // Back home, the design's blob: URLs go too.
+  await page.click('[data-testid="home-link"]');
+  await page.waitForSelector('[data-testid="presets"]');
+  assert.equal(await page.evaluate(() => new Promise((ok) => {
+    const img = new Image();
+    img.onload = () => ok(true);
+    img.onerror = () => ok(false);
+    img.src = window.lastHref;
+  })), false);
   await context.close();
 });

@@ -45,6 +45,24 @@ test('[DOC-11] print sizes in millimetres and inches', async () => {
   await page.click('[data-testid="home-link"]');
   await page.waitForSelector('[data-testid="design-card"]');
   assert.match(await page.textContent('[data-testid="design-card"]'), /148 × 210 mm/);
+  // A document of several sheets reads as one sheet's size, in its versions and at home.
+  await page.click('[data-testid="preset-doc"]');
+  await waitForEditor(page);
+  await page.evaluate(async () => {
+    const ed = window.paperwall.editor;
+    const body = ed.pageData.elements[1];
+    ed.update({ text: 'Words that fill the sheet and run on to the next. '.repeat(400) }, null, [body.id]);
+    await ed.saveVersion('');
+  });
+  assert.ok(await page.evaluate(() => window.paperwall.editor.doc.height > window.paperwall.editor.doc.document.pageHeight), 'several sheets long');
+  await page.click('[data-testid="history-btn"]');
+  await page.waitForFunction(() => [...document.querySelectorAll('[role="dialog"] small')].length >= 2);
+  const sizes = await page.evaluate(() => [...document.querySelectorAll('[role="dialog"] small')].map((s) => s.textContent.match(/\d+ × \d+ px/)?.[0]).filter(Boolean));
+  assert.ok(sizes.length >= 2 && sizes.every((s) => s === '1240 × 1754 px'), `every version: ${sizes}`);
+  await page.keyboard.press('Escape');
+  await page.click('[data-testid="home-link"]');
+  await page.waitForSelector('[data-testid="design-card"]');
+  assert.match(await page.textContent('[data-testid="design-card"]'), /1240 × 1754 px/);
   await context.close();
 });
 

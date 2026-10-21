@@ -69,7 +69,7 @@ export function historyDialog(editor) {
       // Saving the design mustn't start a timed version of its own as well.
       editor.versionAt = Date.now();
       await editor.flush();
-      if (!(await editor.saveVersion('Saved by you'))) toast(t('history.saveError'), 'error');
+      if (!(await editor.saveVersion('saved'))) toast(t('history.saveError'), 'error');
       fill();
     } }, t('history.save')),
     list), { wide: true, testid: 'history-dialog', onClose: () => forget(list) });

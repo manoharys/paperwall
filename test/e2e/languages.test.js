@@ -86,10 +86,33 @@ test('[APP-08] switching language changes the interface at once and is kept afte
   await context.close();
 });
 
-test('[APP-08] switching language in the editor keeps the design as it is: undo, selection and page', async () => {
+test('[APP-08] switching language in the editor keeps the design as it is: undo, selection, page and view', async () => {
   const { page, context, errors } = await newDesign('square');
   await page.evaluate(() => window.paperwall.editor.addPage());
   const el = await addText(page);
+  // Zoomed in and scrolled, the Shapes panel and the Layers tab open.
+  await openTab(page, 'shapes');
+  await page.click('[data-testid="tab-layers"]');
+  await page.evaluate(() => window.paperwall.editor.setZoom(1.7));
+  await page.evaluate(() => {
+    const stage = document.querySelector('[data-testid="stage"]');
+    stage.scrollLeft = 150;
+    stage.scrollTop = 120;
+  });
+  const view = () => page.evaluate(() => {
+    const stage = document.querySelector('[data-testid="stage"]');
+    return {
+      zoom: window.paperwall.editor.zoom,
+      left: Math.round(stage.scrollLeft),
+      top: Math.round(stage.scrollTop),
+      rail: document.querySelector('.rail [aria-current="true"]')?.dataset.tab,
+      collapsed: !!document.querySelector('.insert.collapsed'),
+      tab: document.querySelector('[role="tab"][aria-selected="true"]')?.dataset.tab,
+    };
+  });
+  const looked = await view();
+  assert.deepEqual([looked.zoom, looked.rail, looked.tab], [1.7, 'shapes', 'layers']);
+  assert.ok(looked.left > 0 && looked.top > 0, 'scrolled');
   // Listeners on the window, the page and the editor: as many after as before (the old screen's go with it).
   const cdp = await context.newCDPSession(page);
   const listening = async () => {
@@ -117,6 +140,7 @@ test('[APP-08] switching language in the editor keeps the design as it is: undo,
   assert.equal((await page.textContent('[data-testid="rail-text"]')).trim(), say('es', 'insert.tabText'));
   assert.equal(await page.locator('[data-testid="page-thumb"]').count(), 2);
   assert.deepEqual(await listening(), listeners);
+  assert.deepEqual(await view(), looked, 'zoom, scroll and open panels as they were');
   // Undo still takes back the text just added, on the same page.
   await page.click('[data-testid="undo"]');
   assert.deepEqual(await page.evaluate((id) => {

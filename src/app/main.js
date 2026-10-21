@@ -3,7 +3,7 @@
 
 import { h, icon, iconButton, clear, toast, mod, forget, announce, liveRegions } from './ui.js';
 import { Editor } from './editor.js';
-import { Canvas } from './canvas.js';
+import { Canvas, forgetBlobUrls } from './canvas.js';
 import { Inspector, resizeDialog } from './inspector.js';
 import { InsertPanel } from './insert.js';
 import { PageStrip, present, presenterView } from './pages.js';
@@ -19,7 +19,7 @@ import { findDialog } from './find.js';
 import { historyDialog } from './history.js';
 import { openOnlineSettings } from './online-settings.js';
 import { api as cutoutApi, forgetCuts } from './cutout.js';
-import { withSmallPictures } from './media.js';
+import { withSmallPictures, VideoFrames } from './media.js';
 import { elementName } from './names.js';
 import { t, setLanguage, pickLanguage } from './i18n.js';
 
@@ -97,8 +97,9 @@ async function changeLanguage(code, { focus } = {}) {
   await store.setSetting('language', code).catch(() => null);
   // In the editor, just its screen is drawn again: the design stays open as it is (undo, selection, page).
   if (current) {
+    const view = current.unbind.view();
     current.unbind();
-    current.unbind = drawEditor(current.editor);
+    current.unbind = drawEditor(current.editor, view);
   } else await route();
   // Back where the person was (the screen was drawn again under them).
   document.querySelector(`[data-testid="${focus}"]`)?.focus();
@@ -133,6 +134,7 @@ async function closeEditor() {
 
 async function showHome() {
   await closeEditor();
+  forgetBlobUrls();
   document.title = t('app.title');
   renderHome(root, {
     openDesign: (id) => (location.hash = `#/d/${id}`),
@@ -183,7 +185,7 @@ async function openEditor(id) {
   // copied now (text measured), before any edit can land while storage answers.
   const original = versionSnapshot(doc);
   // (Closing waits for this, so the Original always comes first.)
-  editor.versionsChecked = store.hasVersions(doc.id).then((has) => (has ? (editor.versionAt = Date.now()) : editor.saveVersion('Original', { snapshot: original }))).catch(() => {
+  editor.versionsChecked = store.hasVersions(doc.id).then((has) => (has ? (editor.versionAt = Date.now()) : editor.saveVersion('original', { snapshot: original }))).catch(() => {
     editor.versionAt = Date.now(); // can't tell: carry on keeping versions every few minutes
   });
   // (Just its preview: not every design, videos and all.)
@@ -194,9 +196,10 @@ async function openEditor(id) {
 /**
  * The editor's screen for `editor`: top bar, panels, canvas and page strip.
  * Returns what takes it down again (the editor itself, its undo history,
- * selection and page, stay as they are).
+ * selection and page, stay as they are), with .view(): how it's looked at
+ * (zoom, scroll, open panels), for `view` when it's drawn again.
  */
-function drawEditor(editor) {
+function drawEditor(editor, view = null) {
   const canvas = new Canvas(editor);
   const inspector = new Inspector(editor, canvas, { onResizeDesign: () => resizeDialog(editor), onPlay: (how) => present(editor, canvas, { autoplay: true, ...how }) });
   const insert = new InsertPanel(editor);
@@ -260,9 +263,21 @@ function drawEditor(editor) {
   const onResize = () => canvas.layout();
   window.addEventListener('resize', onResize);
   syncTop();
+  if (view) {
+    // Drawn again (in another language): as it was looked at.
+    Object.assign(insert, view.insert);
+    insert.el.classList.toggle('collapsed', view.collapsed);
+    insert.render();
+    inspector.tab = view.inspectorTab;
+    workspace.dataset.sheet = view.sheet;
+  }
   inspector.render();
-  canvas.zoomToFit();
+  if (!view) canvas.zoomToFit();
   canvas.render();
+  if (view) {
+    canvas.el.scrollLeft = view.left;
+    canvas.el.scrollTop = view.top;
+  }
   // A font can finish loading after the first paint (a slow device, a font
   // picked from the list). When one this design uses arrives, measure its
   // text again and redraw. Fonts loading for previews elsewhere are ignored.
@@ -282,8 +297,8 @@ function drawEditor(editor) {
   };
   document.fonts.addEventListener('loadingdone', onFontsLoaded);
   // Handy in the console, and used by the end-to-end tests.
-  window.paperwall = { editor, canvas, inspector, export: exportApi, store, cutout: cutoutApi };
-  return () => {
+  window.paperwall = { editor, canvas, inspector, export: exportApi, store, cutout: cutoutApi, VideoFrames };
+  const unbind = () => {
     document.fonts.removeEventListener('loadingdone', onFontsLoaded);
     unbindKeys();
     offSheet();
@@ -292,6 +307,15 @@ function drawEditor(editor) {
     for (const part of [canvas, inspector, insert, strip]) part.destroy();
     window.removeEventListener('resize', onResize);
   };
+  unbind.view = () => ({
+    left: canvas.el.scrollLeft,
+    top: canvas.el.scrollTop,
+    insert: { tab: insert.tab, query: insert.query, category: insert.category, pen: insert.pen },
+    collapsed: insert.el.classList.contains('collapsed'),
+    inspectorTab: inspector.tab,
+    sheet: workspace.dataset.sheet,
+  });
+  return unbind;
 }
 
 window.addEventListener('hashchange', route);

@@ -38,16 +38,6 @@ export function presetById(id) {
   return PRESETS.find((p) => p.id === id) || null;
 }
 
-/** How a page is named in lists: its number, and its title if it has one. */
-export function pageName(page, i) {
-  return page.title ? `Page ${i + 1}: ${page.title}` : `Page ${i + 1}`;
-}
-
-/** Its name, saying so when it's hidden. */
-export function pageLabel(page, i) {
-  return page.hidden ? `${pageName(page, i)} (hidden)` : pageName(page, i);
-}
-
 /** Page px in one mm or inch (or 1 for px), unrounded. */
 export function pxPerUnit(unit, dpi = DPI) {
   return unit === 'mm' ? dpi / 25.4 : unit === 'in' ? dpi : 1;

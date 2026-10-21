@@ -157,6 +157,11 @@ export function debounce(fn, ms) {
     t = null;
     return fn();
   };
+  /** Drop a call that's waiting. */
+  wrapped.cancel = () => {
+    clearTimeout(t);
+    t = null;
+  };
   /** Run now only if a call is waiting. */
   wrapped.flushPending = () => {
     if (t === null) return Promise.resolve();

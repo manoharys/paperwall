@@ -84,11 +84,12 @@ export function pageLabel(page, i) {
   return page.hidden ? t('page.hiddenLabel', { name: pageName(page, i) }) : pageName(page, i);
 }
 
-/** Versions kept by Paperwall itself are labelled in English when saved; shown in the person's language. */
+// Versions Paperwall labels itself: by id, or (kept before ids) by their English words.
+const VERSION_LABELS = { original: 'history.original', saved: 'history.savedByYou', Original: 'history.original', 'Saved by you': 'history.savedByYou' };
+
+/** A version's label in the person's language. */
 export function versionLabel(label) {
-  if (label === 'Original') return t('history.original');
-  if (label === 'Saved by you') return t('history.savedByYou');
-  return label;
+  return VERSION_LABELS[label] ? t(VERSION_LABELS[label]) : label;
 }
 
 // The AI writing languages (named in English for the model) as the person's language names them.

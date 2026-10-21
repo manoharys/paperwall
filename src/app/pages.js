@@ -38,9 +38,12 @@ export class PageStrip {
     this.render();
   }
 
-  /** Let go of the editor (the editor's screen is being taken down). */
+  /** Let go of the editor, and of pages still to draw (the editor's screen is being taken down). */
   destroy() {
     this.unlisten();
+    this.redraw.cancel(); // (no redraw waiting to run on a strip that's gone)
+    forget(this.el);
+    for (const { img } of this.images.values()) forget(img);
   }
 
   /** Titles changed: update the labels, without drawing every page again. */

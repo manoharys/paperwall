@@ -95,6 +95,18 @@ test('filled-in words are never read for placeholders', () => {
   assert.deepEqual(tn('no.such.key'), ['no.such.key']);
 });
 
+test('versions Paperwall labels itself read in the language: new ones by id, older ones by their English words', async () => {
+  const { versionLabel } = await import('../../src/app/names.js');
+  try {
+    setLanguage('de');
+    for (const label of ['original', 'Original']) assert.equal(versionLabel(label), CATALOGS.de['history.original']);
+    for (const label of ['saved', 'Saved by you']) assert.equal(versionLabel(label), CATALOGS.de['history.savedByYou']);
+    assert.equal(versionLabel('Before the big change'), 'Before the big change');
+  } finally {
+    setLanguage('en');
+  }
+});
+
 test('time ago: a time a little ahead is just now; formats follow the language', () => {
   try {
     setLanguage('en');

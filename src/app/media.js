@@ -41,6 +41,28 @@ function once(target, ok, bad = 'error', ms = 15000) {
 }
 
 /**
+ * Wait until a video has its picture where it is now (readyState 2 or more),
+ * or `ms` pass. 'loadeddata' comes once per load, not after each seek, and
+ * a paused video may not say when it gets there: so it's also checked often.
+ */
+function pictureHere(v, ms = 5000) {
+  if (v.readyState >= 2) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const events = ['loadeddata', 'canplay', 'seeked', 'error'];
+    const check = () => (v.readyState >= 2 || v.error) && done();
+    const done = () => {
+      clearTimeout(timer);
+      clearInterval(poll);
+      for (const e of events) v.removeEventListener(e, check);
+      resolve(v.readyState >= 2);
+    };
+    const timer = setTimeout(done, ms);
+    const poll = setInterval(check, 15);
+    for (const e of events) v.addEventListener(e, check);
+  });
+}
+
+/**
  * Wait for a video's first picture. iPhones and iPads load nothing until a
  * video plays: a muted one may play by itself, so it's asked to, and stopped
  * as soon as there's a picture.
@@ -213,7 +235,7 @@ export class VideoFrames {
       }
     }
     // (Its picture there, ready to draw: a busy device can lag behind the seek.)
-    if (v.readyState < 2) await once(v, 'loadeddata', 'error', 5000).catch(() => null);
+    await pictureHere(v);
     return v.videoWidth && v.readyState >= 2 ? v : null;
   }
 
@@ -347,7 +369,7 @@ export function videosOn(doc, pageIndexes) {
   return pageIndexes.flatMap((i) => (doc.pages[i] ? videosIn(doc.pages[i], doc.assets) : []));
 }
 
-const smaller = new WeakMap(); // a picture → its smaller copy (a data: URL), or null if it's small already
+const smaller = new WeakMap(); // a picture → its smaller copy ({ dataUrl, width, height }), or null if it's small already
 
 /**
  * The design with the pictures on its first page no bigger than `side` px,
@@ -355,28 +377,52 @@ const smaller = new WeakMap(); // a picture → its smaller copy (a data: URL), 
  * full-size photo. Each picture is made smaller once. Not a copy: shares
  * everything else with `doc`.
  */
-export async function withSmallPictures(doc, side = 720) {
+export function withSmallPictures(doc, side = 720) {
   const ids = usedAssetIds({ pages: doc.pages.slice(0, 1) });
+  return shrinkPictures(doc, ids, (img) => side / Math.max(img.naturalWidth, img.naturalHeight), { under: 0.75, quality: 0.85, cache: smaller });
+}
+
+/**
+ * The design with pictures `ids` redrawn smaller: `scaleFor(img, id)` says
+ * how big each needs to be, as a share of its own size; one that needn't be
+ * under `under` of it stays as it is. A copy of the design's assets (the
+ * design keeps its pictures); everything else is shared. `cache` (a WeakMap)
+ * keeps each picture's smaller copy for next time.
+ */
+export async function shrinkPictures(doc, ids, scaleFor, { under = 0.9, quality = 0.92, cache = null } = {}) {
   const assets = { ...doc.assets };
-  await Promise.all([...ids].map(async (id) => {
+  const one = async (id) => {
     const a = doc.assets[id];
-    if (!a || (a.type || 'image') !== 'image' || typeof a.dataUrl !== 'string' || a.dataUrl.startsWith('data:image/svg')) return;
-    if (!smaller.has(a)) smaller.set(a, shrink(a.dataUrl, side).catch(() => null));
-    const dataUrl = await smaller.get(a);
-    if (dataUrl) assets[id] = { ...a, dataUrl };
-  }));
+    // (Pictures only, and not SVGs: they're drawn at any size anyway.)
+    if (typeof a?.dataUrl !== 'string' || !a.dataUrl.startsWith('data:image/') || a.dataUrl.startsWith('data:image/svg')) return;
+    let job = cache?.get(a);
+    if (!job) {
+      job = redrawSmaller(a.dataUrl, (img) => scaleFor(img, id), under, quality).catch(() => null);
+      cache?.set(a, job);
+    }
+    const made = await job;
+    if (made) assets[id] = { ...a, ...made };
+  };
+  // (Two at a time: quicker than one by one, without every big photo
+  // decoded at full size at once.)
+  const queue = [...ids];
+  const next = async () => {
+    for (let id = queue.shift(); id; id = queue.shift()) await one(id);
+  };
+  await Promise.all([next(), next()]);
   return { ...doc, assets };
 }
 
-/** A picture redrawn at most `side` px on a side (null if it's no bigger than that already). */
-async function shrink(dataUrl, side) {
+/** A picture redrawn at `scaleFor(img)` of its size: { dataUrl, width, height }, or null if that's not under `under`. */
+async function redrawSmaller(dataUrl, scaleFor, under, quality) {
   const img = await loadImage(dataUrl);
-  const k = side / Math.max(img.naturalWidth, img.naturalHeight);
-  if (!(k < 0.75)) return null;
+  const k = scaleFor(img);
+  if (!(k < under)) return null;
   const c = document.createElement('canvas');
   c.width = Math.max(1, Math.round(img.naturalWidth * k));
   c.height = Math.max(1, Math.round(img.naturalHeight * k));
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
   // (Photos stay JPEG; anything that may be see-through, PNG.)
-  return dataUrl.startsWith('data:image/jpeg') ? c.toDataURL('image/jpeg', 0.85) : c.toDataURL('image/png');
+  const url = /^data:image\/jpe?g/.test(dataUrl) ? c.toDataURL('image/jpeg', quality) : c.toDataURL('image/png');
+  return { dataUrl: url, width: c.width, height: c.height };
 }

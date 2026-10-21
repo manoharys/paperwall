@@ -22,15 +22,19 @@ const RATIO_LOCKED = new Set([...KEEPS_RATIO, 'group']);
 
 
 // The blob: URLs of the design last opened (key → { dataUrl, url }). Opening
-// it again reuses them (its photos aren't copied again); opening another
-// design lets them go.
+// it again without going home reuses them (its photos aren't copied again);
+// opening another design, or going home, lets them go.
 let opened = { id: null, urls: new Map() };
 function blobUrls(designId) {
-  if (opened.id !== designId) {
-    for (const { url } of opened.urls.values()) URL.revokeObjectURL(url);
-    opened = { id: designId, urls: new Map() };
-  }
+  if (opened.id !== designId) forgetBlobUrls();
+  opened.id = designId;
   return opened.urls;
+}
+
+/** Let the last design's blob: URLs go (back on the home screen). */
+export function forgetBlobUrls() {
+  for (const { url } of opened.urls.values()) URL.revokeObjectURL(url);
+  opened = { id: null, urls: new Map() };
 }
 
 export class Canvas {

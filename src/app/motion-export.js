@@ -12,7 +12,7 @@ import { buildWebmParts } from '../model/webm.js';
 import { buildMp4Parts } from '../model/mp4.js';
 import { measure, fontCssFor } from './fonts.js';
 import { loadImage } from './ui.js';
-import { VideoFrames, videosOn } from './media.js';
+import { VideoFrames, videosOn, shrinkPictures } from './media.js';
 import { t } from './i18n.js';
 
 /** A copy of what an encoder hands over as bytes (an ArrayBuffer or a view of one). */
@@ -58,19 +58,22 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
   const videos = videosOn(doc, pages).length ? new VideoFrames(doc) : null;
   let last = null; // the last frame's picture, as SVG: a still moment isn't drawn again
   let lastIndex = -1; // the page the last frame showed, settled (nothing on it can change), or -1
-  const settleAt = new Map(); // page index → when it's settled (Infinity if it never is)
-  const settledAt = (index) => {
-    if (!settleAt.has(index)) {
+  // Page index → { still: when its animations are over, settled: when
+  // nothing on it moves, videos included } (Infinity if never).
+  const timesOf = new Map();
+  const pageTimes = (index) => {
+    if (!timesOf.has(index)) {
       // Never with a loop; with videos that play once, when the last has ended.
       const page = doc.pages[index];
-      let at = hasLoop(page) ? Infinity : animationsEnd(page);
+      const still = hasLoop(page) ? Infinity : animationsEnd(page);
+      let settled = still;
       for (const el of videosIn(page, doc.assets)) {
         const length = doc.assets[el.assetId].duration || 0;
-        at = Math.max(at, el.loop === false && length > 0 ? Math.max(0, length - (el.trim?.start || 0)) + 0.1 : Infinity);
+        settled = Math.max(settled, el.loop === false && length > 0 ? Math.max(0, length - (el.trim?.start || 0)) + 0.1 : Infinity);
       }
-      settleAt.set(index, at);
+      timesOf.set(index, { still, settled });
     }
-    return settleAt.get(index);
+    return timesOf.get(index);
   };
   const onPage = new Map(); // page index → its videos (worked out once)
   const videosOf = (index) => {
@@ -80,7 +83,6 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
   // Once only its videos move, a page is drawn from layers: what's between
   // its videos, drawn once, and each video's picture straight from its player.
   const layered = new Map(); // page index → its layers, or null (drawn whole each frame)
-  const ends = new Map(); // page index → when its animations are over (Infinity if one loops)
   // A page's layers go once frames move past it (pages come one after another).
   const release = (keep = -1) => {
     for (const [index, layers] of layered) {
@@ -93,8 +95,7 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
   };
   const layersOf = async (frame) => {
     release(frame.index);
-    if (!ends.has(frame.index)) ends.set(frame.index, hasLoop(doc.pages[frame.index]) ? Infinity : animationsEnd(doc.pages[frame.index]));
-    if (frame.from || frame.local < ends.get(frame.index)) return null;
+    if (frame.from || frame.local < pageTimes(frame.index).still) return null;
     // (Drawn at the first such moment: the same at any later one.)
     if (!layered.has(frame.index)) layered.set(frame.index, await stillLayers(doc, frame, { fontCss, width, height }));
     return layered.get(frame.index);
@@ -102,12 +103,12 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
   try {
     for (let i = 0; i < count; i++) {
       if (signal?.aborted) throw new Error('Stopped');
-      const t = i / fps;
-      const frame = frameAt(doc, tl, t);
+      const time = i / fps;
+      const frame = frameAt(doc, tl, time);
       // A settled page shown again: the same picture, without drawing it.
-      const settled = !frame.from && frame.local >= settledAt(frame.index);
+      const settled = !frame.from && frame.local >= pageTimes(frame.index).settled;
       if (settled && lastIndex === frame.index) {
-        await each(canvas, ctx, i, t, true);
+        await each(canvas, ctx, i, time, true);
         onProgress?.((i + 1) / count);
         continue;
       }
@@ -120,12 +121,12 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
           ctx.fillRect(0, 0, width, height);
           let k = 0;
           for (const layer of layers.list) {
-            if (layer.el) drawVideo(ctx, players[k++], layer.el, width / doc.width);
+            if (layer.el) drawVideo(ctx, players[k++], layer.el, width / doc.width, height / doc.height);
             else ctx.drawImage(layer.canvas, 0, 0, width, height);
           }
           last = null;
           lastIndex = settled ? frame.index : -1;
-          await each(canvas, ctx, i, t, false);
+          await each(canvas, ctx, i, time, false);
           onProgress?.((i + 1) / count);
           continue;
         }
@@ -144,7 +145,7 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
       if (!same) await drawFrame(svg, { ctx, width, height });
       last = svg;
       lastIndex = settled ? frame.index : -1;
-      await each(canvas, ctx, i, t, same);
+      await each(canvas, ctx, i, time, same);
       onProgress?.((i + 1) / count);
     }
   } finally {
@@ -181,32 +182,10 @@ async function fittedPictures(doc, pages, width) {
     walk(page.elements);
     if (page.background?.type === 'image') use(page.background.assetId, doc.width, doc.height);
   }
-  const assets = { ...doc.assets };
-  // (Two at a time: quicker than one by one, without every big photo
-  // decoded at full size at once.)
-  const queue = [...share];
-  const next = async () => {
-    for (let item = queue.shift(); item; item = queue.shift()) await shrink(item);
-  };
-  const shrink = async ([id, part]) => {
-    const a = doc.assets[id];
-    const s = part * 1.25;
-    if (!(s < 0.9) || typeof a?.dataUrl !== 'string' || a.dataUrl.startsWith('data:image/svg')) return;
-    try {
-      const img = await loadImage(a.dataUrl);
-      const c = document.createElement('canvas');
-      c.width = Math.max(1, Math.round(img.naturalWidth * s));
-      c.height = Math.max(1, Math.round(img.naturalHeight * s));
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      // (Pictures that may be see-through stay PNG.)
-      const clear = !/^data:image\/jpe?g/.test(a.dataUrl); // (only JPEGs are never see-through)
-      assets[id] = { ...a, dataUrl: c.toDataURL(clear ? 'image/png' : 'image/jpeg', 0.92), width: c.width, height: c.height };
-    } catch {
-      /* kept as it is */
-    }
-  };
-  await Promise.all([next(), next()]);
-  return { ...doc, assets };
+  // (A little bigger than it shows, for smooth scaling; only those that come out smaller are read.)
+  const scaleOf = (id) => share.get(id) * 1.25;
+  const smaller = [...share.keys()].filter((id) => scaleOf(id) < 0.9);
+  return shrinkPictures(doc, smaller, (img, id) => scaleOf(id));
 }
 
 /** One frame (the page(s) at their moment, as SVG) into the canvas (on white, unless `clear`). */
@@ -279,13 +258,13 @@ async function backdrop(doc, frame, { fontCss, width, height }) {
   return canvas;
 }
 
-/** A video's picture straight onto the frame: placed, turned, cropped and clipped to its shape as the renderer does. `k`: frame px per page px. */
-function drawVideo(ctx, v, el, k) {
+/** A video's picture straight onto the frame: placed, turned, cropped and clipped to its shape as the renderer does. `kx`, `ky`: frame px per page px across and down (the frame is rounded to even sizes, as the layers are stretched to). */
+function drawVideo(ctx, v, el, kx, ky) {
   const crop = el.crop || { x: 0, y: 0, w: 1, h: 1 };
   const iw = el.w / crop.w;
   const ih = el.h / crop.h;
   ctx.save();
-  ctx.scale(k, k);
+  ctx.scale(kx, ky);
   ctx.translate(el.x + el.w / 2, el.y + el.h / 2);
   if (el.rotation) ctx.rotate((el.rotation * Math.PI) / 180);
   ctx.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
@@ -306,7 +285,7 @@ export async function exportGif(doc, pages, { size = null, onProgress, onNote, s
   // GIF delays are whole hundredths of a second: each frame gets its share of
   // the clock, rounded, so the whole GIF keeps time (no drift).
   const at = (i) => Math.round((i * 100) / fps) * 10;
-  const { stuck } = await eachFrame(doc, pages, { fps, width, height, onProgress, signal, readBack: true }, (canvas, ctx, i, t, same) => {
+  const { stuck } = await eachFrame(doc, pages, { fps, width, height, onProgress, signal, readBack: true }, (canvas, ctx, i, time, same) => {
     if (same && i > 0) return gif.hold(at(i + 1) - at(i));
     gif.add(ctx.getImageData(0, 0, width, height).data, at(i + 1) - at(i));
   });

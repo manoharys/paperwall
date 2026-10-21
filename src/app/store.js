@@ -343,7 +343,7 @@ async function writeVersion(doc, { label = '', thumb = null } = {}) {
   const at = (lastAt = Math.max(Date.now(), lastAt + 1));
   // `doc` is a copy nobody changes (versionSnapshot); the images are stored separately, once.
   const { assets, ...rest } = doc;
-  const details = { key: vKey(doc.id, at), designId: doc.id, at, label, thumb, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, unit: doc.unit, assetIds: Object.keys(assets || {}) };
+  const details = { key: vKey(doc.id, at), designId: doc.id, at, label, thumb, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.document?.pageHeight || doc.height, unit: doc.unit, assetIds: Object.keys(assets || {}) };
   // Which images are already stored is checked in the same transaction that
   // writes the version, so another tab's clean-up can't remove one in between.
   const [alo, ahi] = range(`${doc.id}|a|`);
