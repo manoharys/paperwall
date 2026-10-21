@@ -5,7 +5,7 @@ import { History } from '../model/history.js';
 import * as cmd from '../model/commands.js';
 import {
   createText, createShape, createLine, createImage, createVideo, createFrame, createDrawing, thinPoints, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
-  TEXT_STYLES, versionSnapshot, isEmptyFrame, DOCUMENT, stillIsCurrent, presetById,
+  TEXT_STYLES, versionSnapshot, isEmptyFrame, DOCUMENT, stillIsCurrent, presetById, documentSettings,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
 import { flowDocument, growBoard } from '../model/flow.js';
@@ -792,10 +792,12 @@ export class Editor {
     const s = this.sizeRef;
     const boxes = gridBoxes(grid, this.fitW, this.fitH, { margin: Math.round(s * 0.04), gap: Math.round(s * 0.02) });
     const frames = boxes.map((b) => createFrame('none', b));
-    this.change(() => {
+    const group = this.change(() => {
       for (const el of frames) cmd.addElement(this.doc, this.page, el, { center: false });
+      // (In a document, one block: its frames stay a grid as it flows.)
+      if (this.doc.document) return cmd.groupElements(this.doc, this.page, frames.map((el) => el.id));
     });
-    this.select(frames.map((el) => el.id));
+    this.select(group ? [group] : frames.map((el) => el.id));
     return frames;
   }
 
@@ -1167,6 +1169,7 @@ export class Editor {
       const k = width / DOCUMENT.width;
       copy.document ||= { pageHeight: height, margin: Math.round(DOCUMENT.margin * k), gap: Math.round(DOCUMENT.gap * k), dpi: DOCUMENT.dpi };
       if (preset) copy.document.dpi = preset.unit ? 300 : DOCUMENT.dpi;
+      copy.document = documentSettings(copy.document); // (in range, as when it's opened again)
     }
     copy.name = name || `${this.doc.name} (${width} × ${height})`;
     copy.createdAt = Date.now();

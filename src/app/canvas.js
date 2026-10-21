@@ -778,6 +778,7 @@ export class Canvas {
       // (A document's later blocks move down as this one grows.)
       if (ed.doc.document) {
         ed.arrange();
+        ed.syncAllConnectors(); // (lines between blocks go with them)
         this.layout();
       }
       this.positionTextarea();
