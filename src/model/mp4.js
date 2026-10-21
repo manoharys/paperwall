@@ -12,6 +12,13 @@ const u8 = (...v) => Uint8Array.from(v);
 const u16 = (v) => u8((v >> 8) & 255, v & 255);
 const u32 = (v) => u8((v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255);
 const zeros = (n) => new Uint8Array(n);
+/** Many 32-bit numbers as one block (a long video has more than a call can take one by one). */
+function u32s(values) {
+  const out = new Uint8Array(values.length * 4);
+  const v = new DataView(out.buffer);
+  values.forEach((n, i) => v.setUint32(i * 4, n >>> 0));
+  return out;
+}
 const fourcc = (s) => enc.encode(s);
 
 function box(type, ...parts) {
@@ -87,7 +94,7 @@ function trak(t, id, offsets, duration) {
   const lastShown = t.chunks[pts.indexOf(dts[dts.length - 1])];
   const deltas = dts.map((d, i) => (i + 1 < dts.length ? dts[i + 1] - d : Math.max(1, ticks(lastShown?.duration ?? 0) || (i ? dts[i] - dts[i - 1] : 1))));
   const runs = runLengths(deltas);
-  const stts = full('stts', 0, 0, u32(runs.length), ...runs.map(([n, d]) => concat([u32(n), u32(d)])));
+  const stts = full('stts', 0, 0, u32(runs.length), u32s(runs.flat()));
   // Offsets are kept at zero or more (some players refuse a frame decoded
   // after it's shown): every frame is shown `lead` later, and an edit list
   // starts the track `lead` in, so it still plays from its first frame.
@@ -97,7 +104,7 @@ function trak(t, id, offsets, duration) {
   let ctts = null;
   if (shifts.some((o) => o !== 0)) {
     const oruns = runLengths(shifts);
-    ctts = full('ctts', 0, 0, u32(oruns.length), ...oruns.map(([n, o]) => concat([u32(n), u32(o)])));
+    ctts = full('ctts', 0, 0, u32(oruns.length), u32s(oruns.flat()));
   }
   // Opus sound starts with its encoder's pre-skip (WebM says so with
   // CodecDelay): the edit list starts the track after it, in time with the
@@ -114,10 +121,10 @@ function trak(t, id, offsets, duration) {
   if (into || empty) edits.push(concat([u32(Math.max(0, span - empty)), u32(Math.max(0, into)), u16(1), u16(0)]));
   const edts = edits.length ? box('edts', full('elst', 0, 0, u32(edits.length), ...edits)) : null;
   const keys = t.chunks.map((c, i) => (c.key ? i + 1 : 0)).filter(Boolean);
-  const stss = video ? full('stss', 0, 0, u32(keys.length), ...keys.map(u32)) : null;
+  const stss = video ? full('stss', 0, 0, u32(keys.length), u32s(keys)) : null;
   const stsc = full('stsc', 0, 0, u32(1), u32(1), u32(1), u32(1)); // a chunk per sample
-  const stsz = full('stsz', 0, 0, u32(0), u32(t.chunks.length), ...t.chunks.map((c) => u32(c.data.length)));
-  const stco = full('stco', 0, 0, u32(offsets.length), ...offsets.map(u32));
+  const stsz = full('stsz', 0, 0, u32(0), u32(t.chunks.length), u32s(t.chunks.map((c) => c.data.length)));
+  const stco = full('stco', 0, 0, u32(offsets.length), u32s(offsets));
   const stbl = box('stbl', full('stsd', 0, 0, u32(1), video ? videoEntry(t) : audioEntry(t)), stts, ...(ctts ? [ctts] : []), ...(stss ? [stss] : []), stsc, stsz, stco);
   return box('trak', tkhd, ...(edts ? [edts] : []), box('mdia', mdhd, hdlr, box('minf', header, dinf, stbl)));
 }

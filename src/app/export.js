@@ -266,8 +266,12 @@ export function exportDialog(editor) {
         // (Whether video can be made here is known before the sound is decoded for it.)
         if (state.format !== 'gif' && !canMakeVideo()) throw new Error("This browser can't make videos. Try a recent Chrome, Edge, Safari or Firefox.");
         if (state.format !== 'gif' && still.audio) {
-          audio = await soundtrackBuffer(still).catch(() => null);
-          if (!audio) notes.push("The soundtrack couldn't be read here, so the video is silent.");
+          // Decoded once the video is known to be possible here.
+          audio = async () => {
+            const buffer = await soundtrackBuffer(still).catch(() => null);
+            if (!buffer) notes.push("The soundtrack couldn't be read here, so the video is silent.");
+            return buffer;
+          };
         }
         const blob = state.format === 'gif'
           ? await exportGif(still, pages, { onProgress, onNote: (m) => notes.push(m), signal })

@@ -4,7 +4,7 @@
 // (WebCodecs) into files we put together ourselves.
 
 import { renderFrame } from '../model/render.js';
-import { timeline, frameAt, soundFade, animationsEnd, keepsMoving } from '../model/motion.js';
+import { timeline, frameAt, soundFade, animationsEnd, hasLoop, videosIn } from '../model/motion.js';
 import { GifEncoder } from '../model/gif.js';
 import { buildWebmParts } from '../model/webm.js';
 import { buildMp4Parts } from '../model/mp4.js';
@@ -55,8 +55,14 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal, r
   const settleAt = new Map(); // page index → when it's settled (Infinity if it never is)
   const settledAt = (index) => {
     if (!settleAt.has(index)) {
+      // Never with a loop; with videos that play once, when the last has ended.
       const page = doc.pages[index];
-      settleAt.set(index, keepsMoving(page, doc.assets) ? Infinity : animationsEnd(page));
+      let at = hasLoop(page) ? Infinity : animationsEnd(page);
+      for (const el of videosIn(page, doc.assets)) {
+        const length = doc.assets[el.assetId].duration || 0;
+        at = Math.max(at, el.loop === false && length > 0 ? Math.max(0, length - (el.trim?.start || 0)) + 0.1 : Infinity);
+      }
+      settleAt.set(index, at);
     }
     return settleAt.get(index);
   };
@@ -169,7 +175,8 @@ async function pickVideoCodec(container, width, height) {
 
 /**
  * The design as a video: 'mp4' or 'webm'. `audio` (optional) is a soundtrack
- * as an AudioBuffer, cut to the video's length. `onNote(message)` hears about
+ * as an AudioBuffer (or a function giving one, called once the video is
+ * known to be possible here), cut to the video's length. `onNote(message)` hears about
  * anything left out (a soundtrack this browser can't encode).
  */
 export async function exportVideo(doc, pages, { container = 'mp4', size = null, audio = null, volume = 1, onProgress, onNote, signal } = {}) {
@@ -177,6 +184,8 @@ export async function exportVideo(doc, pages, { container = 'mp4', size = null, 
   const { width, height } = frameSize(doc, 'video', size);
   const pick = await pickVideoCodec(container, width, height);
   if (!pick) throw new Error(`This browser can't make ${container.toUpperCase()} videos. Try ${container === 'mp4' ? 'WebM' : 'MP4'} instead.`);
+  // The soundtrack is decoded only now that the video can be made.
+  if (typeof audio === 'function') audio = await audio();
   const fps = FPS.video;
   const chunks = [];
   let description = null;
