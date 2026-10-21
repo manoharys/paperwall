@@ -535,12 +535,13 @@ class GlRunner {
   async run(model, feeds, { onProgress, signal, pause } = {}) {
     const { graph } = model;
     const missing = unsupported(model);
-    if (missing.length) throw new Error(`This model uses operations Paperwall can't run yet: ${missing.join(', ')}`);
-    const values = new Map(graph.initializers);
-    for (const i of graph.inputs) {
-      if (!feeds[i.name]) throw new Error(`The model needs an input called ${i.name}`);
-      values.set(i.name, feeds[i.name]);
+    const absent = graph.inputs.find((i) => !feeds[i.name]);
+    if (missing.length || absent) {
+      this.destroy(); // (its graphics context goes too: browsers keep only a few)
+      throw new Error(missing.length ? `This model uses operations Paperwall can't run yet: ${missing.join(', ')}` : `The model needs an input called ${absent.name}`);
     }
+    const values = new Map(graph.initializers);
+    for (const i of graph.inputs) values.set(i.name, feeds[i.name]);
     const uses = new Map();
     const lastUse = new Map();
     graph.nodes.forEach((n, i) => n.inputs.forEach((name) => {

@@ -49,9 +49,10 @@ export function openOnlineSettings(feature) {
     const address = pid === 'ollama' ? h('input', { type: 'url', value: await ollamaUrl(), spellcheck: 'false', 'aria-label': 'Ollama address', 'data-testid': `online-ollama-${f}` }) : null;
     // What's typed is kept as it's typed (keys are long; nobody should lose one to a stray click).
     const keep = async () => {
+      // (Throws for an Ollama address it can't use: Test says so, typing just shows it.)
       if (key) await setKey(pid, key.value);
       // (Only addresses the page may reach are kept: anything else would always fail.)
-      if (address && !(await setOllamaUrl(address.value))) status.textContent = `Paperwall can reach Ollama only at ${p.hosts.join(' or ')}.`;
+      if (address && !(await setOllamaUrl(address.value))) throw new Error(`Paperwall can reach Ollama only at ${p.hosts.join(' or ')}.`);
     };
     key?.addEventListener('input', () => {
       // (Another feature using the same provider shows the same key.)
@@ -59,7 +60,7 @@ export function openOnlineSettings(feature) {
       keep();
     });
     key?.addEventListener('change', changed);
-    address?.addEventListener('input', keep);
+    address?.addEventListener('input', () => keep().then(() => (status.textContent = ''), (e) => (status.textContent = e.message)));
     const test = h('button', { type: 'button', class: 'btn small', 'data-testid': `online-test-${f}`, onClick: async () => {
       test.disabled = true;
       status.textContent = 'Testing…';

@@ -53,7 +53,7 @@ export function aiDesignBlock({ newDesign }) {
           onClick: () => newDesign(doc, { fit: true }),
         }, h('span', { class: 'ai-choice-img', style: { aspectRatio: `${doc.width} / ${doc.height}` }, html: renderPage(doc, 0, { measure, noSize: true, idPrefix: `ai${i}-` }) }), h('small', null, doc.name)))));
     } catch (e) {
-      if (isAbort(e)) return say();
+      if (isAbort(e)) return void (status.querySelector('.ai-progress') && say()); // (AI setup may be showing instead)
       say(h('p', { class: 'ai-error', role: 'alert', 'data-testid': 'ai-design-error' }, e.message));
       toast(e.message, 'error');
     } finally {
@@ -64,7 +64,10 @@ export function aiDesignBlock({ newDesign }) {
 
   return h('section', { class: 'block', 'data-testid': 'ai-design' },
     h('div', { class: 'block-head' }, h('h2', null, 'Describe a design'),
-      h('button', { type: 'button', class: 'link-btn', 'data-testid': 'ai-design-settings', onClick: () => say(aiSetup('design', { onDone: () => say(), onCancel: () => say() })) }, 'AI setup')),
+      h('button', { type: 'button', class: 'link-btn', 'data-testid': 'ai-design-settings', onClick: () => {
+        controller?.abort(); // (a design on its way stops first: its Cancel is about to go)
+        say(aiSetup('design', { onDone: () => say(), onCancel: () => say() }));
+      } }, 'AI setup')),
     h('form', { class: 'ai-design-form', onSubmit: (e) => {
       e.preventDefault();
       if (!controller) make();

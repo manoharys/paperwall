@@ -47,11 +47,11 @@ export function buildRequest(provider, { model, key = '', base = 'http://localho
     return post(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, { 'x-goog-api-key': key }, {
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      ...(json ? { generationConfig: { responseMimeType: 'application/json' } } : {}),
+      generationConfig: { maxOutputTokens: maxTokens, ...(json ? { responseMimeType: 'application/json' } : {}) },
     });
   }
   if (provider === 'ollama') {
-    return post(`${String(base).replace(/\/+$/, '')}/api/chat`, {}, { model, messages, stream: false, ...(json ? { format: 'json' } : {}) });
+    return post(`${String(base).replace(/\/+$/, '')}/api/chat`, {}, { model, messages, stream: false, options: { num_predict: maxTokens }, ...(json ? { format: 'json' } : {}) });
   }
   throw new Error(`${provider} can't write`);
 }
@@ -144,7 +144,9 @@ export function cleanWriting(answer, original = '') {
   // "Here's a shorter version:" and the like.
   const lines = s.split('\n');
   // (Unless the text itself starts that way: "Here is the menu:".)
-  if (lines.length > 1 && /^(here|sure|okay|ok|certainly)\b[^\n]*:$/i.test(lines[0].trim()) && !String(original).trim().startsWith(lines[0].trim())) s = lines.slice(1).join('\n').trim();
+  // Only a line about the answer itself ("Here's a shorter version:"), not a heading of it.
+  const about = /^(here('s| is| are)|sure|okay|ok|certainly)\b.*\b(version|rewrite|rewritten|translation|translated|text|revised|corrected|shorter|longer|edit(ed)?)\b[^\n]*:$/i;
+  if (lines.length > 1 && about.test(lines[0].trim()) && !String(original).trim().startsWith(lines[0].trim())) s = lines.slice(1).join('\n').trim();
   const pairs = [['"', '"'], ['“', '”'], ["'", "'"], ['«', '»']];
   for (const [a, b] of pairs) {
     // (Only quotes around all of it: not two quoted words at either end.)

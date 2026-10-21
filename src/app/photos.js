@@ -131,10 +131,10 @@ export function photosView(ed, state) {
         Object.assign(state, { query, results: [], page: 0, more: false, search: (state.search || 0) + 1 });
         grid.replaceChildren();
       }
+      const mine = state.search; // (more of an earlier search, answering late, isn't mixed in)
       status.textContent = 'Searching…';
       more.disabled = true;
       try {
-        const mine = state.search; // (more of an earlier search, answering late, isn't mixed in)
         const key = p.key ? await keyFor(provider) : '';
         const res = await providerFetch(provider, searchUrl(provider, query, page), { headers: authHeaders(provider, key) });
         const { photos, more: hasMore } = readResults(provider, await res.json(), page);
@@ -143,7 +143,8 @@ export function photosView(ed, state) {
         const seen = new Set(state.results.map((r) => r.id));
         Object.assign(state, { results: [...state.results, ...photos.filter((r) => !seen.has(r.id))], page, more: hasMore, error: '' });
       } catch (e) {
-        state.error = e.message;
+        // (An earlier search failing late doesn't put its error on this one.)
+        if (state.search === mine) state.error = e.message;
       } finally {
         more.disabled = false;
       }
