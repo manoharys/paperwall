@@ -305,7 +305,9 @@ function textEffect(ctx, el, draw) {
   const off = (fx.offset ?? 0.08) * s;
   const thick = Math.max(1, (fx.thickness ?? 0.035) * s);
   const hollow = ` fill="none" stroke="${esc(el.color)}" stroke-width="${f(thick)}" stroke-linejoin="round"`;
-  const at = (dx, dy, paint, extra = '') => `<g transform="translate(${f(dx)} ${f(dy)})"${extra}>${draw(paint)}</g>`;
+  // An offset copy, for looks only: marked so writers of text (the PDF) know
+  // it isn't the words themselves.
+  const at = (dx, dy, paint, extra = '') => `<g transform="translate(${f(dx)} ${f(dy)})" data-copy="1"${extra}>${draw(paint)}</g>`;
   const glowFilter = (blur, strength) => {
     const id = ctx.id('glow');
     const blurs = strength > 1 ? `<feGaussianBlur in="SourceAlpha" stdDeviation="${f(blur)}" result="b1"/><feGaussianBlur in="SourceAlpha" stdDeviation="${f(blur / 3)}" result="b2"/>` : `<feGaussianBlur in="SourceAlpha" stdDeviation="${f(blur)}" result="b1"/>`;

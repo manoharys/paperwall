@@ -376,7 +376,7 @@ const rgb = (c) => c.slice(0, 3).map(num).join(' ');
 
 const INHERITED = ['fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset',
   'fill-opacity', 'stroke-opacity', 'color', 'font-family', 'font-size', 'font-weight', 'font-style', 'letter-spacing', 'text-anchor', 'paint-order',
-  'fill-rule', 'clip-rule', 'xml:space'];
+  'fill-rule', 'clip-rule', 'xml:space', 'data-copy'];
 const ROOT_STYLE = { fill: '#000000', stroke: 'none', 'stroke-width': '1', 'stroke-linecap': 'butt', 'stroke-linejoin': 'miter', 'stroke-miterlimit': '4', color: '#000000', 'font-size': '16', 'font-weight': '400' };
 // Attributes that change how a picture looks in ways PDF doesn't do.
 const UNSUPPORTED_ATTRS = ['filter', 'mask', 'mix-blend-mode', 'style'];
@@ -951,10 +951,15 @@ class Painter {
     // Synthetic italic leans the letters a quarter; synthetic bold thickens their outline (as browsers do).
     const tm = `1 0 ${italic && !/italic|oblique/i.test(font.name) ? 0.25 : 0} -1 ${num(x0)} ${num(y)} Tm`;
     const bold = fakeBold ? size * (size <= 9 ? 1 / 24 : size >= 36 ? 1 / 32 : 1 / 24 + ((size - 9) / 27) * (1 / 32 - 1 / 24)) : 0;
+    // A copy drawn for looks (an effect's echo), or the outline under the
+    // letters, is no text of its own: an artifact, with an empty ActualText
+    // (which readers that skip no artifacts honour), so the words are copied,
+    // searched and read aloud once.
+    const copy = style['data-copy'] !== undefined;
     const passes = [];
     const strokeOn = stroke && sw > 0;
     if (strokeOn && style['paint-order']?.startsWith('stroke') && fill) {
-      passes.push({ mode: 1, stroke, width: sw + bold });
+      passes.push({ mode: 1, stroke, width: sw + bold, artifact: true });
       passes.push({ mode: bold ? 2 : 0, fill, stroke: bold ? fill : null, width: bold });
     } else if (fill || strokeOn) {
       const mode = fill && (strokeOn || bold) ? 2 : fill ? 0 : 1;
@@ -967,7 +972,8 @@ class Painter {
       if (ca < 0.999 || CA < 0.999) ops.push(`/${this.res.gs(ca, CA)} gs`);
       if (p.fill) ops.push(`${rgb(p.fill)} rg`);
       if (p.stroke) ops.push(`${rgb(p.stroke)} RG ${num(p.width)} w 1 j`);
-      ops.push(`BT /${name} ${num(size)} Tf ${num(spacing + extra)} Tc ${p.mode} Tr ${tm} <${glyphHex}> Tj ET Q`);
+      const text = `BT /${name} ${num(size)} Tf ${num(spacing + extra)} Tc ${p.mode} Tr ${tm} <${glyphHex}> Tj ET`;
+      ops.push(copy || p.artifact ? `/Artifact BMC /Span << /ActualText () >> BDC ${text} EMC EMC` : text, 'Q');
       this.ops.push(ops.join(' '));
     }
   }
