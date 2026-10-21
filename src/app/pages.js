@@ -408,6 +408,8 @@ export function presenterView(editor, canvas) {
   const onKey = (e) => {
     const k = presentingKey(e.key);
     if (!k) return;
+    // (Enter or Space on a focused button presses it.)
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.closest?.('button')) return;
     if (k === 'stop') ctl?.close();
     else if (k === 'first') ctl?.go(0);
     else if (k === 'last') ctl?.go(Infinity);

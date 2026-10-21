@@ -104,6 +104,14 @@ export function createDesignFromPreset(presetId) {
   return doc;
 }
 
+/** A document's settings when made: A4 sheets at 150 dpi (1240 px wide), margins, gaps between blocks. */
+export const DOCUMENT = { width: 1240, pageHeight: 1754, margin: 120, gap: 28, dpi: 150 };
+
+/** Whether a video's still is from where it starts now (else its poster shows, and a new still is due). */
+export function stillIsCurrent(doc, el) {
+  return !!(el.still && doc.assets[el.still] && (el.stillAt ?? 0) === (el.trim?.start || 0));
+}
+
 /** Sizes of a document's text: a heading, a smaller heading, body and lists. */
 export const DOC_STYLES = {
   title: { text: 'Untitled document', size: 64, weight: 700, lineHeight: 1.15 },
@@ -115,8 +123,8 @@ export const DOC_STYLES = {
 
 /** A design that flows as a document (see flow.js), started with a title and a paragraph. */
 export function makeDocument(doc) {
-  // 150 dpi: an A4 sheet (210 mm) is 1240 px wide.
-  doc.document = { pageHeight: doc.height, margin: 120, gap: 28, dpi: 150 };
+  const { margin, gap, dpi } = DOCUMENT;
+  doc.document = { pageHeight: doc.height, margin, gap, dpi };
   doc.name = 'Untitled document';
   doc.pages[0].elements.push(createText({ ...DOC_STYLES.title, y: 0 }), createText({ ...DOC_STYLES.body, y: 1 }));
   // (Laid out as text is measured once open; roughly right till then.)
@@ -502,6 +510,9 @@ export function validateDesign(doc) {
     }
     // ({ type: 'none' } is kept: it keeps an element still while its page animates.)
     if (el.anim !== undefined) el.anim = el.anim?.type === 'none' ? { type: 'none' } : cleanMotion(el.anim, ANIMATIONS, { duration: LIMITS.duration, delay: LIMITS.delay });
+    // (Only ever set on a document's text cut for its sheets, never saved.)
+    delete el.listStart;
+    delete el.continues;
     // A sticky note's color (text only): a hex color, else a plain text box.
     if (el.note !== undefined) el.note = el.type === 'text' && typeof el.note === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(el.note) ? el.note : undefined;
     if (el.type === 'video') {
@@ -547,7 +558,7 @@ export function validateDesign(doc) {
   if (doc.document !== undefined) {
     const d = doc.document;
     doc.document = d && typeof d === 'object'
-      ? { pageHeight: clampNum(d.pageHeight, 200, 20000, 1754), margin: clampNum(d.margin, 0, 1000, 120), gap: clampNum(d.gap, 0, 400, 28), dpi: clampNum(d.dpi, 36, 1200, 150) }
+      ? { pageHeight: clampNum(d.pageHeight, 200, 20000, DOCUMENT.pageHeight), margin: clampNum(d.margin, 0, 1000, DOCUMENT.margin), gap: clampNum(d.gap, 0, 400, DOCUMENT.gap), dpi: clampNum(d.dpi, 36, 1200, DOCUMENT.dpi) }
       : undefined;
   }
   if (doc.board !== undefined) doc.board = doc.board === true || undefined;

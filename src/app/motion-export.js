@@ -137,8 +137,13 @@ async function fittedPictures(doc, pages, width) {
     if (page.background?.type === 'image') use(page.background.assetId, doc.width, doc.height);
   }
   const assets = { ...doc.assets };
-  // (Each made smaller at once: they don't wait for each other.)
-  await Promise.all([...share].map(async ([id, part]) => {
+  // (Two at a time: quicker than one by one, without every big photo
+  // decoded at full size at once.)
+  const queue = [...share];
+  const next = async () => {
+    for (let item = queue.shift(); item; item = queue.shift()) await shrink(item);
+  };
+  const shrink = async ([id, part]) => {
     const a = doc.assets[id];
     const s = part * 1.25;
     if (!(s < 0.9) || typeof a?.dataUrl !== 'string' || a.dataUrl.startsWith('data:image/svg')) return;
@@ -154,7 +159,8 @@ async function fittedPictures(doc, pages, width) {
     } catch {
       /* kept as it is */
     }
-  }));
+  };
+  await Promise.all([next(), next()]);
   return { ...doc, assets };
 }
 

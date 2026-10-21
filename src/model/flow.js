@@ -8,12 +8,15 @@ import { fitHeight, layoutText, approxMeasure, notePad } from './text-layout.js'
 import { clone } from './doc.js';
 import { scaleElement } from './commands.js';
 
-export const DOCUMENT = { pageHeight: 1754, margin: 120, gap: 28, dpi: 150 };
+import { DOCUMENT } from './doc.js';
+
+export { DOCUMENT };
 export const BOARD = { grow: 1200, edge: 400, max: 24000 };
 
-/** The blocks of a page in flow order: top to bottom (as last placed). Lines between things follow them, so aren't blocks. */
+/** The blocks of a page in flow order: top to bottom (as last placed). Lines joined to things follow them, so aren't blocks (a free line is one). */
+const joined = (el) => el.type === 'connector' && (el.start?.id || el.end?.id);
 function blocks(page) {
-  return page.elements.filter((el) => !el.hidden && el.type !== 'connector').map((el, i) => ({ el, i })).sort((a, b) => a.el.y - b.el.y || a.i - b.i).map((b) => b.el);
+  return page.elements.filter((el) => !el.hidden && !joined(el)).map((el, i) => ({ el, i })).sort((a, b) => a.el.y - b.el.y || a.i - b.i).map((b) => b.el);
 }
 
 /**

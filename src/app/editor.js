@@ -5,10 +5,10 @@ import { History } from '../model/history.js';
 import * as cmd from '../model/commands.js';
 import {
   createText, createShape, createLine, createImage, createVideo, createFrame, createDrawing, thinPoints, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
-  TEXT_STYLES, versionSnapshot, isEmptyFrame,
+  TEXT_STYLES, versionSnapshot, isEmptyFrame, DOCUMENT, stillIsCurrent,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
-import { flowDocument, growBoard, DOCUMENT } from '../model/flow.js';
+import { flowDocument, growBoard } from '../model/flow.js';
 import { curveGeometry } from '../model/render.js';
 import { unionBounds, pointInBox, toLocal, refitGroup } from '../model/geometry.js';
 import { gridBoxes } from '../model/grids.js';
@@ -480,15 +480,13 @@ export class Editor {
 
   /** Videos whose still isn't from where they start now (moved, undone, pasted) get a new one. */
   retakeStills() {
-    this.stillTried ||= new Map(); // video id → the start last tried (a video that can't be read isn't tried again and again)
+    this.stillFailed ||= new Map(); // video id → a start no still could be taken from (not tried again and again)
     const walk = (els) => {
       for (const el of els) {
         if (el.type === 'group') walk(el.children);
         if (el.type !== 'video' || !this.doc.assets[el.assetId]) continue;
         const start = el.trim?.start || 0;
-        const fine = el.still && this.doc.assets[el.still] && (el.stillAt ?? 0) === start;
-        if (fine || this.stillTried.get(el.id) === start) continue;
-        this.stillTried.set(el.id, start);
+        if (stillIsCurrent(this.doc, el) || this.stillFailed.get(el.id) === start || this.stills?.has(el.id)) continue;
         this.refreshStill(el.id);
       }
     };
@@ -502,10 +500,12 @@ export class Editor {
     const frames = new VideoFrames(this.doc);
     try {
       const url = await frames.seek(found.el, 0, 1920 / Math.max(found.el.w, found.el.h));
+      if (!url) this.stillFailed?.set(id, start);
       if (!url || this.closed) return;
       const img = await loadImage(url);
       const now = locate(this.doc, id, this.pageData.id)?.el;
-      if (!now || (now.trim?.start || 0) !== start) return; // moved on meanwhile: that one takes its own
+      if (!now) return;
+      if ((now.trim?.start || 0) !== start) return void this.retakeStills(); // moved on meanwhile: from where it starts now
       // (The still it replaces stays while the design is open: undo can bring
       // it back. Saving leaves it out.)
       now.still = addAsset(this.doc, { dataUrl: url, mime: url.slice(5, url.indexOf(';')), width: img.naturalWidth, height: img.naturalHeight });
@@ -1036,11 +1036,13 @@ export class Editor {
   /** A page's speaker notes (shown in the presenter view, never on the page). */
   setPageNotes(i, text, key = null) {
     const page = this.doc.pages[i];
-    if (!page) return;
+    const next = text.trim() ? text.slice(0, 10000) : undefined;
+    if (!page || (page.notes || undefined) === next) return;
+    // Notes aren't on the page: nothing to redraw.
     this.change(() => {
-      if (text.trim()) page.notes = text.slice(0, 10000);
+      if (next) page.notes = next;
       else delete page.notes;
-    }, { key });
+    }, { key, quiet: true });
   }
 
   /** Change a page's motion (anim, duration, transition); undefined clears one. */
@@ -1107,12 +1109,15 @@ export class Editor {
     // To a Document or Whiteboard size: one of those (and only that), as made
     // from the home screen, its margins in proportion to its width.
     if (preset?.id === 'doc') {
-      const k = width / 1240;
-      copy.document ||= { pageHeight: height, margin: Math.round(DOCUMENT.margin * k), gap: Math.round(DOCUMENT.gap * k), dpi: 150 };
+      const k = width / DOCUMENT.width;
+      copy.document ||= { pageHeight: height, margin: Math.round(DOCUMENT.margin * k), gap: Math.round(DOCUMENT.gap * k), dpi: DOCUMENT.dpi };
       delete copy.board;
-    }
-    if (preset?.id === 'whiteboard') {
+    } else if (preset?.id === 'whiteboard') {
       copy.board = true;
+      delete copy.document;
+    } else if (preset) {
+      // Any other preset: a design of just that size (it doesn't flow or grow).
+      delete copy.board;
       delete copy.document;
     }
     // A document's sheets print at the paper's size: print sizes at 300 dpi, the Document size at 150.

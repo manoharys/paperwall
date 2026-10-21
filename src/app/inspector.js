@@ -621,6 +621,7 @@ export class Inspector {
     const unit = doc.unit || 'px';
     const size = unit === 'px' ? `${doc.width} × ${doc.height} px` : `${fromPx(doc.width, unit)} × ${fromPx(doc.height, unit)} ${unit}`;
     const grad = bg.type === 'gradient' ? bg.gradient : null;
+    const notesAt = ed.page; // (the page this panel was made for)
     return [
       h('div', { class: 'panel-head' }, h('h2', { 'data-testid': 'selection-title' }, `Page ${ed.page + 1} of ${doc.pages.length}`)),
       section('Page',
@@ -646,7 +647,7 @@ export class Inspector {
       this.motionPanel(),
       section('Notes',
         h('textarea', { rows: '4', class: 'notes', 'data-testid': 'page-notes', 'aria-label': 'Speaker notes for this page', placeholder: 'What to say on this page. Only you see these, in the presenter view.', maxlength: '10000',
-          onInput: (e) => ed.setPageNotes(ed.page, e.target.value, `notes:${ed.pageData.id}`) }, ed.pageData.notes || '')),
+          onInput: (e) => ed.setPageNotes(notesAt, e.target.value, `notes:${notesAt}`) }, ed.pageData.notes || '')),
       section('Design',
         h('p', { class: 'meta', 'data-testid': 'design-size' }, size),
         h('button', { type: 'button', class: 'btn wide', 'data-testid': 'resize-design', onClick: () => this.onResizeDesign() }, icon('resize'), 'Resize to another format')),
