@@ -28,6 +28,15 @@ const EMU_PER_INCH = 914400;
 const MIN_SIDE = 914400;
 const MAX_SIDE = 51206400;
 
+/** A whole number within the schema's range for it. */
+const within = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(v)));
+// The schema's ranges: line spacing in points (ST_TextSpacingPoint), letter
+// spacing (ST_TextPoint), line widths (ST_LineWidth), margins and indents.
+const MAX_SPACING = 158400;
+const MAX_LETTER_SPACING = 400000;
+const MAX_LINE_WIDTH = 20116800;
+const MAX_MARGIN = 51206400;
+
 /** Text for XML: escaped, without the control characters XML forbids. */
 export function xmlText(s) {
   return String(s ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f￾￿]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -162,7 +171,7 @@ function line(el, emu, alpha) {
   const dash = el.dash === 'dashed' ? '<a:prstDash val="dash"/>' : el.dash === 'dotted' ? '<a:prstDash val="sysDot"/>' : '';
   const round = el.type === 'draw' || el.dash === 'dotted' || el.dash === 'dashed';
   const ends = el.type === 'line' ? `${el.startCap === 'arrow' ? '<a:headEnd type="triangle" w="med" len="med"/>' : ''}${el.endCap === 'arrow' ? '<a:tailEnd type="triangle" w="med" len="med"/>' : ''}` : '';
-  return `<a:ln w="${Math.round(sw * emu)}"${round ? ' cap="rnd"' : ''}><a:solidFill>${color(el.stroke, alpha)}</a:solidFill>${dash}<a:round/>${ends}</a:ln>`;
+  return `<a:ln w="${within(sw * emu, 0, MAX_LINE_WIDTH)}"${round ? ' cap="rnd"' : ''}><a:solidFill>${color(el.stroke, alpha)}</a:solidFill>${dash}<a:round/>${ends}</a:ln>`;
 }
 
 /** Where an element sits: offset, size, turn and flips. */
@@ -308,16 +317,16 @@ class Slide {
       el.underline ? 'u="sng"' : '',
       el.strike ? 'strike="sngStrike"' : '',
       el.caps ? 'cap="all"' : '',
-      el.letterSpacing ? `spc="${Math.round(pt(el.letterSpacing) * 100)}"` : '',
+      el.letterSpacing ? `spc="${within(pt(el.letterSpacing) * 100, -MAX_LETTER_SPACING, MAX_LETTER_SPACING)}"` : '',
       'dirty="0"',
     ].filter(Boolean).join(' ');
-    const outline = el.outline?.width ? `<a:ln w="${Math.round(el.outline.width * 2 * emu)}"><a:solidFill>${color(el.outline.color, a)}</a:solidFill></a:ln>` : '';
+    const outline = el.outline?.width ? `<a:ln w="${within(el.outline.width * 2 * emu, 0, MAX_LINE_WIDTH)}"><a:solidFill>${color(el.outline.color, a)}</a:solidFill></a:ln>` : '';
     const highlight = el.highlight?.color && normalizeHex(el.highlight.color) ? `<a:highlight>${color(el.highlight.color)}</a:highlight>` : '';
     const font = xmlText(el.font || 'Inter');
     const rPr = (tag) => `<a:${tag} ${run}>${outline}<a:solidFill>${color(el.color, a)}</a:solidFill>${highlight}<a:latin typeface="${font}"/><a:cs typeface="${font}"/></a:${tag}>`;
     const algn = { left: 'l', center: 'ctr', right: 'r', justify: 'just' }[el.align] || 'l';
-    const spacing = `<a:lnSpc><a:spcPts val="${Math.round(pt(el.size * (el.lineHeight || 1.2)) * 100)}"/></a:lnSpc>`;
-    const indent = Math.round(el.size * 1.1 * emu);
+    const spacing = `<a:lnSpc><a:spcPts val="${within(pt(el.size * (el.lineHeight || 1.2)) * 100, 0, MAX_SPACING)}"/></a:lnSpc>`;
+    const indent = within(el.size * 1.1 * emu, 0, MAX_MARGIN);
     // (A document's text cut for its sheets numbers on from `listStart`, and
     // when it `continues` a list item, its first line has no mark of its own.)
     // Numbers count on over blank lines, as the page counts them. A paragraph
