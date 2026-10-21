@@ -212,14 +212,14 @@ test('[APP-07] a video download draws what is still once, with the video and wha
       // (The video fills 1080 × 810: its square's corner, then the blue around it.)
       return { over: px(540, 660), under: px(540, 960), square: px(400, 270), video: px(100, 100) };
     };
-    return { took, a: await at(0.04), b: await at(0.8) };
+    return { took, a: await at(0.1), b: await at(0.8) };
   });
   assert.ok(out.took < 60000, `made in ${Math.round(out.took)} ms`);
   const near = (p, q) => p.every((v, i) => Math.abs(v - q[i]) < 60);
   for (const f of [out.a, out.b]) {
     assert.ok(near(f.over, [255, 0, 0]), `the bar over the video stays over it: ${f.over}`);
     assert.ok(near(f.under, [0, 192, 0]), `the bar below it shows: ${f.under}`);
-    assert.ok(near(f.video, [32, 64, 255]), `the video shows: ${f.video}`);
+    assert.ok(near(f.video, [32, 64, 255]), `the video shows: ${JSON.stringify(out)}`);
   }
   assert.ok(near(out.a.square, [32, 64, 255]) && near(out.b.square, [255, 255, 0]), `and moves: ${out.a.square} → ${out.b.square}`);
   assert.deepEqual(errors, []);

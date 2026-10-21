@@ -211,7 +211,9 @@ export class VideoFrames {
         return null;
       }
     }
-    return v.videoWidth ? v : null;
+    // (Its picture there, ready to draw: a busy device can lag behind the seek.)
+    if (v.readyState < 2) await once(v, 'loadeddata', 'error', 5000).catch(() => null);
+    return v.videoWidth && v.readyState >= 2 ? v : null;
   }
 
   /**
