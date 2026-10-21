@@ -130,7 +130,6 @@ export async function runCutoutModel(model, input, { onProgress, signal, engine 
   return { out: (await runModel(model, feeds, { onProgress, signal, pause }))[name], engine: 'cpu' };
 }
 
-/** Find the subject of RGBA pixels: a mask { mask, mw, mh } from 0 (background) to 1. */
 /** RGBA pixels at most `max` on a side (as they are when smaller already). */
 function shrink(rgba, w, h, max) {
   if (Math.max(w, h) <= max || typeof document === 'undefined') return { rgba, w, h };
@@ -150,6 +149,7 @@ function shrink(rgba, w, h, max) {
   return { rgba: g.getImageData(0, 0, sw, sh).data, w: sw, h: sh };
 }
 
+/** Find the subject of RGBA pixels: a mask { mask, mw, mh } from 0 (background) to 1. */
 export async function findSubject(model, rgba, w, h, opts) {
   const size = model.graph.inputs[0].shape?.[2];
   const side = Number.isInteger(size) && size > 0 ? size : undefined;

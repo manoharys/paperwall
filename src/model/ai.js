@@ -43,7 +43,8 @@ export function buildRequest(provider, { model, key = '', base = 'http://localho
       { model, messages, max_completion_tokens: maxTokens, ...(json ? { response_format: { type: 'json_object' } } : {}) });
   }
   if (provider === 'gemini') {
-    return post(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {}, {
+    // (The key in a header, never in an address where logs would keep it.)
+    return post(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, { 'x-goog-api-key': key }, {
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       ...(json ? { generationConfig: { responseMimeType: 'application/json' } } : {}),
@@ -145,7 +146,9 @@ export function cleanWriting(answer, original = '') {
   if (lines.length > 1 && /^(here|sure|okay|ok|certainly)\b[^\n]*:$/i.test(lines[0].trim())) s = lines.slice(1).join('\n').trim();
   const pairs = [['"', '"'], ['“', '”'], ["'", "'"], ['«', '»']];
   for (const [a, b] of pairs) {
-    if (s.length > 1 && s.startsWith(a) && s.endsWith(b) && !(original.startsWith(a) && original.endsWith(b))) s = s.slice(a.length, -b.length).trim();
+    // (Only quotes around all of it: not two quoted words at either end.)
+    const inner = s.slice(a.length, -b.length);
+    if (s.length > 1 && s.startsWith(a) && s.endsWith(b) && !inner.includes(a) && !inner.includes(b) && !(original.startsWith(a) && original.endsWith(b))) s = inner.trim();
   }
   return s;
 }

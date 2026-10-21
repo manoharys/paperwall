@@ -18,7 +18,7 @@ export const PROVIDERS = {
   // A model file, downloaded once and then run on this device: pictures never
   // leave it. Pinned to one exact file, checked by its SHA-256 (docs/MODELS.md).
   u2netp: {
-    name: 'U²-Net small (runs on this device)', for: ['cutout'], key: false, site: 'https://github.com/xuebinqin/U-2-Net', hosts: ['https://cdn.jsdelivr.net'],
+    name: 'U²-Net small (runs on this device)', for: ['cutout'], key: false, site: 'https://github.com/xuebinqin/U-2-Net', hosts: ['https://cdn.jsdelivr.net/npm/@rmbg/model-u2netp@0.0.1/u2netp.onnx'], // (just the file: not all of the CDN)
     model: {
       url: 'https://cdn.jsdelivr.net/npm/@rmbg/model-u2netp@0.0.1/u2netp.onnx',
       sha256: '309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8',

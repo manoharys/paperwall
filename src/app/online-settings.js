@@ -25,7 +25,8 @@ export async function testProvider(id) {
   if (p.for.includes('photos')) return providerFetch(id, searchUrl(id, 'flower', 1, 1), { headers: authHeaders(id, key) });
   if (id === 'claude') return providerFetch(id, 'https://api.anthropic.com/v1/models', { headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' } });
   if (id === 'openai') return providerFetch(id, 'https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${key}` } });
-  if (id === 'gemini') return providerFetch(id, `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`);
+  // (The key in a header, never in an address where logs would keep it.)
+  if (id === 'gemini') return providerFetch(id, 'https://generativelanguage.googleapis.com/v1beta/models', { headers: { 'x-goog-api-key': key } });
   if (id === 'ollama') return providerFetch(id, `${await ollamaUrl()}/api/tags`);
   throw new Error(`There's no test for ${p.name} yet.`);
 }
@@ -49,7 +50,8 @@ export function openOnlineSettings(feature) {
     // What's typed is kept as it's typed (keys are long; nobody should lose one to a stray click).
     const keep = async () => {
       if (key) await setKey(pid, key.value);
-      if (address) await setOllamaUrl(address.value);
+      // (Only addresses the page may reach are kept: anything else would always fail.)
+      if (address && !(await setOllamaUrl(address.value))) status.textContent = `Paperwall can reach Ollama only at ${p.hosts.join(' or ')}.`;
     };
     key?.addEventListener('input', () => {
       // (Another feature using the same provider shows the same key.)
@@ -84,7 +86,7 @@ export function openOnlineSettings(feature) {
       } }),
       // (One that runs on this device downloads its model once, and sends nothing.)
       h('p', { class: 'hint' }, f === 'cutout'
-        ? `Runs on this device: your pictures never leave it. Its model (${p.name}) is downloaded once from ${p.hosts.join(', ')} the first time you use it.`
+        ? `Runs on this device: your pictures never leave it. Its model (${p.name}) is downloaded once from ${new URL(p.hosts[0]).host} the first time you use it.`
         : `Sends ${SENDS[f] || 'what you ask it'} to ${p.name}, and only when you use it.`),
       key ? h('label', { class: 'field' }, h('span', null, `${p.name} key`), key) : null,
       address ? h('label', { class: 'field' }, h('span', null, 'Ollama address'), address,

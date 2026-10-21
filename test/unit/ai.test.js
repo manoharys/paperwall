@@ -31,12 +31,12 @@ test('[ON-03] each provider gets a request in its own format, the key only where
   assert.deepEqual(ob.messages.map((m) => m.role), ['system', 'user']);
 
   const gemini = buildRequest('gemini', { ...ask, json: true });
-  assert.equal(gemini.url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=KEY-123');
+  assert.equal(gemini.url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent');
   const gb = JSON.parse(gemini.init.body);
   assert.equal(gb.systemInstruction.parts[0].text, 'Be brief.');
   assert.equal(gb.contents[0].parts[0].text, 'Say hi');
   assert.equal(gb.generationConfig.responseMimeType, 'application/json');
-  assert.ok(!JSON.stringify(gemini.init.headers).includes('KEY-123'));
+  assert.equal(gemini.init.headers['x-goog-api-key'], 'KEY-123', 'the key in a header, not the address');
 
   const ollama = buildRequest('ollama', { ...ask, base: 'http://localhost:11434/', json: true });
   assert.equal(ollama.url, 'http://localhost:11434/api/chat');

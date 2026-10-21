@@ -53,8 +53,12 @@ export async function ollamaUrl() {
   return (await getSetting('online|ollama', 'http://localhost:11434')) || 'http://localhost:11434';
 }
 
+/** Keep Ollama's address, if it's one Paperwall can reach (returns whether it was kept). */
 export async function setOllamaUrl(url) {
-  await setSetting('online|ollama', String(url || '').trim().replace(/\/+$/, ''));
+  const clean = String(url || '').trim().replace(/\/+$/, '');
+  if (!PROVIDERS.ollama.hosts.includes(clean)) return false;
+  await setSetting('online|ollama', clean);
+  return true;
 }
 
 /**

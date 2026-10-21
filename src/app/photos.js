@@ -123,7 +123,8 @@ export function photosView(ed, state) {
     };
 
     const search = async (page) => {
-      const query = input.value.trim();
+      // (More of the same search, whatever's been typed in the box since.)
+      const query = page > 1 ? state.query : input.value.trim();
       if (!query) return;
       if (page === 1) {
         forgetPreviews();

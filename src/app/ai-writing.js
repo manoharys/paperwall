@@ -50,7 +50,9 @@ async function run(ed, id, pageId, action, opts = {}) {
     const text = cleanWriting(await complete({ feature: 'writing', system, prompt, signal: controller.signal }), sent);
     if (!text) throw new Error('The answer came back empty. Try again.');
     // (Typed into meanwhile: what was typed stays.)
-    if (findElement(page, id)?.text !== sent) throw new Error('The text changed while the answer was on its way, so it was left as you wrote it. Try again.');
+    // (Looked up again: undo and redo put a new copy of the design in place.)
+    const nowPage = ed.doc.pages.find((p) => p.id === pageId);
+    if ((nowPage && findElement(nowPage, id))?.text !== sent) throw new Error('The text changed while the answer was on its way, so it was left as you wrote it. Try again.');
     if (!ed.closed) ed.update({ text }, null, [id], pageId);
   } catch (e) {
     if (!isAbort(e)) {

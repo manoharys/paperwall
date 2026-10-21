@@ -214,7 +214,7 @@ test('[APP-05] makes no network requests after loading, enforced by the browser'
   // (Only the opt-in online extras' providers, each by its exact address.)
   const connect = csp.match(/connect-src ([^;]*)/)[1].trim().split(/\s+/);
   assert.deepEqual(connect.sort(), onlineHosts().sort());
-  assert.ok(connect.every((h) => /^https?:\/\/[a-z0-9.-]+(:\d+)?$/.test(h)), 'no wildcards');
+  assert.ok(connect.every((h) => /^https?:\/\/[a-z0-9.-]+(:\d+)?(\/[\w@.\/-]+)?$/.test(h) && !h.includes('*')), 'no wildcards');
   assert.match(csp, /default-src 'none'/);
   const blocked = await page.evaluate(() => fetch('https://example.com/').then(() => 'sent', () => 'blocked'));
   assert.equal(blocked, 'blocked');
