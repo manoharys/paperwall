@@ -15,6 +15,9 @@
   with editable text boxes, shapes, cropped and framed photos, and speaker
   notes. Effects, charts, icons and stickers come as pictures. Opens in
   PowerPoint, Keynote and LibreOffice.
+- Documents come as their sheets in every PDF (vector, flattened and print)
+  and as a slide a sheet in PowerPoint. Sticky notes stay notes of their
+  color with editable text, and videos show their full-size still.
 - Written from the public specs: deflate, a Brotli decoder and a WOFF2 font
   reader (to embed the bundled fonts), a TrueType subsetter, and the PDF and
   PowerPoint writers.
