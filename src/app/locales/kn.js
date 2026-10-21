@@ -964,6 +964,7 @@ export const kn = {
   'gpu.missingValue': "ಮಾದರಿ ಇಲ್ಲದ ಒಂದು ಮೌಲ್ಯವನ್ನು ಉಲ್ಲೇಖಿಸುತ್ತದೆ: {name}",
   'a11y.selected': "{name} ಆಯ್ಕೆಯಾಗಿದೆ, {total} ರಲ್ಲಿ {n}",
   'a11y.selectedMany': { one: "{n} ಅಂಶ ಆಯ್ಕೆಯಾಗಿದೆ", other: "{n} ಅಂಶಗಳು ಆಯ್ಕೆಯಾಗಿವೆ" },
+  'a11y.selectedHidden': "{name} ಆಯ್ಕೆಯಾಗಿದೆ (ಮರೆಮಾಡಲಾಗಿದೆ)",
   'a11y.nothing': "ಏನೂ ಆಯ್ಕೆಯಾಗಿಲ್ಲ",
   'a11y.locked': "{name} (ಲಾಕ್ ಆಗಿದೆ)",
   'a11y.page': "ಪುಟ {n} / {total}",

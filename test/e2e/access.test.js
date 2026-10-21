@@ -141,6 +141,16 @@ test('[APP-09] dialogs keep focus inside, close with Escape and give focus back'
   await page.keyboard.press('Escape');
   await page.waitForSelector('[data-testid="color-popover"]', { state: 'detached' });
   assert.equal(await focused(page), 'bg-color');
+  // A dialog opened from a menu gives focus back to the menu's button.
+  await page.focus('[data-testid="main"]');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('[data-testid="menu-online"]');
+  await page.focus('[data-testid="menu-online"]');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('[role="dialog"]');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('[role="dialog"]', { state: 'detached' });
+  assert.equal(await focused(page), 'main', 'More > Online extras…, then Escape: back on More');
   await context.close();
 });
 
@@ -333,5 +343,35 @@ test('[APP-09] the canvas is a labelled, described place on the page', async () 
   await settled(page);
   assert.equal(await focused(page), 'stage');
   assert.equal((await state(page, (ed, id) => ed.find(id), el.id)).text, 'Hi');
+  await context.close();
+});
+
+test('[APP-09] Alt+Arrows resize a turned element in place; a hidden one is announced as hidden', async () => {
+  const { page, context } = await newDesign('square');
+  const sq = await addShape(page, 'Square');
+  await page.evaluate((id) => window.paperwall.editor.update({ rotation: 40 }, null, [id]), sq.id);
+  // Its top-left corner (as turned) stays where it is, as with dragging the opposite handle.
+  const corner = () => page.evaluate((id) => {
+    const e = window.paperwall.editor.find(id);
+    const a = (e.rotation * Math.PI) / 180;
+    const [cx, cy] = [e.x + e.w / 2, e.y + e.h / 2];
+    return [cx - (e.w / 2) * Math.cos(a) + (e.h / 2) * Math.sin(a), cy - (e.w / 2) * Math.sin(a) - (e.h / 2) * Math.cos(a)];
+  }, sq.id);
+  const before = await corner();
+  await page.focus('[data-testid="stage"]');
+  for (let i = 0; i < 5; i++) await page.keyboard.press('Alt+Shift+ArrowRight');
+  await page.keyboard.press('Alt+Shift+ArrowDown');
+  const now = (await elements(page)).find((e) => e.id === sq.id);
+  assert.ok(now.w > sq.w + 40, 'it got bigger');
+  const after = await corner();
+  assert.ok(Math.hypot(after[0] - before[0], after[1] - before[1]) < 0.01, `corner stayed: ${before} → ${after}`);
+  // Hidden, it isn't counted among the elements Tab goes through.
+  await addText(page);
+  await page.evaluate((id) => {
+    const ed = window.paperwall.editor;
+    ed.update({ hidden: true }, null, [id]);
+    ed.select([id]);
+  }, sq.id);
+  await page.waitForFunction(() => /^Rectangle selected \(hidden\)$/.test(document.querySelector('[data-testid="announcer"]').textContent));
   await context.close();
 });

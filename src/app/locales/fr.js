@@ -964,6 +964,7 @@ export const fr = {
   'gpu.missingValue': "Le modèle fait référence à une valeur manquante, {name}",
   'a11y.selected': "{name} sélectionné, {n} sur {total}",
   'a11y.selectedMany': { one: "{n} élément sélectionné", other: "{n} éléments sélectionnés" },
+  'a11y.selectedHidden': "{name} sélectionné (masqué)",
   'a11y.nothing': "Aucune sélection",
   'a11y.locked': "{name} (verrouillé)",
   'a11y.page': "Page {n} sur {total}",

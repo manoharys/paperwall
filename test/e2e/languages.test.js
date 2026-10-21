@@ -4,7 +4,7 @@
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { openApp, teardown, waitForEditor, addText, openTab } from './helpers.js';
+import { openApp, newDesign, teardown, waitForEditor, addText, openTab } from './helpers.js';
 import { audit } from './audit.js';
 import { CATALOGS, LANGUAGES } from '../../src/app/i18n.js';
 
@@ -82,6 +82,36 @@ test('[APP-08] switching language changes the interface at once and is kept afte
   assert.deepEqual(await rawKeys(page), []);
   // The design's own text isn't translated: it stays as written.
   assert.equal(await page.evaluate(() => window.paperwall.editor.doc.pages[0].elements[0].text), say('de', 'newText.heading'));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('[APP-08] switching language in the editor keeps the design as it is: undo, selection and page', async () => {
+  const { page, context, errors } = await newDesign('square');
+  await page.evaluate(() => window.paperwall.editor.addPage());
+  const el = await addText(page);
+  const was = await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    window.editorBefore = ed;
+    return { page: ed.page, selection: ed.selection, versions: ed.versionAt };
+  });
+  assert.equal(was.page, 1);
+  await page.click('[data-testid="main"]');
+  await pick(page, 'es', 'menu-language');
+  await page.waitForFunction(() => document.activeElement?.dataset.testid === 'main');
+  const now = await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    return { same: ed === window.editorBefore, page: ed.page, selection: ed.selection, versions: ed.versionAt, canUndo: ed.history.canUndo };
+  });
+  assert.deepEqual(now, { ...was, same: true, canUndo: true });
+  assert.equal((await page.textContent('[data-testid="rail-text"]')).trim(), say('es', 'insert.tabText'));
+  assert.equal(await page.locator('[data-testid="page-thumb"]').count(), 2);
+  // Undo still takes back the text just added, on the same page.
+  await page.click('[data-testid="undo"]');
+  assert.deepEqual(await page.evaluate((id) => {
+    const ed = window.paperwall.editor;
+    return [ed.page, !!ed.find(id)];
+  }, el.id), [1, false]);
   assert.deepEqual(errors, []);
   await context.close();
 });

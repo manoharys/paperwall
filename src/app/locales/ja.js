@@ -964,6 +964,7 @@ export const ja = {
   'gpu.missingValue': "このモデルは存在しない値 {name} を参照しています",
   'a11y.selected': "{name} を選択（{total} 個中 {n} 個目）",
   'a11y.selectedMany': { other: "{n} 個の要素を選択中" },
+  'a11y.selectedHidden': "{name} を選択（非表示）",
   'a11y.nothing': "何も選択していません",
   'a11y.locked': "{name}（ロック中）",
   'a11y.page': "ページ {n} / {total}",

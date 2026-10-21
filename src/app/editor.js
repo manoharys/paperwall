@@ -10,7 +10,7 @@ import {
 import { fitHeight } from '../model/text-layout.js';
 import { flowDocument, growBoard } from '../model/flow.js';
 import { curveGeometry } from '../model/render.js';
-import { unionBounds, pointInBox, toLocal, refitGroup } from '../model/geometry.js';
+import { unionBounds, pointInBox, toLocal, refitGroup, handlePosition } from '../model/geometry.js';
 import { gridBoxes } from '../model/grids.js';
 import { createConnector, updateConnectors, isLine, lineHit } from '../model/connectors.js';
 import { gridLines, marginSize } from '../model/view.js';
@@ -1114,10 +1114,15 @@ export class Editor {
         if (dw) h = Math.max(1, w / r);
         else w = Math.max(1, h * r);
       }
+      // Its top-left corner (as turned) stays put, as when dragging the opposite handle.
+      const corner = handlePosition(e, 'nw');
       if (e.type === 'text') {
         cmd.resizeElement(e, { x: e.x, y: e.y, w, h: e.h });
         this.fitText(e);
       } else cmd.resizeElement(e, { x: e.x, y: e.y, w, h }, { scaleContent: e.type === 'group' || e.type === 'qr' });
+      const now = handlePosition(e, 'nw');
+      e.x += corner.x - now.x;
+      e.y += corner.y - now.y;
     }, { key: `resize:${el.id}` });
   }
 

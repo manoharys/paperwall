@@ -965,6 +965,7 @@ export const ptBR = {
   'gpu.missingValue': "O modelo se refere a um valor ausente, {name}",
   'a11y.selected': "{name} selecionado, {n} de {total}",
   'a11y.selectedMany': { one: "{n} elemento selecionado", other: "{n} elementos selecionados" },
+  'a11y.selectedHidden': "{name} selecionado (oculto)",
   'a11y.nothing': "Nada selecionado",
   'a11y.locked': "{name} (bloqueado)",
   'a11y.page': "Página {n} de {total}",

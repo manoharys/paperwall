@@ -966,6 +966,7 @@ export const en = {
   'gpu.missingValue': 'The model refers to a missing value, {name}',
   'a11y.selected': '{name} selected, {n} of {total}',
   'a11y.selectedMany': { one: '{n} element selected', other: '{n} elements selected' },
+  'a11y.selectedHidden': '{name} selected (hidden)',
   'a11y.nothing': 'Nothing selected',
   'a11y.locked': '{name} (locked)',
   'a11y.page': 'Page {n} of {total}',

@@ -1,6 +1,6 @@
 // Form controls used by the panels: color picker, sliders, number fields.
 
-import { h, icon, iconButton } from './ui.js';
+import { h, icon, iconButton, menuClosed } from './ui.js';
 import { mixHex, sortedStops, normalizeHex } from '../model/color.js';
 import { t, LANGUAGES, language } from './i18n.js';
 import { paletteName, gradientName, fontKind } from './names.js';
@@ -22,6 +22,7 @@ export function closePopover() {
   if (!openPopover) return;
   openPopover.cleanup?.();
   openPopover.opener?.setAttribute('aria-expanded', 'false');
+  if (openPopover.opener && openPopover.contains(document.activeElement)) menuClosed(openPopover.opener);
   openPopover.remove();
   openPopover = null;
   document.dispatchEvent(new Event('paperwall:popover-closed'));

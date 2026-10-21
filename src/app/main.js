@@ -95,7 +95,11 @@ async function changeLanguage(code, { focus } = {}) {
   quickLanguage(code);
   relabelPage();
   await store.setSetting('language', code).catch(() => null);
-  await route();
+  // In the editor, just its screen is drawn again: the design stays open as it is (undo, selection, page).
+  if (current) {
+    current.unbind();
+    current.unbind = drawEditor(current.editor);
+  } else await route();
   // Back where the person was (the screen was drawn again under them).
   document.querySelector(`[data-testid="${focus}"]`)?.focus();
 }
@@ -184,11 +188,21 @@ async function openEditor(id) {
   });
   // (Just its preview: not every design, videos and all.)
   if (!(await store.getThumb(doc.id).catch(() => null))) editor.thumb();
+  current = { editor, unbind: drawEditor(editor) };
+}
+
+/**
+ * The editor's screen for `editor`: top bar, panels, canvas and page strip.
+ * Returns what takes it down again (the editor itself, its undo history,
+ * selection and page, stay as they are).
+ */
+function drawEditor(editor) {
+  const before = new Set(editor.listeners);
   const canvas = new Canvas(editor);
   const inspector = new Inspector(editor, canvas, { onResizeDesign: () => resizeDialog(editor), onPlay: (how) => present(editor, canvas, { autoplay: true, ...how }) });
   const insert = new InsertPanel(editor);
   const strip = new PageStrip(editor, canvas);
-  const nameInput = h('input', { class: 'doc-name', value: doc.name, 'aria-label': t('top.designName'), 'data-testid': 'doc-name', maxlength: '120' });
+  const nameInput = h('input', { class: 'doc-name', value: editor.doc.name, 'aria-label': t('top.designName'), 'data-testid': 'doc-name', maxlength: '120' });
   nameInput.addEventListener('change', () => editor.rename(nameInput.value));
   nameInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') nameInput.blur();
@@ -242,8 +256,8 @@ async function openEditor(id) {
   const skip = h('button', { type: 'button', class: 'skip-link', 'data-testid': 'skip-to-canvas', onClick: () => canvas.el.focus() }, t('a11y.skip'));
   root.append(h('div', { class: 'editor' }, skip, top, workspace, strip.el));
   const unbindKeys = bindShortcuts(editor, canvas, { exportDialog: () => exportDialog(editor), findDialog: () => findDialog(editor) });
-  const offTop = editor.on(syncTop);
-  const offSay = editor.on(sayChanges(editor));
+  editor.on(syncTop);
+  editor.on(sayChanges(editor));
   const onResize = () => canvas.layout();
   window.addEventListener('resize', onResize);
   syncTop();
@@ -268,18 +282,16 @@ async function openEditor(id) {
     });
   };
   document.fonts.addEventListener('loadingdone', onFontsLoaded);
-  current = {
-    editor,
-    unbind: () => {
-      document.fonts.removeEventListener('loadingdone', onFontsLoaded);
-      unbindKeys();
-      offTop();
-      offSay();
-      window.removeEventListener('resize', onResize);
-    },
-  };
   // Handy in the console, and used by the end-to-end tests.
   window.paperwall = { editor, canvas, inspector, export: exportApi, store, cutout: cutoutApi };
+  // (What the parts of the screen listen to on the editor, to let go of with them.)
+  const mine = [...editor.listeners].filter((fn) => !before.has(fn));
+  return () => {
+    document.fonts.removeEventListener('loadingdone', onFontsLoaded);
+    unbindKeys();
+    for (const fn of mine) editor.listeners.delete(fn);
+    window.removeEventListener('resize', onResize);
+  };
 }
 
 window.addEventListener('hashchange', route);
@@ -316,8 +328,11 @@ function sayChanges(editor) {
     if (!sel.length) return say(t('a11y.nothing'));
     if (sel.length > 1) return say(t('a11y.selectedMany', { n: sel.length }));
     const els = editor.pageData.elements.filter((el) => !el.hidden);
-    const name = elementName(sel[0]);
-    say(t('a11y.selected', { name: sel[0].locked ? t('a11y.locked', { name }) : name, n: els.indexOf(sel[0]) + 1 || 1, total: els.length || 1 }));
+    let name = elementName(sel[0]);
+    if (sel[0].locked) name = t('a11y.locked', { name });
+    // (A hidden one isn't among those Tab goes through: no place to count.)
+    if (sel[0].hidden) return say(t('a11y.selectedHidden', { name }));
+    say(t('a11y.selected', { name, n: els.indexOf(sel[0]) + 1 || 1, total: els.length || 1 }));
   };
 }
 

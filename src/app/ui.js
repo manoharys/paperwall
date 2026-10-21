@@ -214,8 +214,18 @@ export function focusables(root) {
  * click beside the dialog doesn't close it (Close and Escape still do).
  * Tab stays inside it, and closing it puts focus back where it was.
  */
+// The button of a menu that just closed from inside (focus is on the page
+// then): a dialog opened from that menu gives focus back to it. Forgotten
+// once focus goes anywhere.
+let menuOpener = null;
+export function menuClosed(btn) {
+  menuOpener = btn;
+  document.addEventListener('focusin', () => (menuOpener = null), { once: true });
+}
+
 export function dialog(title, body, { onClose, wide = false, testid, steady = null } = {}) {
-  const opener = document.activeElement;
+  const active = document.activeElement;
+  const opener = active && active !== document.body ? active : menuOpener;
   const backdrop = h('div', { class: 'backdrop' });
   let closed = false;
   const close = () => {

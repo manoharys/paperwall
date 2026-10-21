@@ -964,6 +964,7 @@ export const hi = {
   'gpu.missingValue': "मॉडल एक ऐसे मान का ज़िक्र करता है जो मौजूद नहीं है: {name}",
   'a11y.selected': "{name} चुना गया, {total} में से {n}",
   'a11y.selectedMany': { one: "{n} एलिमेंट चुना गया", other: "{n} एलिमेंट चुने गए" },
+  'a11y.selectedHidden': "{name} चुना गया (छिपा हुआ)",
   'a11y.nothing': "कुछ नहीं चुना गया",
   'a11y.locked': "{name} (लॉक है)",
   'a11y.page': "पेज {n} / {total}",

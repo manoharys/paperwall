@@ -965,6 +965,7 @@ export const ar = {
   'gpu.missingValue': "يشير النموذج إلى قيمة مفقودة: {name}",
   'a11y.selected': "تم تحديد {name}، {n} من {total}",
   'a11y.selectedMany': { zero: "لم يُحدَّد شيء", one: "تم تحديد عنصر واحد", two: "تم تحديد عنصرين", few: "تم تحديد {n} عناصر", many: "تم تحديد {n} عنصرًا", other: "تم تحديد {n} عنصر" },
+  'a11y.selectedHidden': "تم تحديد {name} (مخفي)",
   'a11y.nothing': "لا شيء محدّد",
   'a11y.locked': "{name} (مقفل)",
   'a11y.page': "الصفحة {n} من {total}",
