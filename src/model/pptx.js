@@ -114,10 +114,18 @@ function pictureBox(doc, el) {
   return x1 - x0 > 0 && y1 - y0 > 0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
 }
 
-/** Which elements of these pages need a picture: [{ page, key, box }] (box in page px). media as for pptxKind. */
+/**
+ * Which elements of these pages need a picture: [{ page, key, box }] (box in
+ * page px; key '@bg' for a background photo whose picture isn't in `media`,
+ * when given, as for pptxKind).
+ */
 export function planPptx(doc, pages, media = null) {
   const wants = [];
   for (const i of pages) {
+    const bg = doc.pages[i].background;
+    if (media && bg?.type === 'image' && doc.assets[bg.assetId] && !media.has(`asset:${bg.assetId}:file`)) {
+      wants.push({ page: i, key: '@bg', box: { x: 0, y: 0, w: doc.width, h: doc.height } });
+    }
     for (const el of doc.pages[i].elements) {
       if (el.hidden || pptxKind(doc, el, media) !== 'raster') continue;
       const box = pictureBox(doc, el);
@@ -480,17 +488,19 @@ export function buildPptx(doc, pages, env = {}) {
     const page = doc.pages[index];
     const s = new Slide(doc, emu, media, env.media);
     s.rel(`${REL}/slideLayout`, '../slideLayouts/slideLayout1.xml');
-    const behind = s.backgroundPicture(page);
+    // A planned picture (made by the app) as it is, upright in its box.
+    const planned = (key) => {
+      const png = env.pictures?.get(key);
+      if (!png) return '';
+      const name = `image${mediaFiles.length + 1}.png`;
+      mediaFiles.push([name, png]);
+      return s.raster(name, plan.get(key));
+    };
+    // (A background photo that couldn't be read comes as a picture of the background.)
+    const behind = plan.has(`${index}:@bg`) ? planned(`${index}:@bg`) : s.backgroundPicture(page);
     const shapes = page.elements.filter((el) => !el.hidden).map((el) => {
       const key = `${index}:${el.id}`;
-      if (plan.has(key)) {
-        const png = env.pictures?.get(key);
-        if (!png) return '';
-        const name = `image${mediaFiles.length + 1}.png`;
-        mediaFiles.push([name, png]);
-        return s.raster(name, plan.get(key));
-      }
-      return s.element(el);
+      return plan.has(key) ? planned(key) : s.element(el);
     }).join('');
     if (notesOf(page)) s.rel(`${REL}/notesSlide`, `../notesSlides/notesSlide${withNotes.indexOf(index) + 1}.xml`);
     const xml = `${XML}<p:sld ${NS}><p:cSld>${s.background(page)}<p:spTree>${GROUP_ROOT}${behind}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
