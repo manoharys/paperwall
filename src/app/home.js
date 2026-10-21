@@ -122,7 +122,7 @@ function renameDialog(row, after) {
     const doc = await store.loadDesign(row.id);
     doc.name = input.value.trim() || 'Untitled design';
     doc.updatedAt = Date.now();
-    await store.saveDesign(doc, row.thumb);
+    await store.saveDesign(doc); // (its preview stays the newest stored)
     d.close();
     after();
   } }, input, h('button', { type: 'submit', class: 'btn primary', 'data-testid': 'rename-save' }, 'Save')));

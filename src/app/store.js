@@ -145,6 +145,7 @@ export async function getThumb(id) {
 
 /** Save a design with a small preview image (left as it was when `thumb` is undefined). */
 export async function saveDesign(doc, thumb) {
+  deleted.delete(doc.id); // (saved again: a design once more, say opened from a file)
   if (thumb !== undefined) await put('settings', thumbKey(doc.id), thumb);
   else {
     thumb = await get('settings', thumbKey(doc.id));
