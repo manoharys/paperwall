@@ -641,10 +641,16 @@ function readStops(node, current) {
   if (!stops.length) return null;
   if (stops[0].offset > 0) stops.unshift({ ...stops[0], offset: 0 });
   if (stops[stops.length - 1].offset < 1) stops.push({ ...stops[stops.length - 1], offset: 1 });
-  // Two stops at one place make a hard edge: nudge them apart a hair.
-  for (let i = 1; i < stops.length; i++) if (stops[i].offset <= stops[i - 1].offset) stops[i] = { ...stops[i], offset: Math.min(1, stops[i - 1].offset + 1e-4) };
   if (stops.length === 1) stops.push({ ...stops[0], offset: 1 });
-  return stops;
+  // Two stops at one place make a hard edge: nudge them apart a hair. In
+  // thousandths, as the file writes them, so the stitching function's
+  // Bounds rise and stay inside its Domain (0 and 1, the ends' places).
+  const end = stops.length - 1;
+  if (end > 1000) no('gradient with too many stops');
+  const t = stops.map((s, i) => (i === 0 ? 0 : i === end ? 1000 : Math.round(s.offset * 1000)));
+  for (let i = 1; i < end; i++) t[i] = Math.max(t[i], t[i - 1] + 1);
+  for (let i = end - 1; i > 0; i--) t[i] = Math.min(t[i], t[i + 1] - 1);
+  return stops.map((s, i) => (s.offset === t[i] / 1000 ? s : { ...s, offset: t[i] / 1000 }));
 }
 
 // ---------- drawing a page ----------
