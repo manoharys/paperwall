@@ -63,6 +63,7 @@ export function pagePoints(doc) {
  * is as it is. Split once its fonts are in: they decide where lines break.
  */
 async function onPaper(doc, pages) {
+  if (!doc.document) return [doc, pages]; // (nothing to split: no fonts to wait for)
   await ensureDesignFonts(doc);
   return sheetsOf(doc, pages, measure);
 }
