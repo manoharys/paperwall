@@ -6,7 +6,7 @@ import { renderPage, textRuns } from '../model/render.js';
 import { buildPdf } from '../model/pdf.js';
 import { buildZip } from '../model/zip.js';
 import { validateDesign, clone, visiblePages, printDpi, pageLabel, versionSnapshot, soundtrackOf, keptAssets } from '../model/doc.js';
-import { measure, fontCssFor, registerDesignFonts } from './fonts.js';
+import { measure, fontCssFor, registerDesignFonts, ensureDesignFonts } from './fonts.js';
 import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage } from './ui.js';
 import { section, segmented, slider, toggle } from './widgets.js';
 import { exportGif, exportVideo, canMakeVideo } from './motion-export.js';
@@ -71,11 +71,17 @@ export function pagePoints(doc) {
   return { ptWidth: (doc.width / dpi) * 72, ptHeight: (doc.height / dpi) * 72, renderScale: dpi === 300 ? 1 : 2 };
 }
 
-/** On paper, a document is sheets (split between its blocks); anything else is as it is. */
-const onPaper = (doc, pages) => sheetsOf(doc, pages, measure);
+/**
+ * On paper, a document is sheets (split between its blocks); anything else
+ * is as it is. Split once its fonts are in: they decide where lines break.
+ */
+async function onPaper(doc, pages) {
+  await ensureDesignFonts(doc);
+  return sheetsOf(doc, pages, measure);
+}
 
 export async function exportPdf(doc0, pages0, { quality = 0.92 } = {}) {
-  const [doc, pages] = onPaper(doc0, pages0);
+  const [doc, pages] = await onPaper(doc0, pages0);
   const pts = pagePoints(doc);
   const out = [];
   for (const i of pages) {
@@ -91,7 +97,7 @@ export async function exportPdf(doc0, pages0, { quality = 0.92 } = {}) {
 /** A small preview for the home screen. */
 export async function thumbnail(doc0) {
   // (A document's first sheet, not a strip of its whole length.)
-  const [doc] = onPaper(doc0, [0]);
+  const [doc] = await onPaper(doc0, [0]);
   const scale = 360 / Math.max(doc.width, doc.height);
   const canvas = await rasterize(doc, 0, { scale, background: '#ffffff' });
   return canvas.toDataURL('image/jpeg', 0.82);
@@ -104,7 +110,7 @@ export async function copyToClipboard(doc, pageIndex) {
 }
 
 export async function printDesign(doc0, pages0) {
-  const [doc, pages] = onPaper(doc0, pages0);
+  const [doc, pages] = await onPaper(doc0, pages0);
   const imgs = [];
   for (const i of pages) imgs.push((await rasterize(doc, i, { scale: maxScale(doc, 2), background: '#ffffff' })).toDataURL('image/png'));
   const root = h('div', { id: 'print-root' }, imgs.map((src) => h('img', { src, alt: '' })));
