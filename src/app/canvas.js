@@ -260,7 +260,7 @@ export class Canvas {
     const was = this.drawn;
     this.drawn = { ...now, pageId: ed.pageData.id };
     const svg = this.svgHost.firstElementChild;
-    const same = was && svg && was.pageId === ed.pageData.id && was.head === now.head && was.background === now.background &&
+    const same = was && svg && was.pageId === ed.pageData.id &&
       was.elements.length === now.elements.length && now.elements.every((m, i) => !m === !was.elements[i]);
     const changed = same ? now.elements.flatMap((m, i) => (m === was.elements[i] ? [] : [i])) : null;
     // Each element shown is one <g>, in order, after the background.
@@ -271,8 +271,20 @@ export class Canvas {
       this.svgHost.innerHTML = `${now.head}<defs>${now.defs}</defs>${now.background}${now.elements.join('')}</svg>`;
       return;
     }
-    if (was.defs !== now.defs) svg.querySelector(':scope > defs').innerHTML = now.defs;
     const scratch = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    // (A document grown longer: just the page's size.)
+    if (was.head !== now.head) {
+      scratch.innerHTML = `${now.head}</svg>`;
+      for (const name of ['width', 'height', 'viewBox']) svg.setAttribute(name, scratch.firstChild.getAttribute(name));
+    }
+    const defs = svg.querySelector(':scope > defs');
+    if (was.defs !== now.defs) defs.innerHTML = now.defs;
+    // (The background is what's between the definitions and the elements: never a <g>.)
+    if (was.background !== now.background) {
+      for (const n of [...svg.children]) if (n !== defs && n.localName !== 'g') n.remove();
+      scratch.innerHTML = now.background;
+      defs.after(...scratch.childNodes);
+    }
     for (const i of changed) {
       scratch.innerHTML = now.elements[i];
       nodes[at[i]].replaceWith(scratch.firstChild);
