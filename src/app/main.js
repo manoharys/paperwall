@@ -133,8 +133,8 @@ async function openEditor(id) {
   editor.versionsChecked = store.hasVersions(doc.id).then((has) => (has ? (editor.versionAt = Date.now()) : editor.saveVersion('Original', { snapshot: original }))).catch(() => {
     editor.versionAt = Date.now(); // can't tell: carry on keeping versions every few minutes
   });
-  const meta = (await store.listDesigns()).find((d) => d.id === doc.id);
-  if (!meta?.thumb) editor.thumb();
+  // (Just its preview: not every design, videos and all.)
+  if (!(await store.getThumb(doc.id).catch(() => null))) editor.thumb();
   const canvas = new Canvas(editor);
   const inspector = new Inspector(editor, canvas, { onResizeDesign: () => resizeDialog(editor), onPlay: (how) => present(editor, canvas, { autoplay: true, ...how }) });
   const insert = new InsertPanel(editor);

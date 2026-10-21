@@ -132,12 +132,18 @@ export function all(store) {
 
 // ---------- designs ----------
 
-/** Save a design with a small preview image. */
 // Each design's latest preview is also kept on its own, small, so saving
 // without a new one reads just that (not the whole stored design, videos and
 // all), and every tab sees the newest.
 const thumbKey = (id) => `thumb|${id}`;
 
+/** A design's latest preview, or null. */
+export async function getThumb(id) {
+  const kept = await get('settings', thumbKey(id));
+  return kept !== undefined ? kept : (await get('designs', id))?.thumb ?? null;
+}
+
+/** Save a design with a small preview image (left as it was when `thumb` is undefined). */
 export async function saveDesign(doc, thumb) {
   if (thumb !== undefined) await put('settings', thumbKey(doc.id), thumb);
   else {
