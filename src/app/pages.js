@@ -288,6 +288,7 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     sound?.stop();
     document.removeEventListener('keydown', onKey, true);
     document.removeEventListener('fullscreenchange', onFullscreen);
+    window.removeEventListener('hashchange', close);
     if (document.fullscreenElement) document.exitFullscreen().catch(() => null);
     root.remove();
   };
@@ -306,10 +307,13 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
   });
   document.addEventListener('keydown', onKey, true);
   document.addEventListener('fullscreenchange', onFullscreen);
+  // Leaving the editor (Back, say) ends presenting too.
+  window.addEventListener('hashchange', close);
   document.body.append(root);
   go(at, false);
   root.focus();
   root.requestFullscreen?.().catch(() => null);
+  return { close };
 }
 
 // Safari draws HTML inside SVG (the live video's place) without the page's

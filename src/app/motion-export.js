@@ -4,7 +4,7 @@
 // (WebCodecs) into files we put together ourselves.
 
 import { renderFrame } from '../model/render.js';
-import { timeline, frameAt, soundFade } from '../model/motion.js';
+import { timeline, frameAt, soundFade, animationsEnd, keepsMoving } from '../model/motion.js';
 import { GifEncoder } from '../model/gif.js';
 import { buildWebmParts } from '../model/webm.js';
 import { buildMp4Parts } from '../model/mp4.js';
@@ -51,6 +51,15 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal, r
   // Videos on the pages are shown frame by frame, each at its exact moment.
   const videos = videosOn(doc, pages).length ? new VideoFrames(doc) : null;
   let last = null; // the last frame's picture, as SVG: a still moment isn't drawn again
+  let lastIndex = -1; // the page the last frame showed, settled (nothing on it can change), or -1
+  const settleAt = new Map(); // page index → when it's settled (Infinity if it never is)
+  const settledAt = (index) => {
+    if (!settleAt.has(index)) {
+      const page = doc.pages[index];
+      settleAt.set(index, keepsMoving(page, doc.assets) ? Infinity : animationsEnd(page));
+    }
+    return settleAt.get(index);
+  };
   const onPage = new Map(); // page index → its videos (worked out once)
   const videosOf = (index) => {
     if (!onPage.has(index)) onPage.set(index, videosOn(doc, [index]));
@@ -61,6 +70,13 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal, r
       if (signal?.aborted) throw new Error('Stopped');
       const t = i / fps;
       const frame = frameAt(doc, tl, t);
+      // A settled page shown again: the same picture, without drawing it.
+      const settled = !frame.from && frame.local >= settledAt(frame.index);
+      if (settled && lastIndex === frame.index) {
+        await each(canvas, ctx, i, t, true);
+        onProgress?.((i + 1) / count);
+        continue;
+      }
       const pictures = new Map();
       if (videos) {
         // Each video has its own player: they all seek at once.
@@ -74,6 +90,7 @@ async function eachFrame(doc, pages, { fps, width, height, onProgress, signal, r
       const same = svg === last;
       if (!same) await drawFrame(svg, { ctx, width, height });
       last = svg;
+      lastIndex = settled ? frame.index : -1;
       await each(canvas, ctx, i, t, same);
       onProgress?.((i + 1) / count);
     }
