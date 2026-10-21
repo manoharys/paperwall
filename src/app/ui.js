@@ -94,6 +94,9 @@ const UI_ICONS = {
   ruler: '<path d="M3 8h18v8H3z"/><path d="M7 8v3M11 8v4M15 8v3M19 8v4"/>',
   connect: '<rect x="3" y="4" width="6" height="6" rx="1"/><rect x="15" y="14" width="6" height="6" rx="1"/><path d="M9 7h4v10h2"/>',
   grid: '<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>',
+  play: '<path d="M7 4.5v15l12.5-7.5z"/>',
+  music: '<path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
+  motion: '<path d="M4 12h3M2.5 8h5M3.5 16h4"/><circle cx="14.5" cy="12" r="5.5"/>',
   history: '<path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4"/><path d="M12 8v4l3 2"/>',
   draw: '<path d="M4 20c2-1 3-4 5-4s2 3 4 3 3-5 7-8"/><path d="M15 4l5 5"/>',
   paint: '<rect x="4" y="3.5" width="14" height="6" rx="1"/><path d="M18 6.5h2v5h-8v3M11 14.5h2v6h-2z"/>',
@@ -172,8 +175,11 @@ export function toast(message, kind = 'info') {
   setTimeout(() => t.remove(), 3000);
 }
 
-/** A modal dialog. Returns { el, close }. */
-export function dialog(title, body, { onClose, wide = false, testid } = {}) {
+/**
+ * A modal dialog. Returns { el, close }. `steady()`: while it says so, a
+ * click beside the dialog doesn't close it (Close and Escape still do).
+ */
+export function dialog(title, body, { onClose, wide = false, testid, steady = null } = {}) {
   const backdrop = h('div', { class: 'backdrop' });
   const close = () => {
     backdrop.remove();
@@ -191,7 +197,7 @@ export function dialog(title, body, { onClose, wide = false, testid } = {}) {
     h('div', { class: 'dialog-body' }, body));
   backdrop.append(box);
   backdrop.addEventListener('pointerdown', (e) => {
-    if (e.target === backdrop) close();
+    if (e.target === backdrop && !steady?.()) close();
   });
   document.addEventListener('keydown', onKey, true);
   document.body.append(backdrop);
@@ -207,6 +213,8 @@ export function dataUrlToBytes(dataUrl) {
   const meta = dataUrl.slice(5, comma);
   const data = dataUrl.slice(comma + 1);
   if (meta.endsWith(';base64')) {
+    // The browser's own decoder where it has one (much quicker for videos).
+    if (typeof Uint8Array.fromBase64 === 'function') return { bytes: Uint8Array.fromBase64(data), mime: meta.slice(0, -7) };
     const bin = atob(data);
     const out = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);

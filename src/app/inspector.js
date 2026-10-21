@@ -4,14 +4,13 @@
 import { h, icon, iconButton, clear, toast, pickFile, readFileAsDataUrl, dialog, mod } from './ui.js';
 import { colorButton, slider, numberField, selectField, segmented, toggle, section, closePopover, popoverOpen, PALETTES, fontPicker, gradientEditor } from './widgets.js';
 import { FONTS, FONT_KINDS } from '../model/fonts.js';
-import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, isEmptyFrame, parseChartData, chartDataText, parseTable, tableText } from '../model/doc.js';
+import { ANIMATIONS, PAGE_ANIMATIONS, TRANSITIONS, DEFAULT_ANIM_DURATION, DEFAULT_STAGGER, DEFAULT_TRANSITION_DURATION, LIMITS, pageDuration } from '../model/motion.js';
+import { SHAPES, FRAME_MASKS, createText, restroke, PRESETS, toPx, fromPx, DEFAULT_FILTERS, uid, isEmptyFrame, parseChartData, chartDataText, parseTable, tableText, soundtrackOf, KEEPS_RATIO } from '../model/doc.js';
 import { collectColors, cropZoom } from '../model/commands.js';
 import { renderElementOnly, TEXT_EFFECTS } from '../model/render.js';
 import { measure, addCustomFont, customFontNames, ensureFont, fontSettled } from './fonts.js';
 import { iconById, stickerById } from '../model/graphics.js';
 import { getSetting } from './store.js';
-
-const MASK_LABELS = { none: 'Rectangle', circle: 'Circle', arch: 'Arch', blob: 'Blob', heart: 'Heart', star: 'Star', polygon: 'Hexagon', triangle: 'Triangle', diamond: 'Diamond' };
 
 const DUOTONES = [
   ['Ink', '#1a1a2e', '#f7f4ef'], ['Ocean', '#0b2a45', '#7fd1c7'], ['Sunset', '#5b1a6e', '#ffb36b'], ['Berry', '#3b1426', '#ff8fa3'],
@@ -29,8 +28,10 @@ function cached(key, keep, make) {
 
 const EFFECT_NAMES = { none: 'None', lift: 'Lift', hollow: 'Hollow', splice: 'Splice', echo: 'Echo', glitch: 'Glitch', glow: 'Glow', neon: 'Neon' };
 
-const TYPE_NAMES = { text: 'Text', shape: 'Shape', line: 'Line', image: 'Image', icon: 'Icon', sticker: 'Sticker', qr: 'QR code', group: 'Group', chart: 'Chart', table: 'Table', draw: 'Drawing', connector: 'Connector' };
+const TYPE_NAMES = { video: 'Video', text: 'Text', shape: 'Shape', line: 'Line', image: 'Image', icon: 'Icon', sticker: 'Sticker', qr: 'QR code', group: 'Group', chart: 'Chart', table: 'Table', draw: 'Drawing', connector: 'Connector' };
 const SHAPE_NAMES = { rect: 'Rectangle', ellipse: 'Circle', triangle: 'Triangle', star: 'Star', polygon: 'Polygon', heart: 'Heart', arrow: 'Arrow', bubble: 'Speech bubble', diamond: 'Diamond', arch: 'Arch', blob: 'Blob' };
+// Frame shapes are named as shapes are, but for these three.
+const MASK_LABELS = { ...SHAPE_NAMES, none: 'Rectangle', circle: 'Circle', polygon: 'Hexagon' };
 
 // Presets set the basic adjustments only; warmth, tint, hue, vignette and
 // duotone are left as they are. Original puts everything back.
@@ -45,10 +46,11 @@ const FILTER_PRESETS = {
 };
 
 export class Inspector {
-  constructor(editor, canvas, { onResizeDesign }) {
+  constructor(editor, canvas, { onResizeDesign, onPlay }) {
     this.ed = editor;
     this.canvas = canvas;
     this.onResizeDesign = onResizeDesign;
+    this.onPlay = onPlay;
     this.tab = 'edit';
     this.brand = { colors: [] };
     this.body = h('div', { class: 'inspector-body' });
@@ -160,7 +162,7 @@ export class Inspector {
     const set = (k) => (v) => this.up({ [k]: k === 'rotation' ? ((v % 360) + 360) % 360 : v });
     const resize = (k) => (v) => {
       const props = { [k]: Math.max(1, v) };
-      if (el.type === 'image' || el.type === 'icon' || el.type === 'sticker' || el.type === 'qr') {
+      if (KEEPS_RATIO.includes(el.type)) {
         const r = el.w / el.h;
         if (k === 'w') props.h = Math.max(1, v / r);
         else props.w = Math.max(1, v * r);
@@ -215,6 +217,7 @@ export class Inspector {
       shape: () => this.shapePanel(el),
       line: () => this.linePanel(el),
       image: () => this.imagePanel(el),
+      video: () => this.videoPanel(el),
       icon: () => [section('Color', h('div', { class: 'field inline' }, h('span', null, 'Icon color'), colorButton({ label: 'Icon color', testid: 'icon-color', value: el.color, getContext: this.colorContext, onChange: (c, l) => this.up({ color: c }, l ? 'color' : null) })),
         slider({ label: 'Line weight', value: el.strokeWidth || 1.8, min: 0.5, max: 4, step: 0.1, onChange: (v, l) => this.up({ strokeWidth: v }, l ? 'sw' : null) }))],
       connector: () => [
@@ -232,8 +235,64 @@ export class Inspector {
       table: () => this.tablePanel(el),
     }[el.type];
     if (specific) out.push(...specific());
-    out.push(this.arrange(1), this.geometry(el), this.effects());
+    out.push(this.arrange(1), this.geometry(el), this.effects(), this.animatePanel(el));
     return out;
+  }
+
+  /** How the element comes in when the page plays (presenting, GIF, video). */
+  animatePanel(el) {
+    const ed = this.ed;
+    const a = el.anim || { type: 'none' };
+    const now = () => this.ed.single?.anim || a;
+    const pageAnim = ed.pageData.anim?.type;
+    const withPage = !!pageAnim && pageAnim !== 'none' && ed.pageData.elements.some((e) => e.id === el.id);
+    return section('Animate',
+      h('div', { class: 'anim-grid', role: 'group', 'aria-label': 'Animation', 'data-testid': 'anim-types' }, [
+        // With a page animation (and not inside a group, which comes in as
+        // one): "With the page" follows it, None keeps this one still.
+        ...(withPage ? [h('button', { type: 'button', class: `anim${!el.anim ? ' on' : ''}`, 'aria-pressed': String(!el.anim), 'data-testid': 'anim-page', onClick: () => this.up({ anim: null }) }, 'With the page')] : []),
+        ...Object.entries(ANIMATIONS).map(([type, { name }]) => {
+          const on = type === 'none' ? (withPage ? el.anim?.type === 'none' : a.type === 'none') : a.type === type;
+          return h('button', {
+            type: 'button', class: `anim${on ? ' on' : ''}`, 'aria-pressed': String(on), 'data-testid': `anim-${type}`,
+            // A whole replacement (updates merge into objects).
+            onClick: () => this.up({ anim: type === 'none' ? (withPage ? { type: 'none' } : null) : { type, duration: now().duration ?? DEFAULT_ANIM_DURATION, delay: now().delay ?? 0 } }),
+          }, name);
+        }),
+      ]),
+      withPage && !el.anim ? h('p', { class: 'hint' }, `Comes in with the page's ${ANIMATIONS[pageAnim].name.toLowerCase()} animation. Pick None to keep it still.`) : null,
+      a.type !== 'none' ? h('div', { class: 'sub' },
+        slider({ label: 'Duration', value: a.duration ?? DEFAULT_ANIM_DURATION, min: LIMITS.duration[0], max: LIMITS.duration[1], step: 0.1, unit: 's', testid: 'anim-duration', onChange: (v, l) => this.up({ anim: { ...now(), duration: v } }, l ? 'anim' : null) }),
+        slider({ label: 'Delay', value: a.delay ?? 0, min: LIMITS.delay[0], max: LIMITS.delay[1], step: 0.1, unit: 's', testid: 'anim-delay', onChange: (v, l) => this.up({ anim: { ...now(), delay: v } }, l ? 'anim' : null) })) : null,
+      h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'anim-play', onClick: () => this.onPlay?.({ only: true }) }, icon('play'), 'Play this page'));
+  }
+
+  /** The design's soundtrack: what it is, how loud, and taking it away. */
+  soundtrackRow() {
+    const ed = this.ed;
+    const a = soundtrackOf(ed.doc);
+    if (!a) return h('p', { class: 'hint', 'data-testid': 'soundtrack-none' }, 'Soundtrack: add a sound from Uploads. It plays when you press Play, and in videos you download.');
+    return h('div', { class: 'sub', 'data-testid': 'soundtrack' },
+      h('div', { class: 'field inline' }, h('span', null, 'Soundtrack'), h('b', { class: 'ellipsis' }, a.name || 'Sound'),
+        iconButton('trash', 'Remove the soundtrack', () => ed.setSoundtrack(null), { 'data-testid': 'soundtrack-remove' })),
+      slider({ label: 'Volume', value: Math.round((ed.doc.audio.volume ?? 1) * 100), min: 0, max: 100, unit: '%', testid: 'soundtrack-volume', onChange: (v, l) => ed.setSoundtrackVolume(v / 100, l ? 'volume' : null) }));
+  }
+
+  /** The page's own motion: an animation for everything on it, how long it shows, and how it comes in. */
+  motionPanel() {
+    const ed = this.ed;
+    const page = ed.pageData;
+    const at = ed.page;
+    const pa = page.anim || { type: 'none' };
+    const tr = page.transition || { type: 'none' };
+    const set = (patch, key) => ed.setPageMotion(at, patch, key);
+    return section('Motion',
+      selectField({ label: 'Animate the page', value: pa.type, testid: 'page-anim', options: Object.entries(PAGE_ANIMATIONS).map(([value, { name }]) => ({ value, label: name })), onChange: (type) => set({ anim: type === 'none' ? undefined : { ...pa, type, stagger: pa.stagger ?? DEFAULT_STAGGER } }) }),
+      slider({ label: 'Show for', value: pageDuration(page), min: LIMITS.page[0], max: LIMITS.page[1], step: 0.5, unit: 's', testid: 'page-duration', onChange: (v, l) => set({ duration: v }, l ? `duration:${at}` : null) }),
+      selectField({ label: 'Transition into this page', value: tr.type, testid: 'page-transition', options: Object.entries(TRANSITIONS).map(([value, { name }]) => ({ value, label: name })), onChange: (type) => set({ transition: type === 'none' ? undefined : { type, duration: tr.duration ?? DEFAULT_TRANSITION_DURATION } }) }),
+      at === 0 && tr.type !== 'none' ? h('p', { class: 'hint' }, 'Shows when this page follows another, as when pages are moved.') : null,
+      this.soundtrackRow(),
+      h('button', { type: 'button', class: 'btn small wide', 'data-testid': 'page-play', onClick: () => this.onPlay?.() }, icon('play'), 'Play from this page'));
   }
 
   multiPanel(sel) {
@@ -395,6 +454,18 @@ export class Inspector {
       h('div', { class: 'row' },
         toggle({ label: 'Arrow at start', checked: el.startCap === 'arrow', testid: 'arrow-start', onChange: (on) => this.up({ startCap: on ? 'arrow' : 'none' }) }),
         toggle({ label: 'Arrow at end', checked: el.endCap === 'arrow', testid: 'arrow-end', onChange: (on) => this.up({ endCap: on ? 'arrow' : 'none' }) })))];
+  }
+
+  /** Where a video starts and whether it loops; its shape, like a picture's. */
+  videoPanel(el) {
+    const asset = this.ed.doc.assets[el.assetId];
+    const length = asset?.duration || 0;
+    return [section('Video',
+      h('p', { class: 'hint' }, `${length ? `${Math.round(length * 10) / 10} seconds. ` : ''}Plays when the page plays, presents or downloads as a video. Videos play without their sound: add a soundtrack from Uploads.`),
+      length > 0.5 ? slider({ label: 'Start at', value: el.trim?.start || 0, min: 0, max: Math.floor((length - 0.5) * 10) / 10, step: 0.1, unit: 's', testid: 'video-start', onChange: (v, l) => this.up({ trim: { start: v } }, l ? 'trim' : null) }) : null,
+      toggle({ label: 'Play again from the start when it ends', checked: el.loop !== false, testid: 'video-loop', onChange: (on) => this.up({ loop: on }) }),
+      selectField({ label: 'Frame shape', value: el.mask || 'none', testid: 'video-mask', options: FRAME_MASKS.map((m) => ({ value: m, label: MASK_LABELS[m] })), onChange: (mask) => this.up({ mask }) }),
+      !el.mask || el.mask === 'none' ? slider({ label: 'Corner rounding', value: el.radius || 0, min: 0, max: Math.round(Math.min(el.w, el.h) / 2), onChange: this.live('radius') }) : null)];
   }
 
   imagePanel(el) {
@@ -567,6 +638,7 @@ export class Inspector {
         bg.type === 'color' ? h('div', { class: 'field inline' }, h('span', null, 'Color'), colorButton({ label: 'Background color', testid: 'bg-color', value: bg.color, getContext: this.colorContext, onChange: (c, l) => ed.setBackground({ type: 'color', color: c }, l ? 'color' : null) })) : null,
         grad ? h('div', { class: 'sub' }, gradientEditor({ label: 'Background gradient', value: grad, getContext: this.colorContext, testid: 'bg-gradient', current: () => ed.pageData.background?.gradient, onChange: (g, l) => ed.setBackground({ type: 'gradient', gradient: g }, l ? 'grad' : null) })) : null,
         bg.type === 'image' ? h('button', { type: 'button', class: 'btn small wide', onClick: () => ed.setBackground({ type: 'color', color: '#ffffff' }) }, 'Remove background image') : null),
+      this.motionPanel(),
       section('Design',
         h('p', { class: 'meta', 'data-testid': 'design-size' }, size),
         h('button', { type: 'button', class: 'btn wide', 'data-testid': 'resize-design', onClick: () => this.onResizeDesign() }, icon('resize'), 'Resize to another format')),

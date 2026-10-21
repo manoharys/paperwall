@@ -84,10 +84,8 @@ const center = (box) => {
 export function updateConnectors(page, { refit = true } = {}) {
   if (!page || !hasConnector(page.elements)) return false;
   let changed = false;
-  // Every element's box on the page. Inside unrotated groups that's the
-  // element's own box moved by the group; inside a rotated or flipped group
-  // the end attaches to the outermost group's box instead.
-  // Only the elements some connector is attached to are looked up.
+  // Every element's box as it shows on the page (see index below). Only the
+  // elements some connector is attached to are looked up.
   const refs = new Set();
   const collect = (els) => {
     for (const e of els) {
@@ -98,15 +96,24 @@ export function updateConnectors(page, { refit = true } = {}) {
   collect(page.elements);
   const byId = new Map();
   let refitted = false;
-  const index = (els, ox, oy, top) => {
+  // `toPage` places a box given in this list's coordinates on the page. A
+  // group's children are relative to it, and in a turned or mirrored group
+  // they're turned and mirrored with it: each child's box is where it shows.
+  const index = (els, toPage) => {
     for (const e of els) {
-      if (refs.has(e.id)) byId.set(e.id, top || { ...e, x: e.x + ox, y: e.y + oy });
+      if (refs.has(e.id)) byId.set(e.id, toPage(e));
       if (e.type !== 'group') continue;
-      const plain = !top && !e.rotation && !e.flipX && !e.flipY;
-      index(e.children, ox + e.x, oy + e.y, plain ? null : top || { ...e, x: e.x + ox, y: e.y + oy });
+      index(e.children, (b) => {
+        const shifted = { ...b, x: b.x + e.x, y: b.y + e.y };
+        if (!e.rotation && !e.flipX && !e.flipY) return toPage(shifted);
+        const c = fromLocal(e, { x: shifted.x + b.w / 2, y: shifted.y + b.h / 2 });
+        const mirrored = !!e.flipX !== !!e.flipY; // one mirroring turns the other way
+        const rotation = (mirrored ? -(b.rotation || 0) : b.rotation || 0) + (e.rotation || 0);
+        return toPage({ ...shifted, x: c.x - b.w / 2, y: c.y - b.h / 2, rotation });
+      });
     }
   };
-  index(page.elements, 0, 0, null);
+  index(page.elements, (b) => b);
   // Connectors inside an (unrotated) group are synced in page coordinates too.
   const visit = (els, ox, oy) => {
     for (const el of els) {
@@ -177,9 +184,9 @@ export function updateConnectors(page, { refit = true } = {}) {
       moved = true;
     }
     if (!sTarget && !eTarget) return moved;
-    // Both elements inside the same turned group: both ends would land on the
-    // group's one box. Leave the line as it is until the group is undone.
-    if (sTarget && sTarget === eTarget) return moved;
+    // Both ends on the same element: they'd land on one point. Leave the
+    // line as it is.
+    if (sTarget && el.start.id === el.end.id) return moved;
     const a = sTarget ? anchorOn(sTarget, eTarget ? center(eTarget) : b0) : null;
     const b = eTarget ? anchorOn(eTarget, sTarget ? center(sTarget) : a0) : null;
     // Attached ends take the side they meet; loose ends keep the one they had.
@@ -198,7 +205,7 @@ export function updateConnectors(page, { refit = true } = {}) {
     // A refitted group may itself be a target: place ends on its new box.
     // (Once: this second pass only moves ends onto boxes that are settled now.)
     byId.clear();
-    index(page.elements, 0, 0, null);
+    index(page.elements, (b) => b);
     refit = false;
     visit(page.elements, 0, 0);
   }

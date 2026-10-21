@@ -40,8 +40,8 @@ function backdropFor(page, index, el) {
     }
     if (o.type === 'shape' && o.fill) return o.fill;
     if (o.type === 'text' && o.highlight) return o.highlight.color;
-    // Pictures, groups, tables and codes have many colors: can't judge, so don't guess.
-    if (['image', 'sticker', 'chart', 'group', 'table', 'qr'].includes(o.type)) return null;
+    // Pictures, videos, groups, tables and codes have many colors: can't judge, so don't guess.
+    if (['image', 'video', 'sticker', 'chart', 'group', 'table', 'qr'].includes(o.type)) return null;
   }
   const bg = page.background;
   if (bg?.type === 'color') return bg.color;

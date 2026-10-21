@@ -1,6 +1,7 @@
 // The design document: pages of elements, plus the images they use.
 
 import { boxAround } from './geometry.js';
+import { ANIMATIONS, PAGE_ANIMATIONS, TRANSITIONS, LIMITS, clampNum, shownPages } from './motion.js';
 
 export const FORMAT_VERSION = 1;
 export const DPI = 300;
@@ -27,7 +28,7 @@ export const PRESETS = [
 
 /** Indexes of the pages that aren't hidden (shown when presenting and downloading). */
 export function visiblePages(doc) {
-  return doc.pages.map((p, i) => (p.hidden ? -1 : i)).filter((i) => i >= 0);
+  return shownPages(doc);
 }
 
 export function presetById(id) {
@@ -194,6 +195,41 @@ export function createImage(assetId, props = {}) {
   });
 }
 
+/**
+ * A video on the page: shown like a picture (crop, filters, rounding, frame
+ * shapes), playing from `trim.start` seconds when the page plays; `loop`
+ * starts it over if it's shorter than the page.
+ */
+export function createVideo(assetId, props = {}) {
+  return base('video', {
+    w: 640,
+    h: 360,
+    assetId,
+    crop: { x: 0, y: 0, w: 1, h: 1 },
+    filters: { ...DEFAULT_FILTERS },
+    radius: 0,
+    mask: 'none',
+    trim: { start: 0 },
+    loop: true,
+    ...props,
+  });
+}
+
+/** The design's soundtrack (its stored sound), or null. */
+export function soundtrackOf(doc) {
+  return (doc.audio && doc.assets[doc.audio.assetId]) || null;
+}
+
+/** Where a video is (seconds into its file) at `local` seconds into its page. */
+export function videoTime(el, local, duration) {
+  // A start point at or past the end means just before the end.
+  const start = Math.max(0, duration > 0 ? Math.min(el.trim?.start || 0, duration - 0.04) : el.trim?.start || 0);
+  const t = start + Math.max(0, local);
+  if (!(duration > 0)) return t;
+  if (el.loop === false) return Math.min(t, Math.max(0, duration - 0.04));
+  return start + ((t - start) % Math.max(0.04, duration - start));
+}
+
 export const DRAW_TOOLS = {
   pen: { strokeWidth: 6, opacity: 1 },
   marker: { strokeWidth: 18, opacity: 1 },
@@ -330,13 +366,21 @@ export function createGroup(children, props = {}) {
   return base('group', { children, ...props });
 }
 
-/** Add an image's bytes to the design. Returns the asset id. */
-export function addAsset(doc, { mime, dataUrl, width, height, name = '' }) {
+// Asset types; each holds a data: URL of its own kind (data:image/…, data:font/…).
+const ASSET_KINDS = new Set(['image', 'font', 'video', 'audio']);
+
+/** Element types whose width and height keep their ratio when resized. */
+export const KEEPS_RATIO = ['image', 'video', 'icon', 'sticker', 'qr'];
+
+/** Add a picture, video or sound to the design (once: the same file is shared). Returns the asset id. */
+export function addAsset(doc, { mime, dataUrl, width, height, name = '', kind = 'image', duration, poster }) {
+  // The same file used the same way is stored once (a sound and a video of
+  // the same bytes stay apart: each kind is checked as its own when loaded).
   for (const [id, a] of Object.entries(doc.assets)) {
-    if (a.dataUrl === dataUrl) return id;
+    if (a.dataUrl === dataUrl && (a.type || 'image') === kind) return id;
   }
   const id = uid('a');
-  doc.assets[id] = { type: 'image', mime, dataUrl, width, height, name };
+  doc.assets[id] = { type: kind, mime, dataUrl, width, height, name, ...(duration !== undefined ? { duration } : {}), ...(poster ? { poster } : {}) };
   return id;
 }
 
@@ -345,10 +389,11 @@ export function usedAssetIds(doc) {
   const used = new Set();
   const visit = (els) => {
     for (const el of els) {
-      if (el.type === 'image') used.add(el.assetId);
+      if (el.type === 'image' || el.type === 'video') used.add(el.assetId);
       if (el.type === 'group') visit(el.children);
     }
   };
+  if (doc.audio?.assetId) used.add(doc.audio.assetId);
   for (const p of doc.pages) {
     visit(p.elements);
     if (p.background?.type === 'image') used.add(p.background.assetId);
@@ -356,16 +401,21 @@ export function usedAssetIds(doc) {
   return used;
 }
 
-/** Remove images that no element or background uses any more. */
-export function pruneAssets(doc) {
-  const used = usedAssetIds(doc);
-  for (const id of Object.keys(doc.assets)) if (!used.has(id)) delete doc.assets[id];
-  return doc;
-}
-
 /** Whether an image element is an empty frame: no picture yet, or its picture is missing. */
 export function isEmptyFrame(doc, el) {
   return el?.type === 'image' && !doc.assets[el.assetId];
+}
+
+/** An animation or transition from a file: a known type and numbers in range, else nothing. */
+function cleanMotion(m, kinds, ranges) {
+  if (!m || typeof m !== 'object' || !Object.hasOwn(kinds, m.type) || m.type === 'none') return undefined;
+  const out = { type: m.type };
+  // Missing, empty or not a number: left out, so the default applies (as when playing).
+  for (const [k, [lo, hi]] of Object.entries(ranges)) {
+    const v = clampNum(m[k], lo, hi, undefined);
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
 }
 
 /** Check that a parsed file looks like a Paperwall design. Throws a readable error if not. */
@@ -380,7 +430,18 @@ export function validateDesign(doc) {
   if (!doc.assets || typeof doc.assets !== 'object') doc.assets = {};
   // Files can come from anyone: keep only well-formed elements with numeric geometry.
   const NUMERIC = ['x', 'y', 'w', 'h', 'rotation', 'opacity', 'size', 'weight', 'lineHeight', 'letterSpacing', 'curve', 'strokeWidth', 'radius', 'sides', 'innerRatio'];
+  // Every element its own id, across all pages (videos, connectors and
+  // downloads tell elements apart by it): a repeat gets a new one.
+  // (Connectors on the same page then follow the new id: `renamed`.)
+  const seenIds = new Set();
+  let renamed = new Map();
   const clean = (els) => els.filter((el) => el && typeof el === 'object' && typeof el.type === 'string' && typeof el.id === 'string').map((el) => {
+    if (seenIds.has(el.id)) {
+      const id = uid('e');
+      renamed.set(el.id, id);
+      el.id = id;
+    }
+    seenIds.add(el.id);
     for (const k of NUMERIC) if (k in el && el[k] !== null) el[k] = Number.isFinite(+el[k]) ? +el[k] : 0;
     if (el.type === 'group') el.children = Array.isArray(el.children) ? clean(el.children) : [];
     if (el.type === 'draw' || el.type === 'connector') el.points = (Array.isArray(el.points) ? el.points : []).filter((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite));
@@ -388,18 +449,64 @@ export function validateDesign(doc) {
       if (el.points.length !== 2) el.points = [[0, 0], [1, 1]];
       for (const k of ['start', 'end']) el[k] = { id: typeof el[k]?.id === 'string' ? el[k].id : null, side: ['l', 'r', 't', 'b'].includes(el[k]?.side) ? el[k].side : undefined };
     }
+    // ({ type: 'none' } is kept: it keeps an element still while its page animates.)
+    if (el.anim !== undefined) el.anim = el.anim?.type === 'none' ? { type: 'none' } : cleanMotion(el.anim, ANIMATIONS, { duration: LIMITS.duration, delay: LIMITS.delay });
+    if (el.type === 'video') {
+      el.trim = { start: Math.max(0, Number.isFinite(+el.trim?.start) ? +el.trim.start : 0) };
+      el.loop = el.loop !== false;
+    }
     return el;
   });
   for (const p of doc.pages) {
     if (!p || !Array.isArray(p.elements)) throw new Error('A page in this design is damaged');
+    renamed = new Map();
     p.elements = clean(p.elements);
+    if (renamed.size) {
+      const relink = (els) => {
+        for (const el of els) {
+          for (const end of [el.start, el.end]) if (end && typeof end === 'object' && renamed.has(end.id)) end.id = renamed.get(end.id);
+          if (el.type === 'group') relink(el.children);
+        }
+      };
+      relink(p.elements);
+    }
     if (p.title !== undefined) p.title = typeof p.title === 'string' ? p.title.slice(0, 120) : undefined;
     if (p.hidden !== undefined) p.hidden = p.hidden === true || undefined;
     if (p.guides !== undefined) p.guides = (Array.isArray(p.guides) ? p.guides : []).filter((g) => g && (g.axis === 'x' || g.axis === 'y') && Number.isFinite(+g.pos)).map((g) => ({ axis: g.axis, pos: +g.pos }));
+    if (p.anim !== undefined) p.anim = cleanMotion(p.anim, PAGE_ANIMATIONS, { duration: LIMITS.duration, stagger: LIMITS.stagger });
+    if (p.transition !== undefined) p.transition = cleanMotion(p.transition, TRANSITIONS, { duration: LIMITS.transition });
+    if (p.duration !== undefined) p.duration = clampNum(p.duration, ...LIMITS.page, undefined);
   }
   for (const [id, a] of Object.entries(doc.assets)) {
-    if (!a || typeof a.dataUrl !== 'string' || !/^data:(image|font)\//.test(a.dataUrl)) delete doc.assets[id];
+    // Each file must be what it says it is (a picture, a font, a video or a sound).
+    const kind = a && ASSET_KINDS.has(a.type || 'image') ? a.type || 'image' : null;
+    if (!kind || typeof a.dataUrl !== 'string' || !a.dataUrl.startsWith(`data:${kind}/`)) delete doc.assets[id];
     else if (a.type === 'font') a.family = String(a.family || 'My font').replace(/[^\w\s-]/g, '').trim() || 'My font';
+    else if (a.type === 'video' && !(typeof a.poster === 'string' && a.poster.startsWith('data:image/'))) a.poster = undefined;
+    // Sizes and lengths from a file are numbers (or left out).
+    if (a && doc.assets[id]) {
+      for (const k of ['width', 'height']) if (a[k] !== undefined) a[k] = clampNum(a[k], 1, 100000, undefined);
+      if (a.duration !== undefined) a.duration = clampNum(a.duration, 0, 86400, undefined);
+    }
+  }
+  // The soundtrack: a sound the design has, at a volume from 0 to 1.
+  if (doc.audio !== undefined) {
+    const a = soundtrackOf(doc);
+    doc.audio = a && a.type === 'audio' ? { assetId: doc.audio.assetId, volume: clampNum(doc.audio.volume, 0, 1, 1) } : undefined;
+  }
+  // Each element shows its own kind of file: a picture where a video's file
+  // is named (or the other way round) is left out, as a missing file would be.
+  const kindOf = (id) => doc.assets[id] && (doc.assets[id].type || 'image');
+  const check = (els) => {
+    for (const el of els) {
+      // (A picture then is an empty frame to fill; a video, a video whose file is missing.)
+      if ((el.type === 'image' || el.type === 'video') && el.assetId && kindOf(el.assetId) && kindOf(el.assetId) !== el.type) el.assetId = el.type === 'image' ? null : 'missing';
+      if (el.type === 'group') check(el.children);
+    }
+  };
+  for (const p of doc.pages) {
+    check(p.elements);
+    if (p.background?.type === 'image' && kindOf(p.background.assetId) && kindOf(p.background.assetId) !== 'image') p.background = { type: 'color', color: p.background.color || '#ffffff' };
   }
   return doc;
 }
@@ -410,9 +517,17 @@ export function clone(value) {
 
 /** A copy of a design for its version history. Images never change once added, so they're shared, not copied. */
 export function versionSnapshot(doc) {
-  // Only the images it shows (ones replaced long ago needn't be kept by every
-  // version), and every font it carries.
-  const used = usedAssetIds(doc);
-  const assets = Object.fromEntries(Object.entries(doc.assets || {}).filter(([id, a]) => used.has(id) || a?.type === 'font'));
+  const { assets } = keptAssets(doc);
   return { ...clone({ ...doc, assets: undefined }), assets };
+}
+
+/**
+ * The design with only the files it uses (and every font it carries): what's
+ * worth saving. Pictures, videos and sounds taken off the pages stay in the
+ * open design (undo can bring them back), not in what's saved. Not a copy:
+ * shares everything with `doc`.
+ */
+export function keptAssets(doc) {
+  const used = usedAssetIds(doc);
+  return { ...doc, assets: Object.fromEntries(Object.entries(doc.assets || {}).filter(([id, a]) => used.has(id) || a?.type === 'font')) };
 }

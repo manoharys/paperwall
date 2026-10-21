@@ -1,6 +1,8 @@
 // Everything is stored in this browser, on this device: designs, the images
 // you've added, and your brand kit. Nothing is ever sent anywhere.
 
+import { keptAssets } from '../model/doc.js';
+
 const DB_NAME = 'paperwall';
 const DB_VERSION = 2;
 const STORES = ['designs', 'uploads', 'settings', 'versions'];
@@ -130,10 +132,35 @@ export function all(store) {
 
 // ---------- designs ----------
 
-/** Save a design with a small preview image. */
+// Each design's latest preview is also kept on its own, small, so saving
+// without a new one reads just that (not the whole stored design, videos and
+// all), and every tab sees the newest.
+const thumbKey = (id) => `thumb|${id}`;
+
+/** A design's latest preview, or null. */
+export async function getThumb(id) {
+  const kept = await get('settings', thumbKey(id));
+  return kept !== undefined ? kept : (await get('designs', id))?.thumb ?? null;
+}
+
+/** Save a design with a small preview image (left as it was when `thumb` is undefined). */
 export async function saveDesign(doc, thumb) {
-  const prev = thumb === undefined ? await get('designs', doc.id) : null;
-  await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: doc.height, pages: doc.pages.length, thumb: thumb ?? prev?.thumb ?? null, doc });
+  deleted.delete(doc.id); // (saved again: a design once more, say opened from a file)
+  if (thumb !== undefined) await put('settings', thumbKey(doc.id), thumb);
+  else {
+    thumb = await get('settings', thumbKey(doc.id));
+    // Saved before previews were kept apart: read once from the design, and
+    // kept apart from now on.
+    if (thumb === undefined) {
+      thumb = (await get('designs', doc.id))?.thumb ?? null;
+      // (Unless a new preview came meanwhile: it wins.)
+      const newer = await get('settings', thumbKey(doc.id));
+      if (newer === undefined) await put('settings', thumbKey(doc.id), thumb);
+      else thumb = newer;
+    }
+  }
+  // Without files nothing uses any more (a deleted video, a replaced soundtrack).
+  await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: doc.height, pages: doc.pages.length, thumb: thumb ?? null, doc: keptAssets(doc) });
 }
 
 export async function loadDesign(id) {
@@ -142,10 +169,23 @@ export async function loadDesign(id) {
 
 export async function listDesigns() {
   const rows = await all('designs');
-  return rows.map(({ doc, ...meta }) => meta).sort((a, b) => b.updatedAt - a.updatedAt);
+  // The newest preview is the one kept on its own (the design's copy can lag).
+  const kept = await getMany('settings', rows.map((r) => thumbKey(r.id)));
+  return rows.map(({ doc, ...meta }, i) => ({ ...meta, thumb: kept[i] ?? meta.thumb })).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+// Designs deleted in this tab: a preview still being made for one isn't kept.
+const deleted = new Set();
+
+/** Keep a design's new preview (without saving the design again). */
+export async function saveThumb(id, thumb) {
+  if (deleted.has(id)) return;
+  await put('settings', thumbKey(id), thumb);
 }
 
 export async function deleteDesign(id) {
+  deleted.add(id);
+  await del('settings', thumbKey(id)).catch(() => null);
   await del('designs', id);
   // The design is gone either way; its history is cleaned up as well as it can be.
   await deleteVersions(id).catch(() => null);
@@ -298,20 +338,33 @@ function deleteVersions(designId) {
 
 // ---------- uploads (reusable across designs) ----------
 
+// A video's or sound's bytes are kept apart from its details ("~data|<id>",
+// sorting after every upload id), so listing Uploads doesn't read every video.
+const DATA = '~data|';
+const isMedia = (u) => u.kind === 'video' || u.kind === 'audio';
+
 export async function saveUpload(upload) {
-  await put('uploads', upload.id, upload);
+  if (!isMedia(upload)) return put('uploads', upload.id, upload);
+  const { dataUrl, ...details } = upload;
+  await batch('uploads', [[`${DATA}${upload.id}`, { dataUrl }], [upload.id, details]]);
 }
 
+/** Every upload, newest first: pictures whole, videos and sounds without their bytes (getUpload has them). */
 export async function listUploads() {
-  return (await all('uploads')).sort((a, b) => b.addedAt - a.addedAt);
+  const rows = await run('uploads', 'readonly', (s) => s.getAll(IDBKeyRange.upperBound('~', true)),
+    () => [...memory.uploads].filter(([k]) => !k.startsWith(DATA)).map(([, v]) => v));
+  return rows.sort((a, b) => b.addedAt - a.addedAt);
 }
 
+/** An upload, whole. */
 export async function getUpload(id) {
-  return get('uploads', id);
+  const [upload, data] = await getMany('uploads', [id, `${DATA}${id}`]);
+  if (!upload) return upload;
+  return data ? { ...upload, ...data } : upload;
 }
 
 export async function deleteUpload(id) {
-  await del('uploads', id);
+  await batch('uploads', [[id, undefined], [`${DATA}${id}`, undefined]]);
 }
 
 // ---------- settings ----------

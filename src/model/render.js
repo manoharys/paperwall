@@ -4,9 +4,11 @@
 import { shapePath, dashArray, maskPath, drawPath } from './shapes.js';
 import { connectorGeometry, arrowHead } from './connectors.js';
 import { hexToRgb, mixHex, sortedStops } from './color.js';
-import { layoutText, displayText, approxMeasure } from './text-layout.js';
+import { layoutText, displayText, approxMeasure, measureWith } from './text-layout.js';
 import { iconById, stickerById } from './graphics.js';
 import { qrMatrix, qrPath } from './qr.js';
+import { animationOf, motionAt, readingOrder, transitionAt } from './motion.js';
+import { boundsOf } from './geometry.js';
 
 const f = (n) => Math.round(n * 100) / 100;
 const num = (v, fallback) => (Number.isFinite(+v) ? +v : fallback);
@@ -22,11 +24,16 @@ function makeCtx(doc, opts) {
     defs: [],
     id: (kind) => `${opts.idPrefix || 'pl'}-${kind}-${n++}`,
     measure: opts.measure || approxMeasure,
-    href: opts.assetHref || ((assetId) => doc.assets[assetId]?.dataUrl || ''),
+    // `part`: 'poster' for a video's poster picture, else the file itself.
+    href: opts.assetHref || ((assetId, part) => doc.assets[assetId]?.[part === 'poster' ? 'poster' : 'dataUrl'] || ''),
     editor: !!opts.editor,
     // Empty-frame placeholders: while editing and in page previews, never in downloads.
     placeholders: !!(opts.editor || opts.placeholders),
     skip: opts.skip || null,
+    // While playing or downloading: the picture for each video at this moment.
+    videoFrame: opts.videoFrame || null,
+    // Presenting: places for the live videos (see renderVideo).
+    videoSlots: !!opts.videoSlots,
   };
 }
 
@@ -141,11 +148,30 @@ function renderLine(ctx, el) {
 }
 
 function renderImage(ctx, el) {
-  const href = el.assetId ? ctx.href(el.assetId) : '';
+  return renderPicture(ctx, el, el.assetId ? ctx.href(el.assetId) : '');
+}
+
+/**
+ * A video shows like a picture: the frame for this moment when playing (or
+ * downloading), else its poster. While editing it wears a small play badge.
+ */
+function renderVideo(ctx, el) {
+  const asset = ctx.doc.assets[el.assetId];
+  const href = ctx.videoFrame?.(el) || (asset ? ctx.href(el.assetId, 'poster') : '');
+  // Presenting a page whose videos play live: a place for the playing video
+  // itself (put in after drawing), framed and clipped like a picture.
+  const pic = renderPicture(ctx, el, href, ctx.videoSlots && asset ? 'slot' : 'image'); // no picture at all: the grey box of a missing image
+  if (!ctx.editor) return pic;
+  const s = Math.max(14, Math.min(el.w, el.h) * 0.14);
+  return `${pic}<g transform="translate(${f(el.w - s * 1.35)} ${f(s * 0.35)})"><circle cx="${f(s / 2)}" cy="${f(s / 2)}" r="${f(s / 2)}" fill="#000" fill-opacity="0.55"/><path d="M${f(s * 0.4)} ${f(s * 0.3)}L${f(s * 0.72)} ${f(s / 2)}L${f(s * 0.4)} ${f(s * 0.7)}Z" fill="#fff"/></g>`;
+}
+
+function renderPicture(ctx, el, href, as = 'image') {
   const outline = maskPath(el);
   // A picture whose image is missing (damaged file) keeps a grey box everywhere.
-  if (el.assetId && !href) return `<path d="${outline}" fill="#e5e5ef"/>`;
-  if (!href) {
+  // (A live video's place is kept even without a poster: the video fills it.)
+  if (el.assetId && !href && as !== 'slot') return `<path d="${outline}" fill="#e5e5ef"/>`;
+  if (!href && as !== 'slot') {
     // An empty frame shows a soft placeholder while editing; downloads leave it out.
     if (!ctx.placeholders) return '';
     const s = Math.min(el.w, el.h) * 0.22;
@@ -167,7 +193,12 @@ function renderImage(ctx, el) {
     ctx.defs.push(`<radialGradient id="${id}" cx="50%" cy="50%" r="72%"><stop offset="${f(0.75 - v * 0.45)}" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="${f(0.25 + v * 0.6)}"/></radialGradient>`);
     shade = `<rect width="${f(el.w)}" height="${f(el.h)}" fill="url(#${id})"/>`;
   }
-  return `<g clip-path="url(#${clip})"><image href="${esc(href)}" x="${f(-crop.x * iw)}" y="${f(-crop.y * ih)}" width="${f(iw)}" height="${f(ih)}" preserveAspectRatio="none"${fx ? ` filter="url(#${fx})"` : ''}/>${shade}</g>`;
+  const at = `x="${f(-crop.x * iw)}" y="${f(-crop.y * ih)}" width="${f(iw)}" height="${f(ih)}"`;
+  const media = as === 'slot'
+    // Under the live video, its picture until the video shows (then taken away).
+    ? `${href ? `<image data-under="${esc(el.id)}" href="${esc(href)}" ${at} preserveAspectRatio="none"${fx ? ` filter="url(#${fx})"` : ''}/>` : ''}<foreignObject ${at} data-video="${esc(el.id)}"${fx ? ` filter="url(#${fx})"` : ''}></foreignObject>`
+    : `<image href="${esc(href)}" ${at} preserveAspectRatio="none"${fx ? ` filter="url(#${fx})"` : ''}/>`;
+  return `<g clip-path="url(#${clip})">${media}${shade}</g>`;
 }
 
 function renderConnector(ctx, el) {
@@ -310,13 +341,31 @@ function renderText(ctx, el) {
   const deco = [];
   const marks = [];
   const tspans = [];
-  lines.forEach((line, i) => {
+  // Typing it out (an animation): only the first letters show. Lines are
+  // laid out in full first, so letters never move as more appear.
+  // Counted in characters (an emoji is one), not UTF-16 units.
+  let left = el._typed === undefined ? Infinity : Math.round(lines.reduce((n, l) => n + [...(l.text || '')].length, 0) * el._typed);
+  lines.forEach((line0, i) => {
+    let line = line0;
+    if (left !== Infinity) {
+      const all = [...(line.text || '')];
+      const before = left;
+      const shown = all.slice(0, Math.max(0, before));
+      left -= all.length;
+      // Not reached yet (a blank line, its bullet say, shows once typing gets to it).
+      if (all.length ? !shown.length : before <= 0) return;
+      // Same place as the whole line; underlines and boxes only under what's
+      // typed (measured, as the letters are).
+      const text = shown.join('');
+      line = { ...line, text, width: shown.length === all.length ? line.width : measureWith(ctx.measure, el)(text), fullWidth: line.width };
+    }
     const top = pad + i * lineHeight;
     const baseline = top + (lineHeight - el.size) / 2 + ascent;
     const avail = el.w - line.indent;
+    const placed = line.fullWidth ?? line.width;
     let x = line.indent;
-    if (el.align === 'center') x = line.indent + (avail - line.width) / 2;
-    else if (el.align === 'right') x = el.w - line.width;
+    if (el.align === 'center') x = line.indent + (avail - placed) / 2;
+    else if (el.align === 'right') x = el.w - placed;
     if (el.highlight && line.width > 0) {
       const hp = Math.max(pad, el.size * 0.15);
       marks.push(`<rect x="${f(x - hp)}" y="${f(top)}" width="${f(line.width + hp * 2)}" height="${f(lineHeight)}" rx="${f(el.highlight.radius ?? 0)}" fill="${esc(el.highlight.color)}"/>`);
@@ -446,13 +495,26 @@ const RENDERERS = {
   shape: renderShape,
   line: renderLine,
   image: renderImage,
+  video: renderVideo,
   icon: renderIcon,
   sticker: renderSticker,
   qr: renderQr,
   text: renderText,
   connector: renderConnector,
   draw: (ctx, el) => `<path d="${drawPath(el)}" fill="none" stroke="${esc(el.stroke)}" stroke-width="${f(el.strokeWidth)}" stroke-linecap="round" stroke-linejoin="round"/>`,
-  group: (ctx, el) => el.children.map((c) => renderElement(ctx, c)).join(''),
+  // While playing, a group's elements move by their own animations.
+  group: (ctx, el) => {
+    if (!ctx.motion) return el.children.map((c) => renderElement(ctx, c)).join('');
+    // Children move as seen on the page: the group's turn and flips (and
+    // those of groups around it) are taken back out of their motion.
+    const outer = ctx.motion.turn;
+    ctx.motion.turn = mul(outer || IDENTITY, turnOf(el));
+    try {
+      return el.children.map((c) => renderMoving(ctx, c, true)).join('');
+    } finally {
+      ctx.motion.turn = outer;
+    }
+  },
 };
 
 export function renderElement(ctx, el) {
@@ -488,13 +550,124 @@ export function renderPage(doc, pageIndex, opts = {}) {
   const ctx = makeCtx(doc, opts);
   const w = num(doc.width, 1);
   const h = num(doc.height, 1);
-  const bg = opts.transparent ? '' : renderBackground(ctx, page.background, w, h);
-  const body = page.elements.map((el) => renderElement(ctx, el)).join('');
+  return svgDocument(ctx, pageBody(ctx, page, w, h, opts), w, h, opts);
+}
+
+/** The outer SVG around a page's (or frame's) contents: size, fonts, definitions. */
+function svgDocument(ctx, body, w, h, opts, extra = '') {
   const style = opts.fontCss ? `<style>${opts.fontCss}</style>` : '';
   const scale = opts.scale || 1;
   const size = opts.noSize ? '' : ` width="${f(w * scale)}" height="${f(h * scale)}"`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"${size} viewBox="0 0 ${w} ${h}">` +
-    `<defs>${style}${ctx.defs.join('')}</defs>${bg}${body}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"${size} viewBox="0 0 ${w} ${h}"${extra}>` +
+    `<defs>${style}${ctx.defs.join('')}</defs>${body}</svg>`;
+}
+
+/**
+ * A page's background and elements. With `opts.time` (seconds since the page
+ * began), animated elements are drawn where they are at that moment.
+ */
+function pageBody(ctx, page, w, h, opts) {
+  const bg = opts.transparent ? '' : renderBackground(ctx, page.background, w, h);
+  if (opts.time === undefined) return bg + page.elements.map((el) => renderElement(ctx, el)).join('');
+  const before = ctx.motion;
+  ctx.motion = { page, order: readingOrder(page), time: opts.time, size: Math.min(w, h) };
+  try {
+    return bg + page.elements.map((el) => renderMoving(ctx, el, false)).join('');
+  } finally {
+    ctx.motion = before;
+  }
+}
+
+// 2×2 matrices [a, b, c, d] (x' = a·x + c·y, y' = b·x + d·y): how a group
+// turns and flips what's inside it.
+const IDENTITY = [1, 0, 0, 1];
+function turnOf(el) {
+  const r = ((el.rotation || 0) * Math.PI) / 180;
+  const sx = el.flipX ? -1 : 1;
+  const sy = el.flipY ? -1 : 1;
+  return [Math.cos(r) * sx, Math.sin(r) * sx, -Math.sin(r) * sy, Math.cos(r) * sy];
+}
+function mul([a, b, c, d], [e, g, h, k]) {
+  return [a * e + c * g, b * e + d * g, a * h + c * k, b * h + d * k];
+}
+const isIdentity = (m) => !m || (Math.abs(m[0] - 1) < 1e-9 && Math.abs(m[1]) < 1e-9 && Math.abs(m[2]) < 1e-9 && Math.abs(m[3] - 1) < 1e-9);
+
+/** One element at a moment of its page's animations (`nested`: inside a group). */
+function renderMoving(ctx, el, nested) {
+  const { page, order, time, size } = ctx.motion;
+  const anim = animationOf(page, el, order, { nested });
+  if (!anim || el.hidden) return renderElement(ctx, el);
+  const m = motionAt(anim, time, size);
+  const typing = anim.type === 'typewriter';
+  // Only straight text types out; anything else given Typewriter (curved
+  // text too) fades in at the same pace.
+  const types = el.type === 'text' && !el.curve;
+  const opacity = typing && !types ? m.typed : m.opacity;
+  if (opacity <= 0.001 || m.reveal <= 0.001) return '';
+  const body = renderElement(ctx, typing && types && m.typed < 1 ? { ...el, _typed: m.typed } : el);
+  const b = boundsOf(el);
+  const cx = b.x + b.w / 2;
+  const cy = b.y + b.h / 2;
+  const attrs = [];
+  // Inside a turned or flipped group: page directions in the group's own terms.
+  const turn = nested && !isIdentity(ctx.motion.turn) ? ctx.motion.turn : null;
+  let { dx, dy, rotate } = m;
+  let inv = null;
+  if (turn) {
+    const [a, b2, c, d] = turn;
+    const det = a * d - b2 * c;
+    inv = [d / det, -b2 / det, -c / det, a / det];
+    [dx, dy] = [inv[0] * m.dx + inv[2] * m.dy, inv[1] * m.dx + inv[3] * m.dy];
+    if (det < 0) rotate = -rotate; // a mirror turns the other way
+  }
+  if (dx || dy || m.scale !== 1 || rotate) {
+    attrs.push(`transform="translate(${f(dx)} ${f(dy)}) translate(${f(cx)} ${f(cy)}) rotate(${f(rotate)}) scale(${m.scale}) translate(${f(-cx)} ${f(-cy)})"`);
+  }
+  if (opacity < 1) attrs.push(`opacity="${f(opacity)}"`);
+  if (m.reveal < 1 && turn) {
+    // A wipe from the page's left, inside a turned group: a square around the
+    // element, uncovered left to right as the page sees it.
+    const side = Math.hypot(b.w, b.h) + 80;
+    const id = ctx.id('wipe');
+    ctx.defs.push(`<clipPath id="${id}"><rect x="${f(-side / 2)}" y="${f(-side / 2)}" width="${f(side * m.reveal)}" height="${f(side)}" transform="translate(${f(cx)} ${f(cy)}) matrix(${inv.map(f).join(' ')} 0 0)"/></clipPath>`);
+    attrs.push(`clip-path="url(#${id})"`);
+  } else if (m.reveal < 1) {
+    // A wipe: shown from the left edge across.
+    // Room around the box for strokes, arrowheads, shadows and glows: only
+    // the moving right edge cuts.
+    const room = Math.max(b.w, b.h) * 0.5 + 40;
+    const id = ctx.id('wipe');
+    ctx.defs.push(`<clipPath id="${id}"><rect x="${f(b.x - room)}" y="${f(b.y - room)}" width="${f(room + b.w * m.reveal)}" height="${f(b.h + room * 2)}"/></clipPath>`);
+    attrs.push(`clip-path="url(#${id})"`);
+  }
+  return attrs.length ? `<g ${attrs.join(' ')}>${body}</g>` : body;
+}
+
+/**
+ * One frame of a design playing (see motion.frameAt): the page at its moment,
+ * and during a transition the page before it too, placed by the transition.
+ */
+export function renderFrame(doc, frame, opts = {}) {
+  const ctx = makeCtx(doc, opts);
+  const w = num(doc.width, 1);
+  const h = num(doc.height, 1);
+  const layer = (index, local, place) => {
+    const body = pageBody(ctx, doc.pages[index], w, h, { ...opts, time: local });
+    if (!place) return body;
+    if (place.opacity <= 0.001) return '';
+    const attrs = [];
+    if (place.dx || place.scale !== 1) attrs.push(`transform="translate(${f(place.dx * w)} 0) translate(${f(w / 2)} ${f(h / 2)}) scale(${place.scale}) translate(${f(-w / 2)} ${f(-h / 2)})"`);
+    if (place.opacity < 1) attrs.push(`opacity="${f(place.opacity)}"`);
+    return attrs.length ? `<g ${attrs.join(' ')}>${body}</g>` : body;
+  };
+  let body;
+  if (frame.transition) {
+    const tr = transitionAt(frame.transition.type, frame.transition.progress);
+    body = layer(frame.from.index, frame.from.local, tr.from) + layer(frame.index, frame.local, tr.to);
+  } else body = layer(frame.index, frame.local, null);
+  // On white, as in every download (so a see-through moment of a transition
+  // looks the same played, presented or downloaded).
+  return svgDocument(ctx, `<rect width="${f(w)}" height="${f(h)}" fill="#ffffff"/>${body}`, w, h, opts, ' overflow="hidden"');
 }
 
 /** Render a single element on its own, for previews (layers list, thumbnails). */

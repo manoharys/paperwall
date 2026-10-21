@@ -1,6 +1,8 @@
 // A small PDF writer: one JPEG image per page, with an invisible text layer
 // on top so the text can be selected, searched and copied. No dependencies.
 
+import { concat } from './bytes.js';
+
 const enc = new TextEncoder();
 
 /** Points (1/72 in) for a page that is `px` pixels at `dpi`. */
@@ -104,13 +106,7 @@ export function buildPdf(pages, { title = 'Paperwall design' } = {}) {
   write(table);
   write(`trailer\n<< /Size ${count} /Root 1 0 R /Info 3 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
 
-  const out = new Uint8Array(length);
-  let pos = 0;
-  for (const c of chunks) {
-    out.set(c, pos);
-    pos += c.length;
-  }
-  return out;
+  return concat(chunks);
 }
 
 function latin1(s) {

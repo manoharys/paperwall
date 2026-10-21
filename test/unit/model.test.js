@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createDesign, createDesignFromPreset, createText, createShape, createImage, createGroup, PRESETS,
-  toPx, fromPx, addAsset, pruneAssets, validateDesign, clone,
+  toPx, fromPx, addAsset, keptAssets, validateDesign, clone,
 } from '../../src/model/doc.js';
 import {
   addElement, moveElements, deleteElements, duplicateElements, copyElements, pasteElements, reorder,
@@ -320,9 +320,9 @@ test('[IMG-04] adding the same image twice stores it once, and unused images are
   assert.equal(a, b);
   const c = addAsset(doc, { mime: 'image/png', dataUrl: 'data:y', width: 1, height: 1 });
   addElement(doc, 0, createImage(a));
-  pruneAssets(doc);
-  assert.ok(doc.assets[a]);
-  assert.ok(!doc.assets[c]);
+  const saved = keptAssets(doc);
+  assert.ok(saved.assets[a]);
+  assert.ok(!saved.assets[c]);
 });
 
 test('[CLR-02] colors used in the design, most used first', () => {
@@ -611,4 +611,54 @@ test('[BRD-03] short #rgb colors are listed and rebranded too', async () => {
   assert.ok(collectColors(doc).includes('#ff0000'));
   applyBrand(doc, { colors: ['#123456'] });
   assert.equal(s.fill, '#123456');
+});
+
+test('[EDIT-19] whole words without look-behind: any letter counts, no match is skipped', async () => {
+  const { wordMatcher } = await import('../../src/model/find.js');
+  const m = (q, flags = 'giu') => wordMatcher(new RegExp(`${q}(?![\\p{L}\\p{N}])`, flags));
+  assert.deepEqual('Kübersee über, über'.match(m('über')), ['über', 'über'], 'not inside Kübersee');
+  assert.deepEqual('- -'.match(m('-')), ['-', '-'], 'neighbours sharing the space between them');
+  assert.equal('über über'.replace(m('über'), () => 'X'), 'X X');
+  assert.equal('abc'.match(m('b')), null);
+});
+
+test('[EDIT-19] whole words without look-behind keep every non-overlapping match', async () => {
+  const { wordMatcher } = await import('../../src/model/find.js');
+  const m = () => wordMatcher(/--(?![\p{L}\p{N}])/gu);
+  assert.deepEqual('----'.match(m()), ['--', '--']);
+  assert.equal('----'.replace(m(), () => 'X'), 'XX');
+});
+
+test('[EDIT-19] whole words without look-behind: a query starting with an emoji ends', async () => {
+  const { wordMatcher } = await import('../../src/model/find.js');
+  const m = () => wordMatcher(/😀(?![\p{L}\p{N}])/gu);
+  assert.deepEqual('a 😀😀 b'.match(m()), ['😀', '😀']);
+  assert.equal('😀'.replace(m(), () => 'X'), 'X');
+});
+
+test('[EDIT-12] align with a locked element: the others line up with it, it stays', () => {
+  const doc = design();
+  const a = rect({ x: 10, y: 10, w: 100, h: 50 });
+  const locked = rect({ x: 300, y: 200, w: 100, h: 50, locked: true });
+  addElement(doc, 0, a);
+  addElement(doc, 0, locked);
+  alignElements(doc, 0, [a.id, locked.id], 'right');
+  assert.equal(a.x, 300);
+  assert.equal(locked.x, 300);
+});
+
+test('[DOC-09] opening a file, a repeated element id gets a new one and its connector follows', async () => {
+  const { createPage } = await import('../../src/model/doc.js');
+  const doc = design();
+  doc.pages.push(createPage());
+  const a = rect({ id: 'same' });
+  const b = rect({ id: 'same' });
+  addElement(doc, 0, a);
+  addElement(doc, 1, b);
+  doc.pages[1].elements.push({ id: 'c1', type: 'connector', x: 0, y: 0, w: 1, h: 1, start: { id: 'same' }, end: { x: 5, y: 5 } });
+  validateDesign(doc);
+  const renamedId = doc.pages[1].elements[0].id;
+  assert.notEqual(renamedId, 'same');
+  assert.equal(doc.pages[0].elements[0].id, 'same');
+  assert.equal(doc.pages[1].elements[1].start.id, renamedId);
 });

@@ -1,5 +1,7 @@
 // A tiny ZIP writer (no compression), for downloading several pages at once.
 
+import { concat } from './bytes.js';
+
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
@@ -56,12 +58,5 @@ export function buildZip(files) {
   end.setUint16(10, files.length, true);
   end.setUint32(12, centralSize, true);
   end.setUint32(16, offset, true);
-  const parts = [...locals, ...centrals, new Uint8Array(end.buffer)];
-  const out = new Uint8Array(parts.reduce((s, p) => s + p.length, 0));
-  let pos = 0;
-  for (const p of parts) {
-    out.set(p, pos);
-    pos += p.length;
-  }
-  return out;
+  return concat([...locals, ...centrals, new Uint8Array(end.buffer)]);
 }

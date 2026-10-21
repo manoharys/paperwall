@@ -7,15 +7,16 @@ import {
   pointInBox, rectFromPoints, rectsIntersect, HANDLES,
 } from '../model/geometry.js';
 import { resizeElement, coverCrop, topmost, findElement } from '../model/commands.js';
-import { clone, DRAW_TOOLS, pxPerUnit, isEmptyFrame, restroke } from '../model/doc.js';
+import { clone, DRAW_TOOLS, pxPerUnit, isEmptyFrame, restroke, KEEPS_RATIO } from '../model/doc.js';
 import { gridLines, marginSize, bleedSize } from '../model/view.js';
 import { endsOf, setEnds, isLine, lineHit } from '../model/connectors.js';
 import { measure } from './fonts.js';
-import { h, dataUrlToBlob, toast, pickFile } from './ui.js';
+import { mediaKind, blobUrlFor } from './media.js';
+import { h, toast, pickFile } from './ui.js';
 import * as store from './store.js';
 
 const PAD = 64;
-const RATIO_LOCKED = new Set(['image', 'icon', 'sticker', 'qr', 'group']);
+const RATIO_LOCKED = new Set([...KEEPS_RATIO, 'group']);
 
 
 export class Canvas {
@@ -172,13 +173,17 @@ export class Canvas {
     });
   }
 
-  assetHref = (assetId) => {
+  // A blob: URL for an asset (or a video's poster: `part` 'poster'), made
+  // once, so redrawing doesn't copy the picture's data each time.
+  assetHref = (assetId, part) => {
     const a = this.ed.doc.assets[assetId];
-    if (!a) return '';
-    let entry = this.urls.get(assetId);
-    if (!entry || entry.dataUrl !== a.dataUrl) {
-      entry = { dataUrl: a.dataUrl, url: URL.createObjectURL(dataUrlToBlob(a.dataUrl)) };
-      this.urls.set(assetId, entry);
+    const dataUrl = part === 'poster' ? a?.poster : a?.dataUrl;
+    if (!dataUrl) return '';
+    const key = part === 'poster' ? `${assetId}|poster` : assetId;
+    let entry = this.urls.get(key);
+    if (!entry || entry.dataUrl !== dataUrl) {
+      entry = { dataUrl, url: blobUrlFor(dataUrl) };
+      this.urls.set(key, entry);
     }
     return entry.url;
   };
@@ -556,8 +561,9 @@ export class Canvas {
         resizeElement(el, { ...box, h: o.h, y: box.y + (box.h - o.h) / 2 });
       } else {
         resizeElement(el, box, { scaleContent: o.type === 'group' || o.type === 'qr' });
-        const asset = o.type === 'image' && !keepRatio ? ed.doc.assets[o.assetId] : null;
-        if (asset) coverCrop(el, asset.width, asset.height);
+        const asset = (o.type === 'image' || o.type === 'video') && !keepRatio ? ed.doc.assets[o.assetId] : null;
+        // (Only with the file's own size to fill from.)
+        if (asset?.width > 0 && asset?.height > 0) coverCrop(el, asset.width, asset.height);
       }
     } else if (d.mode === 'resize-many') {
       d.moved = true;
@@ -700,6 +706,8 @@ export class Canvas {
     // every picture after the first, when several are dropped) it's added.
     let filled = false;
     const place = async (upload) => {
+      // Videos and sounds go where they belong (the page; the soundtrack).
+      if (upload.kind === 'video' || upload.kind === 'audio') return this.ed.place(upload, { at });
       const frame = filled ? null : this.ed.frameAt(at);
       if (frame) {
         this.ed.fillFrame(frame.id, upload);
@@ -710,17 +718,19 @@ export class Canvas {
     if (uploadId) {
       try {
         const upload = await store.getUpload(uploadId);
-        if (upload && !this.ed.closed) await place(upload);
+        if (upload && !upload.dataUrl) toast(`${upload.name} is missing. Try uploading it again.`, 'error');
+        else if (upload && !this.ed.closed) await place(upload);
       } catch (err) {
         toast(err.message, 'error');
       }
       return;
     }
-    const files = [...(e.dataTransfer?.files || [])].filter((f) => f.type.startsWith('image/'));
+    const files = [...(e.dataTransfer?.files || [])].filter((f) => mediaKind(f));
     if (!files.length) return;
     for (const file of files) {
       try {
-        const upload = await this.ed.importImageFile(file);
+        const upload = await this.ed.importMediaFile(file);
+        if (this.ed.closed) return;
         await place(upload);
         at = { x: at.x + 30, y: at.y + 30 };
       } catch (err) {

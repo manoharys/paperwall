@@ -36,17 +36,20 @@ on-device AI models. Not approved: a collaboration server.
 
 ## v0.4 Motion
 
-- [ ] Animations for elements and pages (fade, rise, pan, pop, typewriter…)
-- [ ] Page timing and transitions
-- [ ] Download as GIF and video (WebM/MP4)
-- [ ] Video and audio elements
-- [ ] Carried over from v0.3 review: a page-level connector whose two ends are both inside one turned group follows that group when it moves
+- [x] Animations for elements and pages (fade, rise, pan, pop, typewriter…) (MOT-01, MOT-02)
+- [x] Page timing and transitions; playing them (MOT-03, MOT-04)
+- [x] Download as GIF and video (WebM/MP4) (MOT-05, MOT-06)
+- [x] Video and audio elements (MOT-07, MOT-08)
+- [x] Carried over from v0.3 review: a page-level connector whose two ends are both inside one turned group follows that group when it moves
 
 ## v0.5 Present, docs and whiteboards
 
 - [ ] Presenter view with notes and a timer
 - [ ] Documents: long text with headings, lists and images
 - [ ] Whiteboards: infinite canvas, sticky notes, connectors
+- [ ] Carried over from v0.4 review: keep pictures, videos and sounds in their own store (as files, not text inside each saved design), so big videos don't slow saving
+- [ ] Carried over from v0.4 review: a video's still picture (on the page, in thumbnails and in PNG, JPG, PDF and SVG downloads) shows the frame it starts at, at full size
+- [ ] Carried over from v0.4 review: faster GIF and video downloads of pages with big photos and videos (still layers drawn once, video frames drawn straight to the canvas), and live videos in Safari when presenting
 
 ## v0.6 Online extras (opt-in)
 

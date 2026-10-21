@@ -4,7 +4,7 @@
 import { History } from '../model/history.js';
 import * as cmd from '../model/commands.js';
 import {
-  createText, createShape, createLine, createImage, createFrame, createDrawing, thinPoints, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
+  createText, createShape, createLine, createImage, createVideo, createFrame, createDrawing, thinPoints, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
   TEXT_STYLES, versionSnapshot, isEmptyFrame,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
@@ -16,6 +16,7 @@ import { gridLines, marginSize } from '../model/view.js';
 import { maskPath } from '../model/shapes.js';
 
 import { measure, ensureFont } from './fonts.js';
+import { mediaKind, checkSize, videoInfo, audioInfo } from './media.js';
 import { removePlainBackground } from '../model/bgremove.js';
 import { readFileAsDataUrl, loadImage, toast, debounce } from './ui.js';
 import * as store from './store.js';
@@ -204,7 +205,8 @@ export class Editor {
       // Reused by a version saved soon after, if it's known to show that state
       // (nothing changed while it was drawn).
       if (this.doc.updatedAt === at) this.lastThumb = { url, at };
-      await store.saveDesign(this.doc, url);
+      // Just the preview: the design itself is saved by persist.
+      await store.saveThumb(this.doc.id, url);
     } catch {
       /* thumbnails are optional */
     }
@@ -263,6 +265,9 @@ export class Editor {
     this.change(() => {
       // Keep today's images too: undo snapshots share the design's assets.
       Object.assign(this.doc, { name: v.name, width: v.width, height: v.height, unit: v.unit, pages: v.pages, assets: { ...this.doc.assets, ...v.assets } });
+      // The soundtrack too, as the version had it (none, if it had none).
+      if (v.audio) this.doc.audio = v.audio;
+      else delete this.doc.audio;
       this.page = 0; // the version may have fewer pages than the one in view
     });
     this.selection = [];
@@ -427,6 +432,65 @@ export class Editor {
       return this.insert(el, { center: false });
     }
     return this.insert(el);
+  }
+
+  /** A video from Uploads, at its own shape, as big as fits nicely (or dropped `at` a point). */
+  addVideo(upload, { at } = {}) {
+    const assetId = addAsset(this.doc, { ...upload, kind: 'video' });
+    // (A size it doesn't know: the usual 16:9.)
+    const [vw, vh] = upload.width > 0 && upload.height > 0 ? [upload.width, upload.height] : [640, 360];
+    const s = Math.min(1, (this.doc.width * 0.7) / vw, (this.doc.height * 0.7) / vh);
+    const el = createVideo(assetId, { w: Math.round(vw * s), h: Math.round(vh * s) });
+    if (at) {
+      el.x = at.x - el.w / 2;
+      el.y = at.y - el.h / 2;
+      return this.insert(el, { center: false });
+    }
+    return this.insert(el);
+  }
+
+  /** Use a sound from Uploads as the design's soundtrack (null takes it away). */
+  setSoundtrack(upload, volume = this.doc.audio?.volume ?? 1) {
+    this.change(() => {
+      if (!upload) delete this.doc.audio;
+      else this.doc.audio = { assetId: addAsset(this.doc, { ...upload, kind: 'audio' }), volume };
+    });
+  }
+
+  /** The soundtrack's volume (0 to 1). */
+  setSoundtrackVolume(volume, key = null) {
+    if (!this.doc.audio) return;
+    this.change(() => (this.doc.audio = { ...this.doc.audio, volume }), { key });
+  }
+
+  /** A picture, video or sound from this device, kept in Uploads too. */
+  async importMediaFile(file) {
+    const kind = mediaKind(file);
+    if (kind === 'image') return this.importImageFile(file);
+    if (!kind) throw new Error(`${file.name} isn't a picture, video or sound`);
+    checkSize(file, kind);
+    // Checked first: a file that can't be used isn't read in whole for nothing.
+    const info = await (kind === 'video' ? videoInfo(file) : audioInfo(file));
+    // A "video" with no picture this browser can show: either a video it
+    // can't play (an iPhone's HEVC, say) or music in a video file. There's no
+    // telling which, so neither is guessed (a guess could replace the soundtrack).
+    if (info.noPicture) throw new Error(`This browser can't show a picture in ${file.name}. A video plays here as MP4 (H.264) or WebM; a sound as MP3, M4A, OGG or WAV.`);
+    const dataUrl = await readFileAsDataUrl(file);
+    const upload = { id: uid('u'), name: file.name, mime: file.type, dataUrl, kind, ...info, addedAt: Date.now() };
+    // It's used either way; Uploads just can't keep a copy when storage is full.
+    await store.saveUpload(upload).catch(() => toast(`${file.name} couldn't be kept in Uploads: this browser's storage is full.`, 'error'));
+    return upload;
+  }
+
+  /** Put an upload where it belongs: a picture or video on the page, a sound as the soundtrack. */
+  async place(upload, opts) {
+    if (upload.kind === 'video') return this.addVideo(upload, opts);
+    if (upload.kind === 'audio') {
+      this.setSoundtrack(upload);
+      toast(`${upload.name} is the soundtrack now. It plays when you press Play, and in videos you download.`);
+      return null;
+    }
+    return this.addImage(upload, opts);
   }
 
   async importImageFile(file) {
@@ -749,7 +813,7 @@ export class Editor {
     const out = {};
     const visit = (list) => {
       for (const el of list) {
-        if (el.type === 'image' && this.doc.assets[el.assetId]) out[el.assetId] = this.doc.assets[el.assetId];
+        if ((el.type === 'image' || el.type === 'video') && this.doc.assets[el.assetId]) out[el.assetId] = this.doc.assets[el.assetId];
         if (el.type === 'group') visit(el.children);
       }
     };
@@ -825,7 +889,9 @@ export class Editor {
   // selection (its bounds include held connectors, which then follow their
   // elements). A selection of nothing but held connectors is left alone.
   align(how) {
-    // Only what can move (one element alone is aligned to the page).
+    // What can move, along the edges of the selection: locked elements count
+    // (they stay), held connectors don't (they follow, so they'd shift the
+    // edges with every press). To the page when that's one thing.
     const ids = this.movable;
     if (ids.length) this.change(() => cmd.alignElements(this.doc, this.page, ids, how));
   }
@@ -880,6 +946,18 @@ export class Editor {
     // (which batches them, rather than one per keystroke).
     this.change(() => (this.doc.pages[i].title = clean || undefined), { key: `title:${i}`, quiet: true });
     this.emit('strip');
+  }
+
+  /** Change a page's motion (anim, duration, transition); undefined clears one. */
+  setPageMotion(i, patch, key = null) {
+    const page = this.doc.pages[i];
+    if (!page) return;
+    this.change(() => {
+      for (const [k, v] of Object.entries(patch)) {
+        if (v === undefined) delete page[k];
+        else page[k] = v;
+      }
+    }, { key });
   }
 
   /** Hidden pages stay in the design but are skipped when presenting and downloading. */

@@ -166,6 +166,9 @@ h1, h2, h3 { margin: 0; line-height: 1.15; }
 .upload .icon-btn { position: absolute; top: 4px; right: 4px; background: var(--panel); width: 28px; height: 28px; opacity: 0; }
 .upload:hover .icon-btn { opacity: 1; }
 .upload-img { width: 100%; aspect-ratio: 1; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; padding: 0; cursor: pointer; background: var(--panel-2); }
+.upload-sound { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 100%; padding: 6px; color: var(--muted); }
+.upload-sound small { font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.upload-play { position: absolute; left: 6px; top: 6px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; pointer-events: none; }
 .upload-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .brand-colors { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .brand-color { position: relative; }
@@ -291,6 +294,7 @@ kbd { font: 12px ui-monospace, monospace; background: var(--panel-2); border: 1p
 .presenter { position: fixed; inset: 0; z-index: 80; background: #000; display: grid; place-items: center; outline: 0; cursor: pointer; }
 .slide { max-width: 100vw; max-height: 100vh; width: 100vw; display: grid; place-items: center; }
 .slide svg { max-width: 100vw; max-height: 100vh; width: auto; height: auto; display: block; }
+.slide-video { width: 100%; height: 100%; object-fit: fill; display: block; }
 .slide-count { position: fixed; bottom: 16px; right: 20px; color: #999; font-size: 13px; }
 .presenter-close { position: fixed; top: 12px; right: 12px; border: 0; background: rgba(255,255,255,.1); color: #fff; border-radius: 50%; width: 40px; height: 40px; display: grid; place-items: center; cursor: pointer; }
 
@@ -367,6 +371,9 @@ kbd { font: 12px ui-monospace, monospace; background: var(--panel-2); border: 1p
 .grad-preset:hover { outline: 2px solid var(--accent); }
 
 /* Duotone */
+.anim-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
+.anim { padding: 7px 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font: 12px var(--font); cursor: pointer; }
+.anim.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .duo-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .duo { aspect-ratio: 1; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--muted); font-size: 11px; cursor: pointer; padding: 0; }
 .duo.on { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -431,3 +438,8 @@ kbd { font: 12px ui-monospace, monospace; background: var(--panel-2); border: 1p
 .version-img svg, .version-img img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .version-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .version-meta small { color: var(--muted); }
+
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+
+/* While a download is being made, its choices wait. */
+.export.busy .segmented, .export.busy .page-picks { opacity: .55; pointer-events: none; }

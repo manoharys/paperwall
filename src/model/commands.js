@@ -262,13 +262,15 @@ export function ungroup(doc, pageIndex, groupId) {
 
 /**
  * Align elements. With one element, or toPage, they line up with the page;
- * with several, they line up with the edges of the selection.
+ * with several, they line up with the edges of the selection (locked ones
+ * count, but stay where they are).
  */
 export function alignElements(doc, pageIndex, ids, how, { toPage } = {}) {
-  const els = selectElements(getPage(doc, pageIndex), ids).filter((e) => !e.locked);
+  const all = selectElements(getPage(doc, pageIndex), ids);
+  const els = all.filter((e) => !e.locked);
   if (!els.length) return;
-  const usePage = toPage ?? els.length === 1;
-  const ref = usePage ? { x: 0, y: 0, w: doc.width, h: doc.height } : unionBounds(els);
+  const usePage = toPage ?? all.length === 1;
+  const ref = usePage ? { x: 0, y: 0, w: doc.width, h: doc.height } : unionBounds(all);
   for (const el of els) {
     const b = boundsOf(el);
     let dx = 0;
@@ -321,6 +323,7 @@ const STYLE_KEYS = {
   shape: ['fill', 'stroke', 'strokeWidth', 'dash', 'radius'],
   line: ['stroke', 'strokeWidth', 'dash', 'startCap', 'endCap'],
   image: ['filters', 'radius', 'mask'],
+  video: ['filters', 'radius', 'mask'],
   icon: ['color'],
   connector: ['stroke', 'strokeWidth', 'dash', 'startCap', 'endCap', 'route'],
   draw: ['stroke', 'strokeWidth'],

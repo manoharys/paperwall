@@ -4,10 +4,12 @@
 import { renderPage, textRuns } from '../model/render.js';
 import { buildPdf } from '../model/pdf.js';
 import { buildZip } from '../model/zip.js';
-import { validateDesign, clone, visiblePages, printDpi, pageLabel } from '../model/doc.js';
+import { validateDesign, clone, visiblePages, printDpi, pageLabel, versionSnapshot, soundtrackOf, keptAssets } from '../model/doc.js';
 import { measure, fontCssFor, registerDesignFonts } from './fonts.js';
 import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage } from './ui.js';
 import { section, segmented, slider, toggle } from './widgets.js';
+import { exportGif, exportVideo, canMakeVideo } from './motion-export.js';
+import { designMoves, startsTooLate, timeline } from '../model/motion.js';
 
 const MAX_SIDE = 16000;
 const MAX_PIXELS = 120e6;
@@ -115,7 +117,7 @@ export async function printDesign(doc, pages) {
 // ---------- project files ----------
 
 export function projectBlob(doc) {
-  return new Blob([JSON.stringify(doc)], { type: 'application/json' });
+  return new Blob([JSON.stringify(keptAssets(doc))], { type: 'application/json' });
 }
 
 export function saveProjectFile(doc) {
@@ -136,16 +138,50 @@ export async function readProjectFile(file) {
 
 // ---------- the download dialog ----------
 
+const MOVING = new Set(['gif', 'mp4', 'webm']);
+
+/** How long the animation will be, and a nudge when nothing moves yet. */
+function motionNote(doc, pages) {
+  if (!pages.length) return 'Pick at least one page.';
+  const { total } = timeline(doc, pages);
+  const length = `${Math.round(total * 10) / 10} seconds`;
+  if (!designMoves(doc, pages)) {
+    return pages.length > 1
+      ? `${length} long: each page in turn. To make things move, pick an animation in the Animate panel.`
+      : `${length} long. Nothing moves yet: pick an animation in the Animate panel.`;
+  }
+  const late = pages.find((i) => startsTooLate(doc.pages[i]));
+  if (late !== undefined) return `${length} long. On page ${late + 1}, something is set to come in after the page's time is up, so it won't show: shorten its delay or show the page for longer.`;
+  return `${length} long. Set each page's time and transition with nothing selected.`;
+}
+
+/** The design's soundtrack, decoded, or null. (Soundtracks come with video elements and audio.) */
+export async function soundtrackBuffer(doc) {
+  const a = soundtrackOf(doc);
+  if (!a) return null;
+  // Offline: decoding needs no speakers (and Safari allows only a few live contexts).
+  const Ctx = globalThis.OfflineAudioContext || globalThis.webkitOfflineAudioContext;
+  if (!Ctx) return null;
+  // (The callback form: older Safari's has no promise.)
+  return new Promise((resolve, reject) => {
+    // (Newer browsers also return a promise, which fails too: heard by `reject` already.)
+    new Ctx(1, 1, 48000).decodeAudioData(dataUrlToBytes(a.dataUrl).bytes.buffer, resolve, reject)?.catch?.(() => null);
+  });
+}
+
 export function exportDialog(editor) {
   const doc = editor.doc;
   // Hidden pages start unticked; tick one to download it anyway. If every
   // page is hidden (or there's just one), start with all of them.
   const visible = visiblePages(doc);
   const state = { format: 'png', scale: 1, transparent: false, quality: 92, pages: new Set(visible.length && doc.pages.length > 1 ? visible : doc.pages.map((_, i) => i)) };
+  // The ticked pages, in page order.
+  const picked = () => [...state.pages].sort((a, b) => a - b);
   const body = h('div', { class: 'export' });
   const draw = () => {
     body.replaceChildren(...[
       section('File type', segmented({ label: 'File type', value: state.format, testid: 'export-format', onChange: (v) => {
+        if (state.busy) return; // one download at a time: the choices wait
         state.format = v;
         draw();
       }, options: [
@@ -153,13 +189,21 @@ export function exportDialog(editor) {
         { value: 'jpg', label: 'JPG: smaller files', text: 'JPG' },
         { value: 'pdf', label: 'PDF: for printing', text: 'PDF' },
         { value: 'svg', label: 'SVG: vector, any size', text: 'SVG' },
+        { value: 'gif', label: 'GIF: a short animation', text: 'GIF' },
+        { value: 'mp4', label: 'MP4: video', text: 'MP4' },
+        { value: 'webm', label: 'WebM: video', text: 'WebM' },
       ] }),
       h('p', { class: 'hint' }, {
         png: 'Sharp images for social media and the web.',
         jpg: 'Smaller files, no transparency.',
         pdf: 'One file with every page you pick. Great for printing.',
         svg: 'Vector file that stays sharp at any size. Fonts are included.',
-      }[state.format])),
+        gif: 'Plays your animations and pages on a loop. Kept small to share.',
+        mp4: 'A video of your animations and pages, with your soundtrack. Plays everywhere.',
+        webm: 'A video of your animations and pages, with your soundtrack. Smaller; plays in browsers.',
+      }[state.format]),
+      MOVING.has(state.format) ? h('p', { class: 'hint', 'data-testid': 'export-length' }, motionNote(doc, picked())) : null,
+      (state.format === 'mp4' || state.format === 'webm') && !canMakeVideo() ? h('p', { class: 'hint warn' }, "This browser can't make videos. Try a recent Chrome, Edge, Safari or Firefox, or download a GIF.") : null),
       state.format === 'png' || state.format === 'jpg' ? section('Size', segmented({ label: 'Size', value: state.scale, testid: 'export-scale', onChange: (v) => {
         state.scale = v;
         draw();
@@ -169,7 +213,14 @@ export function exportDialog(editor) {
       doc.pages.length > 1 ? section('Pages', h('div', { class: 'page-picks', 'data-testid': 'export-pages' }, doc.pages.map((_, i) => {
         const cb = h('input', { type: 'checkbox', 'data-testid': `export-page-${i + 1}` });
         cb.checked = state.pages.has(i);
-        cb.addEventListener('change', () => (cb.checked ? state.pages.add(i) : state.pages.delete(i)));
+        cb.disabled = !!state.busy;
+        cb.addEventListener('change', () => {
+          if (cb.checked) state.pages.add(i);
+          else state.pages.delete(i);
+          // The animation's length depends on the pages.
+          const note = body.querySelector('[data-testid="export-length"]');
+          if (note) note.textContent = motionNote(doc, picked());
+        });
         const p = doc.pages[i];
         return h('label', { class: 'toggle' }, cb, h('span', null, pageLabel(p, i)));
       }))) : null,
@@ -185,44 +236,95 @@ export function exportDialog(editor) {
         } }, icon('copy'), 'Copy image'),
         h('button', { type: 'button', class: 'btn', 'data-testid': 'export-print', onClick: async () => {
           d.close();
-          await printDesign(doc, [...state.pages].sort((a, b) => a - b));
+          await printDesign(doc, picked());
         } }, 'Print')),
       h('p', { class: 'fine' }, 'No watermark. Made on your device; nothing is uploaded.'),
     ].filter(Boolean));
   };
   const run = async () => {
-    const pages = [...state.pages].sort((a, b) => a - b);
+    const pages = picked();
     if (!pages.length) return toast('Pick at least one page.');
     const name = safeFilename(doc.name);
     const btn = body.querySelector('[data-testid="export-download"]');
     btn.disabled = true;
     btn.lastChild.textContent = 'Preparing…';
+    state.busy = true;
+    body.classList.add('busy');
+    // Everything waits (Copy and Print too: they'd close the dialog and stop
+    // it); closing the dialog is how to stop.
+    for (const c of body.querySelectorAll('input, select, button')) c.disabled = true;
     try {
-      if (state.format === 'pdf') {
-        download(await exportPdf(doc, pages), `${name}.pdf`);
+      if (MOVING.has(state.format)) {
+        // Frames take a while: say how far along it is. They're drawn from the
+        // design as it was when Download was pressed (later edits don't leak
+        // in), and closing the dialog stops it.
+        const onProgress = (p) => (btn.lastChild.textContent = `Making ${state.format.toUpperCase()}… ${Math.round(p * 100)}%`);
+        const still = versionSnapshot(doc);
+        const signal = stopper.signal;
+        const notes = []; // everything left out, each said
+        let audio = null;
+        // (Whether video can be made here is known before the sound is decoded for it.)
+        if (state.format !== 'gif' && !canMakeVideo()) throw new Error("This browser can't make videos. Try a recent Chrome, Edge, Safari or Firefox.");
+        if (state.format !== 'gif' && still.audio) {
+          // Decoded once the video is known to be possible here.
+          audio = async () => {
+            const buffer = await soundtrackBuffer(still).catch(() => null);
+            if (!buffer) notes.push("The soundtrack couldn't be read here, so the video is silent.");
+            return buffer;
+          };
+        }
+        const blob = state.format === 'gif'
+          ? await exportGif(still, pages, { onProgress, onNote: (m) => notes.push(m), signal })
+          : await exportVideo(still, pages, { container: state.format, audio, volume: still.audio?.volume ?? 1, onProgress, onNote: (m) => notes.push(m), signal });
+        if (signal.aborted) return;
+        download(blob, `${name}.${state.format}`);
+        if (notes.length) toast(notes.join(' '));
+      } else if (state.format === 'pdf') {
+        const pdf = await exportPdf(doc, pages);
+        if (stopper.signal.aborted) return; // closed while making it
+        download(pdf, `${name}.pdf`);
       } else {
         const ext = state.format;
         const make = (i) => (ext === 'svg' ? exportSvg(doc, i, { transparent: state.transparent }) : exportImage(doc, i, { format: ext, scale: state.scale, transparent: state.transparent, quality: state.quality / 100 }));
         if (pages.length === 1) {
-          download(await make(pages[0]), `${name}${doc.pages.length > 1 ? `-${pages[0] + 1}` : ''}.${ext}`);
+          const file = await make(pages[0]);
+          if (stopper.signal.aborted) return;
+          download(file, `${name}${doc.pages.length > 1 ? `-${pages[0] + 1}` : ''}.${ext}`);
         } else {
           const files = [];
-          for (const i of pages) files.push({ name: `${name}-${i + 1}.${ext}`, data: await blobBytes(await make(i)) });
+          for (const i of pages) {
+            if (stopper.signal.aborted) return;
+            files.push({ name: `${name}-${i + 1}.${ext}`, data: await blobBytes(await make(i)) });
+          }
+          if (stopper.signal.aborted) return;
           download(new Blob([buildZip(files)], { type: 'application/zip' }), `${name}.zip`);
         }
       }
+      state.busy = false; // done: closing now isn't stopping anything
       toast('Downloaded');
       d.close();
     } catch (e) {
+      if (stopper.signal.aborted) return; // closed while making it: nothing to say
+      state.busy = false;
+      body.classList.remove('busy');
+      draw(); // everything back as it was, ready to try again
       toast(e.message || 'Export failed', 'error');
-      btn.disabled = false;
-      btn.lastChild.textContent = 'Download';
     }
   };
   draw();
-  const d = dialog('Download', body, { testid: 'export-dialog' });
+  const stopper = new AbortController();
+  // While a download is being made, only Close or Escape stop it (not a
+  // stray click beside the dialog), and stopping it says so.
+  const d = dialog('Download', body, {
+    testid: 'export-dialog',
+    steady: () => state.busy,
+    onClose: () => {
+      if (state.busy) toast('Download stopped');
+      stopper.abort();
+    },
+  });
   return d;
 }
 
 /** For tests and power users: everything above, without the dialog. */
-export const api = { exportImage, exportSvg, exportPdf, thumbnail, projectBlob, rasterize, dataUrlToBytes, clone };
+export const api = { exportImage, exportSvg, exportPdf, exportGif, exportVideo, soundtrackBuffer, thumbnail, projectBlob, rasterize, dataUrlToBytes, clone };

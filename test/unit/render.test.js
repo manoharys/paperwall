@@ -629,3 +629,22 @@ test('[ELM-10] a trimmed curve is the same curve, just shorter', async () => {
   const [ex, ey] = cut.pts.at(-1);
   assert.ok(Math.hypot(300 - ex, 200 - ey) > 40, 'and it stops short of the end');
 });
+
+test('[ELM-10] a connector to elements inside a turned group follows them when the group moves', async () => {
+  const { createConnector, updateConnectors, endsOf } = await import('../../src/model/connectors.js');
+  const { createShape, createGroup } = await import('../../src/model/doc.js');
+  const a = createShape('rect', { x: 0, y: 0, w: 100, h: 100 });
+  const b = createShape('rect', { x: 400, y: 0, w: 100, h: 100 });
+  const c = createConnector({ from: [100, 50], to: [400, 50], start: a.id, end: b.id });
+  const g = createGroup([a, b], { x: 0, y: 0, w: 500, h: 100, rotation: 90 });
+  const page = { elements: [g, c] };
+  updateConnectors(page);
+  const before = endsOf(c);
+  g.x += 300;
+  updateConnectors(page);
+  const after = endsOf(c);
+  for (let i = 0; i < 2; i++) assert.ok(Math.abs(after[i][0] - before[i][0] - 300) < 0.01 && Math.abs(after[i][1] - before[i][1]) < 0.01, 'both ends moved with the group');
+  // Turned 90° about (250, 50): a's middle is at (250, -150), b's at (250, 250); the line runs between them.
+  const [s, e] = before;
+  assert.ok(Math.abs(s[0] - 250) < 0.01 && Math.abs(e[0] - 250) < 0.01, `vertical line at x 250 (${s} → ${e})`);
+});
