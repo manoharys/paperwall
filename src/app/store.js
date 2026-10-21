@@ -133,10 +133,15 @@ export function all(store) {
 // ---------- designs ----------
 
 /** Save a design with a small preview image. */
+// Each design's latest preview, so saving without a new one doesn't read the
+// whole stored design (videos and all) back just to keep it.
+const thumbs = new Map();
+
 export async function saveDesign(doc, thumb) {
-  const prev = thumb === undefined ? await get('designs', doc.id) : null;
+  if (thumb === undefined && !thumbs.has(doc.id)) thumbs.set(doc.id, (await get('designs', doc.id))?.thumb ?? null);
+  if (thumb !== undefined) thumbs.set(doc.id, thumb);
   // Without files nothing uses any more (a deleted video, a replaced soundtrack).
-  await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: doc.height, pages: doc.pages.length, thumb: thumb ?? prev?.thumb ?? null, doc: keptAssets(doc) });
+  await put('designs', doc.id, { id: doc.id, name: doc.name, updatedAt: doc.updatedAt, width: doc.width, height: doc.height, pages: doc.pages.length, thumb: thumbs.get(doc.id) ?? null, doc: keptAssets(doc) });
 }
 
 export async function loadDesign(id) {
@@ -149,6 +154,7 @@ export async function listDesigns() {
 }
 
 export async function deleteDesign(id) {
+  thumbs.delete(id);
   await del('designs', id);
   // The design is gone either way; its history is cleaned up as well as it can be.
   await deleteVersions(id).catch(() => null);
