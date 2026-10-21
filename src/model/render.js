@@ -750,44 +750,54 @@ export function renderElementOnly(doc, el, opts = {}) {
 export function textRuns(doc, pageIndex, measure = approxMeasure) {
   const runs = [];
   const visit = (els, ox, oy) => {
-    for (const el0 of els) {
-      if (el0.hidden) continue;
-      if (el0.type === 'group') {
-        if (!el0.rotation) visit(el0.children, ox + el0.x, oy + el0.y);
+    for (const el of els) {
+      if (el.hidden) continue;
+      if (el.type === 'group') {
+        if (!el.rotation) visit(el.children, ox + el.x, oy + el.y);
         continue;
       }
-      if (el0.type !== 'text') continue;
-      // A sticky note's words sit inside its edges (the same middle, so it turns the same).
-      const el = el0.note ? noteInner(el0) : el0;
-      const x0 = ox + el.x;
-      const y0 = oy + el.y;
-      const cx = x0 + el.w / 2;
-      const cy = y0 + el.h / 2;
-      const rot = ((el.rotation || 0) * Math.PI) / 180;
-      const place = (lx, ly) => {
-        const dx = x0 + lx - cx;
-        const dy = y0 + ly - cy;
-        return { x: cx + dx * Math.cos(rot) - dy * Math.sin(rot), y: cy + dx * Math.sin(rot) + dy * Math.cos(rot) };
-      };
-      if (el.curve) {
-        const text = displayText(el).replace(/\s*\n\s*/g, ' ');
-        const p = place(0, el.h * 0.6);
-        runs.push({ text, x: p.x, y: p.y, size: el.size, width: el.w, angle: el.rotation || 0 });
-        continue;
-      }
-      const { lines, lineHeight } = layoutText(el, measure);
-      const pad = el.highlight ? el.highlight.padding ?? 0 : 0;
-      lines.forEach((line, i) => {
-        if (!line.text) return;
-        const baseline = pad + i * lineHeight + (lineHeight - el.size) / 2 + el.size * 0.8;
-        let x = line.indent;
-        if (el.align === 'center') x = line.indent + (el.w - line.indent - line.width) / 2;
-        else if (el.align === 'right') x = el.w - line.width;
-        const p = place(x, baseline);
-        runs.push({ text: (line.prefix ? line.prefix.trim() + ' ' : '') + line.text, x: p.x, y: p.y, size: el.size, width: line.width, angle: el.rotation || 0 });
-      });
+      runs.push(...textRunsOf(el, measure, ox, oy));
     }
   };
   visit(doc.pages[pageIndex].elements, 0, 0);
+  return runs;
+}
+
+/**
+ * Where the lines of one text element sit, as textRuns has them, in its
+ * parent's terms (moved by ox, oy). Nothing for anything else.
+ */
+export function textRunsOf(el0, measure = approxMeasure, ox = 0, oy = 0) {
+  const runs = [];
+  if (el0.hidden || el0.type !== 'text') return runs;
+  // A sticky note's words sit inside its edges (the same middle, so it turns the same).
+  const el = el0.note ? noteInner(el0) : el0;
+  const x0 = ox + el.x;
+  const y0 = oy + el.y;
+  const cx = x0 + el.w / 2;
+  const cy = y0 + el.h / 2;
+  const rot = ((el.rotation || 0) * Math.PI) / 180;
+  const place = (lx, ly) => {
+    const dx = x0 + lx - cx;
+    const dy = y0 + ly - cy;
+    return { x: cx + dx * Math.cos(rot) - dy * Math.sin(rot), y: cy + dx * Math.sin(rot) + dy * Math.cos(rot) };
+  };
+  if (el.curve) {
+    const text = displayText(el).replace(/\s*\n\s*/g, ' ');
+    const p = place(0, el.h * 0.6);
+    runs.push({ text, x: p.x, y: p.y, size: el.size, width: el.w, angle: el.rotation || 0 });
+    return runs;
+  }
+  const { lines, lineHeight } = layoutText(el, measure);
+  const pad = el.highlight ? el.highlight.padding ?? 0 : 0;
+  lines.forEach((line, i) => {
+    if (!line.text) return;
+    const baseline = pad + i * lineHeight + (lineHeight - el.size) / 2 + el.size * 0.8;
+    let x = line.indent;
+    if (el.align === 'center') x = line.indent + (el.w - line.indent - line.width) / 2;
+    else if (el.align === 'right') x = el.w - line.width;
+    const p = place(x, baseline);
+    runs.push({ text: (line.prefix ? line.prefix.trim() + ' ' : '') + line.text, x: p.x, y: p.y, size: el.size, width: line.width, angle: el.rotation || 0 });
+  });
   return runs;
 }

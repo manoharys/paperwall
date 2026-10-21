@@ -10,7 +10,8 @@
 // A "print" PDF is the same, with the page grown by the bleed so pictures
 // and backgrounds run past the edge, a TrimBox and BleedBox, and crop marks.
 
-import { elementMarkup, backgroundMarkup, transformOf, effectPad } from './render.js';
+import { elementMarkup, backgroundMarkup, transformOf, effectPad, textRunsOf } from './render.js';
+import { pdfText, helveticaWidth } from './pdf.js';
 import { parseSvg, byId } from './svg-read.js';
 import { parseFont, subsetFont, glyphFor } from './sfnt.js';
 import { deflate } from './deflate.js';
@@ -473,6 +474,11 @@ class Resources {
     this.parsed = env.parsedFonts ||= new Map();
     this.ref = file.alloc();
   }
+  /** Helvetica (never embedded), for invisible words no embedded font can carry. */
+  helvetica() {
+    this.usesHelvetica = true;
+    return 'FH';
+  }
   gs(ca, CA = ca) {
     const key = `${num(ca)}|${num(CA)}`;
     if (!this.gstates.has(key)) this.gstates.set(key, `GS${this.gstates.size + 1}`);
@@ -492,6 +498,12 @@ class Resources {
       face = nearestWeight(family, weight);
       key = `${family}|${face}`;
     } else key = `${family}|*`;
+    const font = this.parse(key, family);
+    if (font instanceof Error) no(font.message);
+    return { key, font, fakeBold: weight >= 600 && face < 600 };
+  }
+  /** The font file for a key, parsed (once), or the Error why it can't be embedded. */
+  parse(key, family = key.split('|')[0]) {
     if (!this.parsed.has(key)) {
       const bytes = this.env.fonts?.get(key);
       let font;
@@ -504,9 +516,15 @@ class Resources {
       }
       this.parsed.set(key, font);
     }
-    const font = this.parsed.get(key);
-    if (font instanceof Error) no(font.message);
-    return { key, font, fakeBold: weight >= 600 && face < 600 };
+    return this.parsed.get(key);
+  }
+  /** Any font this PDF can embed, as { key, font }, or null. */
+  anyFont() {
+    for (const key of this.env.fonts?.keys() || []) {
+      const font = this.parse(key);
+      if (!(font instanceof Error)) return { key, font };
+    }
+    return null;
   }
   /** Write everything out; returns the resources dictionary's object number. */
   finish() {
@@ -514,6 +532,11 @@ class Resources {
     const fontDict = [];
     // (A font only an element drawn as a picture asked for isn't embedded.)
     for (const [, r] of this.fonts) if (r.committed) fontDict.push(`/${r.name} ${this.embedFont(r)} 0 R`);
+    if (this.usesHelvetica) {
+      const ref = f.alloc();
+      f.set(ref, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+      fontDict.push(`/FH ${ref} 0 R`);
+    }
     const xobjects = [...this.images.values()].filter((r) => r.used).map((r) => `/${r.name} ${r.ref} 0 R`)
       .concat(this.forms.map(([n, ref]) => `/${n} ${ref} 0 R`), this.rasters.map(([n, ref]) => `/${n} ${ref} 0 R`));
     const gs = [...this.gstates].map(([k, n]) => {
@@ -982,6 +1005,47 @@ class Painter {
     }
   }
 
+  /**
+   * A line of words drawn as a picture, written again invisibly (mode 3) on
+   * top so it can still be selected, searched and copied, stretched to its
+   * width (run as textRunsOf gives it). In the element's embedded font when
+   * it has every letter; else in a font this PDF embeds anyway (missing
+   * letters as its blank glyph), or, with none, Helvetica as the flattened
+   * PDF does, with the words themselves as ActualText, so other scripts and
+   * emoji still read back.
+   */
+  hiddenText({ text, x, y, size, width, angle }, el) {
+    if (!text.trim()) return;
+    const chars = [...text];
+    let f = null;
+    try {
+      f = this.res.font(el.font, String(el.weight || 400));
+    } catch (e) {
+      if (!(e instanceof Unsupported)) throw e;
+    }
+    f ||= this.res.anyFont();
+    const a = ((angle || 0) * Math.PI) / 180;
+    // Upright letters on a page whose y runs down, turned as the element is.
+    const tm = `${num(Math.cos(a))} ${num(Math.sin(a))} ${num(Math.sin(a))} ${num(-Math.cos(a))} ${num(x)} ${num(y)} Tm`;
+    const stretch = (natural) => num(Math.max(1, Math.min(1000, (width / (natural || 1)) * 100)));
+    const as = (shown) => `/Span << /ActualText ${pdfTextString(text)} >> BDC ${shown} EMC`;
+    if (!f) {
+      const shown = `BT /${this.res.helvetica()} ${num(size)} Tf 0 Tc ${stretch(helveticaWidth(text, size))} Tz 3 Tr ${tm} (${pdfText(text)}) Tj ET`;
+      this.ops.push(`q ${as(shown)} Q`);
+      return;
+    }
+    // Each letter's glyph (a space the font lacks as a plain one; a letter it
+    // lacks as its blank glyph, 0, which reads back as nothing).
+    const space = glyphFor(f.font, 32);
+    const drawn = chars.map((ch) => glyphFor(f.font, ch.codePointAt(0)) || (/\s/.test(ch) && space) || 0);
+    chars.forEach((ch, i) => this.glyphs.push([f.key, drawn[i], drawn[i] ? ch : '', drawn[i] !== glyphFor(f.font, ch.codePointAt(0))]));
+    const whole = !COMPLEX.test(text) && drawn.every(Boolean);
+    const name = this.fontName(f.key, f.font);
+    const natural = drawn.reduce((w, g) => w + f.font.advances[g], 0) * (size / f.font.unitsPerEm);
+    const shown = `BT /${name} ${num(size)} Tf 0 Tc ${stretch(natural)} Tz 3 Tr ${tm} <${drawn.map(hex4).join('')}> Tj ET`;
+    this.ops.push(`q ${whole ? shown : as(shown)} Q`);
+  }
+
   fontName(key, font) {
     if (!this.res.fonts.has(key)) this.res.fonts.set(key, { name: `F${this.res.fonts.size + 1}`, font, glyphs: new Map(), standIns: new Set(), committed: false });
     return this.res.fonts.get(key).name;
@@ -1105,8 +1169,28 @@ function drawPage(doc, index, env, res, geo, wants) {
     } catch (e) {
       if (!(e instanceof Unsupported)) throw e;
       const box = rasterBox(el, m, area);
-      if (box) picture(el.id, box, m);
+      if (!box) return;
+      picture(el.id, box, m);
+      if (!wants) hiddenWords(el);
     }
+  };
+  // The words of an element drawn as a picture (a group's too, placed as the
+  // group places them), invisibly on top: still there to select and search.
+  const hiddenWords = (el) => {
+    if (el.hidden) return;
+    if (el.type === 'group') {
+      const t = parseTransform(transformOf(el));
+      ops.push(`q ${cm(t)}`);
+      el.children.forEach(hiddenWords);
+      ops.push('Q');
+      return;
+    }
+    const runs = textRunsOf(el, env.measure);
+    if (!runs.length) return;
+    const p = new Painter(res, env);
+    for (const run of runs) p.hiddenText(run, el);
+    p.commit();
+    ops.push(...p.ops);
   };
   for (const el of page.elements) visit(el, ID);
   ops.push('Q');
