@@ -123,6 +123,7 @@ export function aiSetup(feature, { onDone, onCancel } = {}) {
     };
     let filled = null; // the latest fill, which Save waits for (its rows are the ones read)
     pick.addEventListener('change', () => {
+      if (pick.value === id) return; // (the same one again: what's typed stays)
       id = pick.value;
       show('');
       filled = fill();

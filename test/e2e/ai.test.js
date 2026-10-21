@@ -50,7 +50,9 @@ async function setUp(page, provider, key) {
   const on = page.locator('[data-testid="ai-setup-on"]');
   if (!(await on.isChecked())) await on.check();
   await page.selectOption('[data-testid="ai-setup-provider"]', provider);
-  if (key) await page.fill('[data-testid="ai-setup-key"]', key);
+  // (Its own key field, once the rows have changed over to it.)
+  const names = { claude: 'Claude (Anthropic)', openai: 'OpenAI', gemini: 'Gemini (Google)' };
+  if (key) await page.fill(`[data-testid="ai-setup-key"][aria-label="${names[provider]} key"]`, key);
   else await page.waitForSelector('[data-testid="ai-setup-key"]', { state: 'detached' });
 }
 
