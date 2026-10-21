@@ -469,7 +469,8 @@ class Resources {
     this.shadings = new Map(); // dict -> name
     this.forms = []; // [name, ref]
     this.rasters = []; // [name, ref]
-    this.parsed = new Map(); // font key -> parsed font, or the Error
+    // Font key -> parsed font, or the Error; kept on env so planning and building read each font once.
+    this.parsed = env.parsedFonts ||= new Map();
     this.ref = file.alloc();
   }
   gs(ca, CA = ca) {
@@ -511,7 +512,8 @@ class Resources {
   finish() {
     const f = this.file;
     const fontDict = [];
-    for (const [, r] of this.fonts) fontDict.push(`/${r.name} ${this.embedFont(r)} 0 R`);
+    // (A font only an element drawn as a picture asked for isn't embedded.)
+    for (const [, r] of this.fonts) if (r.committed) fontDict.push(`/${r.name} ${this.embedFont(r)} 0 R`);
     const xobjects = [...this.images.values()].filter((r) => r.used).map((r) => `/${r.name} ${r.ref} 0 R`)
       .concat(this.forms.map(([n, ref]) => `/${n} ${ref} 0 R`), this.rasters.map(([n, ref]) => `/${n} ${ref} 0 R`));
     const gs = [...this.gstates].map(([k, n]) => {
