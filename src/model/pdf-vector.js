@@ -661,7 +661,7 @@ class Painter {
     this.env = env;
     this.ops = [];
     this.defs = new Map();
-    this.glyphs = []; // [fontRecord key, gid, text] used, committed with the element
+    this.glyphs = []; // [fontRecord key, gid, text, stand-in?] used, committed with the element
     this.images = [];
   }
 
@@ -925,10 +925,14 @@ class Painter {
     const spacing = parseFloat(style['letter-spacing']) || 0;
     const chars = [...text];
     const space = glyphFor(font, 32);
-    const gids = chars.map((ch) => {
+    const standIn = new Set(); // letters drawn with another's glyph (a space the font lacks, as a plain one)
+    const gids = chars.map((ch, i) => {
       const g = glyphFor(font, ch.codePointAt(0));
       if (g) return g;
-      if (/\s/.test(ch) && space) return space;
+      if (/\s/.test(ch) && space) {
+        standIn.add(i);
+        return space;
+      }
       return no(`${font.name} has no "${ch}"`);
     });
     // Width as PDF will set it, and as the browser measured it.
@@ -946,7 +950,7 @@ class Painter {
     const fo = style['fill-opacity'] === undefined ? 1 : parseFloat(style['fill-opacity']);
     const so = style['stroke-opacity'] === undefined ? 1 : parseFloat(style['stroke-opacity']);
     const name = this.fontName(key, font);
-    for (let i = 0; i < gids.length; i++) this.glyphs.push([key, gids[i], chars[i]]);
+    for (let i = 0; i < gids.length; i++) this.glyphs.push([key, gids[i], chars[i], standIn.has(i)]);
     const glyphHex = gids.map(hex4).join('');
     // Synthetic italic leans the letters a quarter; synthetic bold thickens their outline (as browsers do).
     const tm = `1 0 ${italic && !/italic|oblique/i.test(font.name) ? 0.25 : 0} -1 ${num(x0)} ${num(y)} Tm`;
@@ -979,16 +983,22 @@ class Painter {
   }
 
   fontName(key, font) {
-    if (!this.res.fonts.has(key)) this.res.fonts.set(key, { name: `F${this.res.fonts.size + 1}`, font, glyphs: new Map(), committed: false });
+    if (!this.res.fonts.has(key)) this.res.fonts.set(key, { name: `F${this.res.fonts.size + 1}`, font, glyphs: new Map(), standIns: new Set(), committed: false });
     return this.res.fonts.get(key).name;
   }
 
   /** Keep what this element used: its glyphs, pictures and see-through groups. */
   commit() {
-    for (const [key, gid, ch] of this.glyphs) {
+    // A glyph reads back as its own letter: a stand-in's (an em space drawn
+    // as a space) only until the letter itself uses it.
+    for (const [key, gid, ch, standIn] of this.glyphs) {
       const r = this.res.fonts.get(key);
       r.committed = true;
-      if (!r.glyphs.has(gid)) r.glyphs.set(gid, ch);
+      if (!r.glyphs.has(gid) || (!standIn && r.standIns.has(gid))) {
+        r.glyphs.set(gid, ch);
+        if (standIn) r.standIns.add(gid);
+        else r.standIns.delete(gid);
+      }
     }
     for (const img of this.images) this.res.useImage(img);
     for (const [name, ops] of this.formsPending || []) {
