@@ -6,6 +6,7 @@ import { templateBrowser } from './insert.js';
 import { readyTemplate } from './templates.js';
 import * as store from './store.js';
 import { readProjectFile } from './export.js';
+import { aiDesignBlock } from './ai-design.js';
 
 export function renderHome(root, { openDesign, newDesign, toggleTheme, installPrompt }) {
   forget(root);
@@ -88,6 +89,7 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, installPr
           h('b', null, p.name),
           h('small', null, p.unit === 'mm' ? `${Math.round((p.w / 300) * 25.4)} × ${Math.round((p.h / 300) * 25.4)} mm` : p.unit === 'in' ? `${p.w / 300} × ${p.h / 300} in` : `${p.w} × ${p.h} px`)))),
         custom),
+      aiDesignBlock({ newDesign }),
       h('section', { class: 'block' },
         h('div', { class: 'block-head' }, h('h2', null, 'Start from a template')),
         ...templates,
