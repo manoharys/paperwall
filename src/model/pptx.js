@@ -309,7 +309,11 @@ class Slide {
     const indent = Math.round(el.size * 1.1 * emu);
     // (A document's text cut for its sheets numbers on from `listStart`, and
     // when it `continues` a list item, its first line has no mark of its own.)
-    const startAt = el.list === 'number' && el.listStart > 1 ? ` startAt="${Math.round(el.listStart)}"` : '';
+    // Numbers count on over blank lines, as the page counts them. A paragraph
+    // without a number ends PowerPoint's run of numbers, so the run after it
+    // starts where the count is (startAt), as does a piece that starts later.
+    let next = Math.max(1, Math.round(el.listStart || 1));
+    let runStart = 0; // the number the run of numbered paragraphs began at (0: not in one)
     const paras = String(el.text ?? '').split('\n').map((t, i) => {
       let bullet = '<a:buNone/>';
       let margin = '';
@@ -319,9 +323,12 @@ class Slide {
         bullet = '<a:buFont typeface="Arial"/><a:buChar char="•"/>';
         margin = ` marL="${indent}" indent="-${indent}"`;
       } else if (el.list === 'number' && t.trim()) {
-        bullet = `<a:buFont typeface="+mj-lt"/><a:buAutoNum type="arabicPeriod"${startAt}/>`;
+        if (!runStart) runStart = next;
+        next++;
+        bullet = `<a:buFont typeface="+mj-lt"/><a:buAutoNum type="arabicPeriod"${runStart > 1 ? ` startAt="${runStart}"` : ''}/>`;
         margin = ` marL="${indent}" indent="-${indent}"`;
       }
+      if (!bullet.includes('buAutoNum')) runStart = 0;
       const pPr = `<a:pPr algn="${algn}"${margin}>${spacing}${bullet}</a:pPr>`;
       return `<a:p>${pPr}${t ? `<a:r>${rPr('rPr')}<a:t>${xmlText(t)}</a:t></a:r>` : ''}${rPr('endParaRPr')}</a:p>`;
     }).join('');
