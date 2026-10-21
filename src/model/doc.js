@@ -366,6 +366,9 @@ export function createGroup(children, props = {}) {
   return base('group', { children, ...props });
 }
 
+// Asset types and the kind of data: URL each holds.
+const ASSET_KINDS = { image: 'image', font: 'font', video: 'video', audio: 'audio' };
+
 /** Element types whose width and height keep their ratio when resized. */
 export const KEEPS_RATIO = ['image', 'video', 'icon', 'sticker', 'qr'];
 
@@ -453,7 +456,9 @@ export function validateDesign(doc) {
     if (p.duration !== undefined) p.duration = clampNum(p.duration, ...LIMITS.page, undefined);
   }
   for (const [id, a] of Object.entries(doc.assets)) {
-    if (!a || typeof a.dataUrl !== 'string' || !/^data:(image|font|video|audio)\//.test(a.dataUrl)) delete doc.assets[id];
+    // Each file must be what it says it is (a picture, a font, a video or a sound).
+    const kind = a && Object.hasOwn(ASSET_KINDS, a.type || 'image') ? a.type || 'image' : null;
+    if (!kind || typeof a.dataUrl !== 'string' || !a.dataUrl.startsWith(`data:${ASSET_KINDS[kind]}/`)) delete doc.assets[id];
     else if (a.type === 'font') a.family = String(a.family || 'My font').replace(/[^\w\s-]/g, '').trim() || 'My font';
     else if (a.type === 'video' && !(typeof a.poster === 'string' && a.poster.startsWith('data:image/'))) a.poster = undefined;
   }

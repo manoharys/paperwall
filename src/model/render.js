@@ -349,9 +349,11 @@ function renderText(ctx, el) {
     let line = line0;
     if (left !== Infinity) {
       const all = [...(line.text || '')];
-      const shown = all.slice(0, Math.max(0, left));
+      const before = left;
+      const shown = all.slice(0, Math.max(0, before));
       left -= all.length;
-      if (!shown.length) return;
+      // Not reached yet (a blank line, its bullet say, shows once typing gets to it).
+      if (all.length ? !shown.length : before <= 0) return;
       // Same place as the whole line; underlines and boxes only under what's
       // typed (measured, as the letters are).
       const text = shown.join('');

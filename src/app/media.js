@@ -226,6 +226,12 @@ export class VideoFrames {
     });
   }
 
+  /** Whether `el`'s video played this visit to its end (and shows its last picture). */
+  hasEnded(el) {
+    const p = this.players.get(el.id);
+    return !!p && !p.failed && !p.fresh && p.video.ended;
+  }
+
   /** Whether `el`'s video is playing from its latest start, with a picture. */
   isPlaying(el) {
     const p = this.players.get(el.id);
