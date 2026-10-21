@@ -668,3 +668,50 @@ test('[EXP-15] PowerPoint: a connector\'s picture has room for its arrowheads', 
   assert.ok(effectPad({ ...c, endCap: 'none' }) < effectPad(c), 'no arrow, no room for one');
   assert.equal(effectPad({ type: 'line', w: 100, h: 24, startCap: 'none', endCap: 'none' }), 6, 'a line without a width draws 4 wide');
 });
+
+test('[EXP-15] PowerPoint: only a list\'s text that goes on from the sheet before is indented', () => {
+  const doc = createDesign({ width: 1920, height: 1080 });
+  // Pieces of longer texts on a later sheet: plain text (its list is 'none'), and a list.
+  doc.pages[0].elements.push(createText({ x: 0, y: 0, w: 900, h: 300, text: 'goes on here\nNext', size: 40, continues: true }));
+  doc.pages[0].elements.push(createText({ x: 0, y: 400, w: 900, h: 300, text: 'rest of a point\nAnother point', size: 40, list: 'bullet', continues: true }));
+  assert.equal(doc.pages[0].elements[0].list, 'none');
+  const slide = unzip(buildPptx(doc, [0], {})).get('ppt/slides/slide1.xml').toString();
+  const firstPara = (word) => /<a:p><a:pPr([^>]*)>/.exec([...slide.matchAll(/<p:sp>.*?<\/p:sp>/g)].map((m) => m[0]).find((x) => x.includes(word)))[1];
+  assert.equal(firstPara('goes on here'), ' algn="l"', 'plain text: no list indent');
+  assert.match(firstPara('rest of a point'), /^ algn="l" marL="\d+" indent="0"$/, 'a list: in line with its item');
+});
+
+test('[EXP-13] words drawn as a picture are still there to select and search, once', () => {
+  const doc = createDesign({ width: 1000, height: 1000 });
+  const els = doc.pages[0].elements;
+  els.push(createText({ id: 'glow', x: 50, y: 50, w: 900, h: 120, text: 'Shining bright', size: 60, effect: { type: 'glow' } }));
+  els.push(createText({ id: 'emoji', x: 50, y: 200, w: 900, h: 120, text: 'Party 🎉 time', size: 40 }));
+  els.push(createText({ id: 'turned', x: 300, y: 400, w: 400, h: 80, text: 'Turned neon', size: 40, rotation: 30, effect: { type: 'neon' } }));
+  els.push(createGroup([createText({ x: 0, y: 0, w: 300, h: 60, text: 'In a group', size: 30 })], { id: 'g', x: 100, y: 800, w: 300, h: 60, shadow: { x: 2, y: 2, blur: 4 } }));
+  const fonts = new Map();
+  for (const { font, weight } of fontsUsed(doc)) fonts.set(`${font.name}|${weight}`, fontBytes(fontFile(font.slug, weight)));
+  const wants = planVectorPdf(doc, [0], { fonts, measure: approxMeasure });
+  assert.deepEqual(wants.map((w) => w.key), ['glow', 'emoji', 'turned', 'g'], 'all drawn as pictures');
+  const px = { width: 2, height: 2, data: zlib.deflateSync(Buffer.alloc(12, 200)) };
+  const build = (env) => buildVectorPdf(doc, [0], { measure: approxMeasure, rasters: new Map(wants.map((w) => [`${w.page}:${w.key}`, px])), ...env });
+  const bytes = build({ fonts });
+  const pdf = readPdf(bytes);
+  const content = pageContents(pdf)[0];
+  assert.match(content, /\/Ra\d+ Do/, 'the pictures');
+  assert.match(content, /q BT \/F\d+ 60 Tf 0 Tc [\d.]+ Tz 3 Tr 1 0 0 -1 [\d.]+ [\d.]+ Tm <[0-9A-F]+> Tj ET Q/, 'invisible words, in the embedded font');
+  assert.match(content, /\/Span << \/ActualText <FEFF005000610072007400790020D83CDF89002000740069006D0065> >> BDC BT \/F\d+ 40 Tf .* 3 Tr .*<[0-9A-F]*0000[0-9A-F]*> Tj ET EMC/, 'a letter the font lacks: the words as ActualText');
+  assert.equal(find(pdf, /\/BaseFont \/Helvetica/).length, 0, 'every font embedded');
+  const words = (b) => {
+    const dir = mkdtempSync(join(tmpdir(), 'paperwall-unit-'));
+    writeFileSync(join(dir, 'a.pdf'), b);
+    return execFileSync('pdftotext', ['-enc', 'UTF-8', '-raw', join(dir, 'a.pdf'), '-']).toString().trim().split('\n');
+  };
+  if (has('pdftotext', ['-v'])) {
+    const want = ['Shining bright', 'Party 🎉 time', 'Turned neon', 'In a group'];
+    assert.deepEqual(words(bytes), want);
+    // No font file at all: Helvetica, as the flattened PDF has it, the words as ActualText.
+    const bare = build({});
+    assert.equal(find(readPdf(bare), /\/BaseFont \/Helvetica/).length, 1);
+    assert.deepEqual(words(bare), want);
+  }
+});
