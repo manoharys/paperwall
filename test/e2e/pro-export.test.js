@@ -280,3 +280,98 @@ test('[EXP-13] [EXP-15] a whiteboard\'s sticky notes as vectors in the PDF and a
   assert.match(slide, new RegExp(`name="Sticky note \\d+".*<a:srgbClr val="${note.note.slice(1).toUpperCase()}"/>.*<a:t>${note.text}</a:t>`), 'a shape of its color, its text editable inside');
   await context.close();
 });
+
+/** Run an export function in the page on a changed copy of the design (page 1); the file's bytes come back. */
+async function exportCopy(page, fn, change, opts = {}) {
+  const b64 = await page.evaluate(async ([fnName, src, o]) => {
+    const { export: ex, editor } = window.paperwall;
+    const doc = ex.clone(editor.doc);
+    new Function('doc', `return (${src})(doc)`)(doc);
+    const blob = await ex[fnName](doc, [0], o);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }, [fn, change.toString(), opts]);
+  return Buffer.from(b64, 'base64');
+}
+
+test('[EXP-14] print PDF: a background drawn as a picture runs into the bleed too', async () => {
+  const { page, context } = await newDesign('flyer');
+  // PDF shadings can't be see-through: this background comes as a picture.
+  await page.evaluate(() => window.paperwall.editor.setBackground({ type: 'gradient', gradient: { type: 'linear', angle: 90, stops: [{ offset: 0, color: '#0a9396', opacity: 0.9 }, { offset: 1, color: '#0a9396', opacity: 0.9 }] } }));
+  const doc = await state(page);
+  assert.ok(planVectorPdf(doc, [0], { print: true }).some((w) => w.key === '@bg'), 'the background as a picture');
+  const { bytes } = await downloadVia(page, pdfKind(page, 'print'));
+  const pdf = readPdf(bytes);
+  const [pg] = find(pdf, /\/Type \/Page\b/);
+  const box = (k) => new RegExp(`/${k} \\[([^\\]]+)\\]`).exec(pg.dict)[1].split(' ').map(Number);
+  const [media, trim, bleed] = [box('MediaBox'), box('TrimBox'), box('BleedBox')];
+  const png = renderPdf(bytes, 72);
+  if (png) {
+    const y = Math.round(media[3] - (trim[1] + trim[3]) / 2);
+    const inside = (await pixelAt(page, png, 'image/png', Math.round(trim[2]) - 6, y)).slice(0, 3);
+    assert.ok(inside[0] < 100, `the background on the page: ${inside}`);
+    for (const x of [(trim[2] + bleed[2]) / 2, (trim[0] + bleed[0]) / 2]) {
+      const px = (await pixelAt(page, png, 'image/png', Math.round(x), y)).slice(0, 3);
+      assert.ok(px.every((v, i) => Math.abs(v - inside[i]) < 8), `the background in the bleed too: ${px} vs ${inside}`);
+    }
+    assert.deepEqual((await pixelAt(page, png, 'image/png', Math.round(media[2]) - 2, y)).slice(0, 3), [255, 255, 255], 'paper outside the bleed');
+  }
+  await context.close();
+});
+
+test('[EXP-13] [EXP-14] a design font whose file is gone: its text comes as a picture, the PDF is still made', async () => {
+  const { page, context, errors } = await newDesign('square');
+  await addText(page);
+  await page.evaluate(() => window.paperwall.editor.update({ text: 'Lost font' }));
+  const missing = (doc) => {
+    // An uploaded font whose stored file is gone (no data).
+    doc.assets.lost = { type: 'font', family: 'Lost Font', name: 'lost.woff2' };
+    doc.pages[0].elements[0].font = 'Lost Font';
+  };
+  for (const print of [false, true]) {
+    const pdf = readPdf(await exportCopy(page, 'exportVectorPdf', missing, { print }));
+    assert.equal(find(pdf, /\/Subtype \/Type0/).length, 0, 'no font for it');
+    assert.ok(find(pdf, /\/Subtype \/Image/).length >= 1, 'the text as a picture');
+  }
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('[EXP-15] PowerPoint: a photo whose picture can\'t be read comes as a picture of itself', async () => {
+  const { page, context } = await newDesign('slides');
+  await uploadImages(page, [await makePng(page, { w: 400, h: 300 })]);
+  const bytes = await exportCopy(page, 'exportPptx', (doc) => {
+    const photo = doc.pages[0].elements.find((e) => e.type === 'image');
+    doc.assets[photo.assetId].dataUrl = 'data:image/png;base64,AAAA'; // not a picture the browser can open
+  });
+  const slide = unzip(bytes).get('ppt/slides/slide1.xml').toString();
+  checkXml(slide, 'slide1.xml');
+  assert.equal([...slide.matchAll(/<p:pic>/g)].length, 1, 'not left off the slide');
+  await context.close();
+});
+
+test('[EXP-13] the flattened PDF splits a document into sheets with its fonts in', async () => {
+  const { page, context } = await newDesign('doc');
+  // A font the page hasn't loaded yet, much wider than the fallback.
+  // (Taller than a sheet: its lines, as measured, decide how many sheets it takes.)
+  const wide = (doc) => {
+    const el = doc.pages[0].elements[1];
+    el.text = 'A long paragraph about the spring fair. '.repeat(120);
+    el.font = 'Press Start 2P';
+    el.h = 20000;
+  };
+  const sheets = async (pg, fn) => {
+    assert.equal(await pg.evaluate(() => [...document.fonts].some((f) => f.family === 'Press Start 2P' && f.status === 'loaded')), false, 'not loaded yet');
+    return find(readPdf(await exportCopy(pg, fn, wide)), /\/Type \/Page\b/).length;
+  };
+  const flat = await sheets(page, 'exportPdf');
+  await context.close();
+  // (In a page of its own: nothing measured there before.)
+  const other = await newDesign('doc');
+  const vector = await sheets(other.page, 'exportVectorPdf');
+  assert.ok(vector >= 2, `${vector} sheets`);
+  assert.equal(flat, vector, 'the same sheets as the vector PDF');
+  await other.context.close();
+});

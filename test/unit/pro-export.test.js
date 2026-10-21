@@ -15,6 +15,7 @@ import { createDesign, createText, createShape, createLine, createImage, createI
 import { createConnector } from '../../src/model/connectors.js';
 import { flowDocument, onPaper } from '../../src/model/flow.js';
 import { approxMeasure, notePad } from '../../src/model/text-layout.js';
+import { renderPage } from '../../src/model/render.js';
 import { fontsUsed, fontFile } from '../../src/model/fonts.js';
 import { craft, NDBITS } from '../../scripts/brotli-dict.mjs';
 import { readPdf, find, pageContents, unzip, checkXml, has } from '../formats.js';
@@ -258,6 +259,43 @@ test('[EXP-14] print PDF: page grown by the bleed, TrimBox and BleedBox, crop ma
   assert.equal(rasterScale(createDesign({ width: 1080, height: 1080 }), { print: true }), 300 / 96, '300 per inch for screen designs too');
 });
 
+test('[EXP-13] hard edges in gradients: the stitching function\'s Bounds rise, inside its Domain', () => {
+  const doc = createDesign({ width: 400, height: 400 });
+  const red = '#ff0000';
+  const blue = '#0000ff';
+  const fills = [
+    [{ offset: 0, color: red }, { offset: 0.5, color: red }, { offset: 0.5, color: blue }, { offset: 1, color: blue }],
+    [{ offset: 0, color: red }, { offset: 1, color: red }, { offset: 1, color: blue }],
+    [{ offset: 0, color: red }, { offset: 0, color: blue }, { offset: 1, color: '#00ff00' }],
+    [{ offset: 0, color: red }, { offset: 0.3, color: blue }, { offset: 0.3, color: red }, { offset: 0.3, color: blue }, { offset: 1, color: red }],
+  ];
+  fills.forEach((stops, i) => doc.pages[0].elements.push(createShape('rect', { id: `r${i}`, x: 10 + i * 90, y: 10, w: 80, h: 80, fill: { type: 'linear', angle: 90, stops } })));
+  assert.deepEqual(planVectorPdf(doc, [0], {}), [], 'all drawn as shadings');
+  const pdf = readPdf(buildVectorPdf(doc, [0], {}));
+  const text = [...pdf.objects.values()].map((o) => o.dict).join('\n');
+  const all = [...text.matchAll(/\/Bounds \[([^\]]*)\]/g)].map((m) => m[1].split(' ').map(Number));
+  assert.equal(all.length, fills.length, 'a stitching function each');
+  for (const bounds of all) {
+    const seq = [0, ...bounds, 1];
+    for (let i = 1; i < seq.length; i++) assert.ok(seq[i] > seq[i - 1], `strictly rising inside [0 1]: ${bounds}`);
+  }
+  assert.deepEqual(all[0], [0.5, 0.501], 'the edge where it was put');
+  assert.deepEqual(all[1], [0.999], 'an edge at the end moves back, not past it');
+});
+
+test('[EXP-14] a background drawn as a picture runs into the bleed', () => {
+  const doc = createDesign({ width: 200, height: 100 });
+  doc.pages[0].background = { type: 'color', color: '#0a9396' };
+  doc.pages[0].elements.push(createShape('rect', { id: 'r', x: 10, y: 10, w: 50, h: 50, fill: '#ff0000' }));
+  const view = { x: -10, y: -10, w: 220, h: 120 };
+  const plain = renderPage(doc, 0, { view });
+  assert.match(plain, /<rect width="200" height="100" fill="#0a9396"\/>/, 'just the page without');
+  const svg = renderPage(doc, 0, { view, bleed: 10 });
+  assert.match(svg, /<g transform="translate\(-10 -10\)"><rect width="220" height="120" fill="#0a9396"\/><\/g>/, 'past every edge with');
+  assert.match(svg, /fill="#ff0000"/, 'the elements where they were');
+  assert.doesNotMatch(renderPage(doc, 0, { view, bleed: 10, transparent: true }), /#0a9396/);
+});
+
 // ---------- PowerPoint ----------
 
 function pptxSample() {
@@ -423,5 +461,24 @@ test('[EXP-13] [EXP-15] sticky notes, video stills, credited photos and lines be
   const inset = Math.round(notePad(p.elements[1]) * emuPerPx(doc));
   assert.match(pink, new RegExp(`<a:bodyPr wrap="square" lIns="${inset}" tIns="${inset}"`), 'the text inside its edges');
   assert.equal([...slide.matchAll(/<p:pic>/g)].length, 3, 'photo, video still and the line');
+  assert.equal([...parts.keys()].filter((n) => n.startsWith('ppt/media/')).length, 3);
+});
+
+test('[EXP-15] PowerPoint: a photo whose picture couldn\'t be read comes as a picture of itself, not left out', () => {
+  const { doc, img, png } = pptxSample();
+  const media = new Map(); // the photo's file couldn't be read
+  assert.equal(pptxKind(doc, doc.pages[0].elements.find((e) => e.id === 'p1')), 'picture');
+  assert.equal(pptxKind(doc, doc.pages[0].elements.find((e) => e.id === 'p1'), media), 'raster');
+  const wants = planPptx(doc, [0], media);
+  assert.deepEqual(wants.map((w) => w.key), ['p1', 'icon', 'glow']);
+  // In a group too: the group comes as one picture.
+  const g = createGroup([createImage(img, { id: 'inner', x: 0, y: 0, w: 100, h: 100 }), createShape('rect', { x: 120, y: 0, w: 100, h: 100 })], { id: 'grp', x: 100, y: 100, w: 220, h: 100 });
+  assert.equal(pptxKind(doc, g), 'group');
+  assert.equal(pptxKind(doc, g, media), 'raster');
+  const pictures = new Map(wants.map((w) => [`${w.page}:${w.key}`, new Uint8Array(png)]));
+  const parts = unzip(buildPptx(doc, [0], { media, pictures }));
+  const slide = parts.get('ppt/slides/slide1.xml').toString();
+  checkXml(slide, 'slide1.xml');
+  assert.equal([...slide.matchAll(/<p:pic>/g)].length, 3, 'the photo, the icon and the neon text, each a picture');
   assert.equal([...parts.keys()].filter((n) => n.startsWith('ppt/media/')).length, 3);
 });
