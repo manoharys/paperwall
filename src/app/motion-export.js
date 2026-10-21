@@ -260,6 +260,7 @@ async function encodeAudio(buffer, seconds, container, volume = 1, signal = null
       if (signal?.aborted) throw new Error('Stopped');
       // A breath now and then, so the page stays responsive (and can be stopped).
       if (at % (block * 50) === 0) await new Promise((r) => setTimeout(r, 0));
+      if (failure) throw failure; // (as with video: the encoder's own error)
       const n = Math.min(block, frames - at);
       const planar = new Float32Array(n * channels);
       for (let c = 0; c < channels; c++) planar.set(pcm.getChannelData(c).subarray(at, at + n), c * n);
@@ -268,7 +269,10 @@ async function encodeAudio(buffer, seconds, container, volume = 1, signal = null
       data.close();
       await drain(encoder, 8);
     }
-    await encoder.flush();
+    if (failure) throw failure;
+    await encoder.flush().catch((e) => {
+      throw failure || e;
+    });
   } finally {
     if (encoder.state !== 'closed') encoder.close();
   }
