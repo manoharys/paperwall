@@ -1,7 +1,7 @@
 // The design document: pages of elements, plus the images they use.
 
 import { boxAround } from './geometry.js';
-import { ANIMATIONS, PAGE_ANIMATIONS, TRANSITIONS, LIMITS, clampNum } from './motion.js';
+import { ANIMATIONS, PAGE_ANIMATIONS, TRANSITIONS, LIMITS, clampNum, shownPages } from './motion.js';
 
 export const FORMAT_VERSION = 1;
 export const DPI = 300;
@@ -28,7 +28,7 @@ export const PRESETS = [
 
 /** Indexes of the pages that aren't hidden (shown when presenting and downloading). */
 export function visiblePages(doc) {
-  return doc.pages.map((p, i) => (p.hidden ? -1 : i)).filter((i) => i >= 0);
+  return shownPages(doc);
 }
 
 export function presetById(id) {
@@ -400,8 +400,10 @@ export function usedAssetIds(doc) {
 
 /** Remove images that no element or background uses any more. */
 export function pruneAssets(doc) {
-  // The same rule as what's saved (see keptAssets): fonts stay.
-  doc.assets = keptAssets(doc).assets;
+  // The same rule as what's saved (see keptAssets): fonts stay. In place:
+  // others may hold this assets object.
+  const kept = keptAssets(doc).assets;
+  for (const id of Object.keys(doc.assets)) if (!(id in kept)) delete doc.assets[id];
   return doc;
 }
 

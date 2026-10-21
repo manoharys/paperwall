@@ -233,16 +233,21 @@ export function pageMoves(page, assets = null) {
 }
 
 /** Whether anything in a design moves (so a GIF or video is worth making). */
-export function designMoves(doc, pages = doc.pages.map((p, i) => (p.hidden ? -1 : i)).filter((i) => i >= 0)) {
+export function designMoves(doc, pages = shownPages(doc)) {
   // The first page's transition never plays: nothing comes before it.
   return pages.some((i, k) => (k === 0 ? animations(doc.pages[i]).length > 0 || hasVideo(doc.pages[i], doc.assets) : pageMoves(doc.pages[i], doc.assets)));
+}
+
+/** The indexes of the pages that aren't hidden (what plays, presents and downloads by default). */
+export function shownPages(doc) {
+  return doc.pages.map((p, i) => (p.hidden ? -1 : i)).filter((i) => i >= 0);
 }
 
 /**
  * The design played from start to end: each shown page, when it starts and
  * how long it lasts. `pages` are page indexes (visible ones, by default).
  */
-export function timeline(doc, pages = doc.pages.map((p, i) => (p.hidden ? -1 : i)).filter((i) => i >= 0)) {
+export function timeline(doc, pages = shownPages(doc)) {
   let at = 0;
   const parts = pages.map((index) => {
     const duration = pageDuration(doc.pages[index]);

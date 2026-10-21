@@ -336,6 +336,7 @@ function soundtrackPlayer(doc) {
   } catch {
     mixer?.close?.().catch(() => null);
     mixer = null;
+    gain = null;
     audio.volume = volume;
   }
   // Asked to play now, while the click that pressed Play still counts:
