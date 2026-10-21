@@ -41,6 +41,8 @@ All of it. Including the things other tools put behind a subscription:
 - SVG with fonts inside, JPG, a flattened PDF, a zip of pages, print
 - **Charts, tables, QR codes**, and removing plain backgrounds, all on your device
 - **No watermark, ever**, and no account
+- **In your language**: English, Español, Français, Deutsch, Português (Brasil), हिन्दी, العربية, 日本語 and ಕನ್ನಡ, right to left included
+- **For everyone**: works with a keyboard alone and with screen readers
 
 ## The scoreboard
 
@@ -106,6 +108,11 @@ end-to-end tests use Playwright.
   check in a real browser: no overflow, no broken words, readable contrast),
   92 open-license font families (SIL OFL / Apache 2.0) loaded only when used,
   1,956 icons (Paperwall's own plus Lucide, ISC) and 198 stickers.
+- **Languages:** every word of the interface is in `src/app/locales`, one
+  file per language, looked up with `t(key, vars)` (`src/app/i18n.js`).
+  A unit test checks that each language has every key, with the same
+  `{placeholders}`. To add a language, copy `en.js`, translate it, and list
+  it in `i18n.js`.
 
 ## Compared with Canva
 
