@@ -346,6 +346,38 @@ test('[APP-09] the canvas is a labelled, described place on the page', async () 
   await context.close();
 });
 
+test('[APP-09] a color picker opened by touch leaves the on-screen keyboard down', async () => {
+  const { page, context } = await newDesign('square', { hasTouch: true });
+  await page.tap('[data-testid="bg-color"]');
+  await page.waitForSelector('[data-testid="color-popover"]');
+  assert.notEqual(await focused(page), 'hex-input', 'no text box focused by a tap');
+  // From the keyboard it still opens on its hex code.
+  await page.tap('[data-testid="bg-color"]');
+  await page.waitForSelector('[data-testid="color-popover"]', { state: 'detached' });
+  await page.focus('[data-testid="bg-color"]');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('[data-testid="color-popover"]');
+  assert.equal(await focused(page), 'hex-input');
+  await context.close();
+});
+
+test('[APP-09] Alt+Left with nothing selected stays in the editor (not the browser\'s Back)', async () => {
+  const { page, context } = await newDesign('square');
+  const url = page.url();
+  await page.focus('[data-testid="stage"]');
+  await page.keyboard.press('Escape');
+  const prevented = await page.evaluate(() => new Promise((ok) => {
+    window.addEventListener('keydown', (e) => setTimeout(() => ok(e.defaultPrevented)), { once: true });
+    document.querySelector('[data-testid="stage"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', altKey: true, bubbles: true, cancelable: true }));
+  }));
+  assert.equal(prevented, true);
+  await page.keyboard.press('Alt+ArrowLeft');
+  await page.waitForTimeout(300);
+  assert.equal(page.url(), url);
+  assert.ok(await page.evaluate(() => !!window.paperwall?.editor));
+  await context.close();
+});
+
 test('[APP-09] Alt+Arrows resize a turned element in place; a hidden one is announced as hidden', async () => {
   const { page, context } = await newDesign('square');
   const sq = await addShape(page, 'Square');

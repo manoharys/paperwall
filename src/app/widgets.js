@@ -74,7 +74,10 @@ export function colorButton({ label, value, onChange, getContext = () => ({}), t
     btn.classList.toggle('empty', !v);
   };
   paint(value);
-  btn.addEventListener('click', () => {
+  let touched = false; // (opened by a finger or pen: no keyboard popping up)
+  btn.addEventListener('pointerdown', (e) => (touched = e.pointerType === 'touch' || e.pointerType === 'pen'));
+  btn.addEventListener('click', (e) => {
+    if (!e.detail) touched = false; // (from the keyboard)
     if (openPopover?.dataset.for === label) return closePopover();
     closePopover();
     const ctx = getContext();
@@ -116,9 +119,12 @@ export function colorButton({ label, value, onChange, getContext = () => ({}), t
       row(t('common.brandKit'), ctx.brand),
       PALETTES.map((p) => row(paletteName(p.name), p.colors)));
     showPopover(pop, btn, { alignRight: true });
-    // Straight into the hex code, so a color can be typed with no mouse.
-    hexInput.focus();
-    hexInput.select();
+    // Straight into the hex code, so a color can be typed with no mouse
+    // (not on touch screens, where that brings up the on-screen keyboard).
+    if (!touched) {
+      hexInput.focus();
+      hexInput.select();
+    }
   });
   return btn;
 }

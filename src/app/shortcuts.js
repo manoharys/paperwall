@@ -107,7 +107,8 @@ export function bindShortcuts(editor, canvas, actions) {
     if (e.key === ']') return done(), editor.reorder('forward');
     if (e.key === '[') return done(), editor.reorder('backward');
     if (e.key.startsWith('Arrow')) {
-      if (!editor.selection.length) return;
+      // (Alt+Left and Right are the browser's Back and Forward: never here, where they'd close the editor.)
+      if (!editor.selection.length) return void (e.altKey && done());
       done();
       const step = e.shiftKey ? 10 : 1;
       const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
