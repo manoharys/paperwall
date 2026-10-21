@@ -12,7 +12,7 @@ import { buildWebmParts } from '../model/webm.js';
 import { buildMp4Parts } from '../model/mp4.js';
 import { measure, fontCssFor } from './fonts.js';
 import { loadImage } from './ui.js';
-import { VideoFrames, videosOn, shrinkPictures } from './media.js';
+import { VideoFrames, videosOn, shrinkPictures, pictureShares } from './media.js';
 import { t } from './i18n.js';
 
 /** A copy of what an encoder hands over as bytes (an ArrayBuffer or a view of one). */
@@ -113,8 +113,10 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
         continue;
       }
       const layers = videos ? await layersOf(frame) : null;
+      let ready = null; // video id → whether its player is at this frame already (tried for the layers)
       if (layers) {
         const players = await Promise.all(layers.videos.map((el) => videos.at(el, frame.local)));
+        ready = new Map(layers.videos.map((el, k) => [el.id, !!players[k]]));
         // (A video that can't be followed here shows its still: the whole frame drawn, below.)
         if (players.every(Boolean)) {
           ctx.fillStyle = '#ffffff';
@@ -136,7 +138,10 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
         // Each video has its own player: they all seek at once.
         const wanted = [[frame.index, frame.local], ...(frame.from ? [[frame.from.index, frame.from.local]] : [])]
           .flatMap(([index, local]) => videosOf(index).map((el) => [el, local]));
-        const got = await Promise.all(wanted.map(([el, local]) => videos.seek(el, local, width / doc.width)));
+        // (Not sent there again when it was just tried: there already, or stuck and showing its poster.)
+        const got = await Promise.all(wanted.map(([el, local]) => (ready?.has(el.id) && local === frame.local
+          ? (ready.get(el.id) ? videos.picture(el, width / doc.width) : null)
+          : videos.seek(el, local, width / doc.width))));
         wanted.forEach(([el], k) => pictures.set(el.id, got[k]));
       }
       // Drawn at the frame's own size, not the design's (a print-size page needn't be rasterized big).
@@ -162,30 +167,9 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
  * keeps its pictures.
  */
 async function fittedPictures(doc, pages, width) {
-  const scale = width / doc.width;
-  // How big each picture shows, as a share of its own size (its biggest use).
-  const share = new Map();
-  const use = (id, w, h) => {
-    const a = doc.assets[id];
-    if (!a?.width || !a?.height) return share.set(id, Infinity);
-    share.set(id, Math.max(share.get(id) || 0, (w * scale) / a.width, (h * scale) / a.height));
-  };
-  const walk = (els) => {
-    for (const el of els) {
-      if (el.type === 'image' && el.assetId) use(el.assetId, el.w / (el.crop?.w || 1), el.h / (el.crop?.h || 1));
-      if (el.type === 'video' && el.still) use(el.still, el.w / (el.crop?.w || 1), el.h / (el.crop?.h || 1));
-      if (el.type === 'group') walk(el.children);
-    }
-  };
-  for (const i of pages) {
-    const page = doc.pages[i];
-    walk(page.elements);
-    if (page.background?.type === 'image') use(page.background.assetId, doc.width, doc.height);
-  }
-  // (A little bigger than it shows, for smooth scaling; only those that come out smaller are read.)
-  const scaleOf = (id) => share.get(id) * 1.25;
-  const smaller = [...share.keys()].filter((id) => scaleOf(id) < 0.9);
-  return shrinkPictures(doc, smaller, (img, id) => scaleOf(id));
+  const shares = pictureShares(doc, pages, width / doc.width);
+  // (A little bigger than it shows, for smooth scaling.)
+  return shrinkPictures(doc, new Map([...shares].map(([id, share]) => [id, share * 1.25])));
 }
 
 /** One frame (the page(s) at their moment, as SVG) into the canvas (on white, unless `clear`). */
