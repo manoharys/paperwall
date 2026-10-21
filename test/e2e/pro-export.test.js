@@ -169,8 +169,10 @@ test('[EXP-15] download as PowerPoint: slides with real text boxes, shapes and p
   await page.evaluate(() => {
     const ed = window.paperwall.editor;
     ed.addIcon('heart', { color: '#d1495b' });
-    ed.doc.pages[0].notes = 'Thank everyone for coming';
+    ed.select([]);
   });
+  // Speaker notes, typed where the presenter view reads them.
+  await page.fill('[data-testid="page-notes"]', 'Thank everyone for coming\nThen the <numbers> & dates');
   await page.click('[data-testid="strip-add-page"]');
   await addText(page, 'subheading');
   const { name, bytes } = await downloadVia(page, () => page.click('[data-testid="export-format"] [data-value="pptx"]'));
@@ -206,7 +208,9 @@ test('[EXP-15] download as PowerPoint: slides with real text boxes, shapes and p
   assert.match(slide, /<a:custGeom>/, 'the star drawn as its outline');
   assert.equal([...slide.matchAll(/<p:pic>/g)].length, 2, 'the photo and the icon as pictures');
   assert.ok([...parts.keys()].filter((n) => n.startsWith('ppt/media/')).length >= 2);
-  assert.match(parts.get('ppt/notesSlides/notesSlide1.xml')?.toString() || '', /Thank everyone for coming/, 'speaker notes');
+  assert.match(parts.get('ppt/notesSlides/notesSlide1.xml')?.toString() || '', /<a:t>Thank everyone for coming<\/a:t>.*<a:t>Then the &lt;numbers&gt; &amp; dates<\/a:t>/, 'speaker notes, a paragraph a line');
+  assert.match(parts.get('ppt/slides/_rels/slide1.xml.rels').toString(), /Target="\.\.\/notesSlides\/notesSlide1\.xml"/, 'on the first slide');
+  assert.doesNotMatch(parts.get('ppt/slides/_rels/slide2.xml.rels').toString(), /notesSlide/, 'the second page has none');
   if (has('soffice', ['--version'])) {
     // LibreOffice opens it: two pages with the text on them.
     const dir = mkdtempSync(join(tmpdir(), 'paperwall-pptx-'));
@@ -220,3 +224,4 @@ test('[EXP-15] download as PowerPoint: slides with real text boxes, shapes and p
   }
   await context.close();
 });
+

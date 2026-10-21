@@ -11,7 +11,9 @@ import { readTables, writeSfnt, parseFont, subsetFont, glyphFor } from '../../sr
 import { jpegInfo } from '../../src/model/jpeg.js';
 import { planVectorPdf, buildVectorPdf, parsePath, parseColor, rasterScale } from '../../src/model/pdf-vector.js';
 import { buildPptx, planPptx, emuPerPx, pptxKind } from '../../src/model/pptx.js';
-import { createDesign, createText, createShape, createLine, createImage, createIcon, createGroup, addAsset } from '../../src/model/doc.js';
+import { createDesign, createText, createShape, createLine, createImage, createIcon, createGroup, addAsset, createDesignFromPreset, validateDesign, DOC_STYLES } from '../../src/model/doc.js';
+import { flowDocument, onPaper } from '../../src/model/flow.js';
+import { approxMeasure } from '../../src/model/text-layout.js';
 import { fontsUsed, fontFile } from '../../src/model/fonts.js';
 import { craft, NDBITS } from '../../scripts/brotli-dict.mjs';
 import { readPdf, find, pageContents, unzip, checkXml, has } from '../formats.js';
@@ -341,3 +343,38 @@ test('[EXP-15] PowerPoint file: parts, relationships, content types and slide XM
     assert.ok(+out > 15);
   }
 });
+
+test('[EXP-15] PowerPoint: speaker notes go on their own slides, once a page', () => {
+  const doc = createDesign({ width: 1920, height: 1080 });
+  doc.pages[0].notes = 'Open with the story\r\nThen the <numbers> & "dates"';
+  doc.pages.push({ id: 'p2', background: { type: 'color', color: '#ffffff' }, elements: [], notes: '   ' });
+  doc.pages.push({ id: 'p3', background: { type: 'color', color: '#ffffff' }, elements: [], notes: 'Thank everyone' });
+  validateDesign(doc); // (as a saved design is read back: blank notes go)
+  assert.equal(doc.pages[1].notes, undefined);
+  const parts = unzip(buildPptx(doc, [0, 1, 2], {}));
+  for (const [n, data] of parts) if (/\.(xml|rels)$/.test(n)) checkXml(data.toString('utf8'), n);
+  const notesOf = (slide) => {
+    const rel = /Target="\.\.\/notesSlides\/(notesSlide\d+\.xml)"/.exec(parts.get(`ppt/slides/_rels/slide${slide}.xml.rels`).toString());
+    return rel && parts.get(`ppt/notesSlides/${rel[1]}`).toString();
+  };
+  assert.match(notesOf(1), /<a:t>Open with the story<\/a:t><\/a:r><a:endParaRPr[^>]*\/><\/a:p><a:p><a:r><a:rPr[^>]*\/><a:t>Then the &lt;numbers&gt; &amp; &quot;dates&quot;<\/a:t>/, 'a paragraph a line, escaped');
+  assert.equal(notesOf(2), null, 'no notes, no notes page');
+  assert.match(notesOf(3), /<a:t>Thank everyone<\/a:t>/);
+  // Each notes page points back at its own slide.
+  assert.match(parts.get('ppt/notesSlides/_rels/notesSlide2.xml.rels').toString(), /Target="\.\.\/slides\/slide3\.xml"/);
+  // A document's page over three sheets: three slides, its notes on the first.
+  const d = createDesignFromPreset('doc');
+  d.pages[0].notes = 'Read the list';
+  d.pages[0].elements.push(createText({ ...DOC_STYLES.numbers, text: Array.from({ length: 90 }, (_, i) => `Point ${i + 1}, long enough to wrap onto a second line of the sheet`).join('\n') }));
+  flowDocument(d, approxMeasure);
+  const [sheets, pages] = onPaper(d, [0], approxMeasure);
+  assert.ok(pages.length >= 3, `${pages.length} sheets`);
+  const deck = unzip(buildPptx(sheets, pages, {}));
+  assert.equal([...deck.keys()].filter((n) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(n)).length, 1);
+  assert.match(deck.get('ppt/slides/_rels/slide1.xml.rels').toString(), /notesSlide1\.xml/);
+  // The list numbers on from where the slide before stopped.
+  const later = sheets.pages[1].elements.find((e) => e.list === 'number');
+  assert.ok(later.listStart > 1);
+  assert.match(deck.get('ppt/slides/slide2.xml').toString(), new RegExp(`<a:buAutoNum type="arabicPeriod" startAt="${later.listStart}"/>`));
+});
+
