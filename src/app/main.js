@@ -6,7 +6,7 @@ import { Editor } from './editor.js';
 import { Canvas } from './canvas.js';
 import { Inspector, resizeDialog } from './inspector.js';
 import { InsertPanel } from './insert.js';
-import { PageStrip, present } from './pages.js';
+import { PageStrip, present, presenterView } from './pages.js';
 import { bindShortcuts, cheatSheet } from './shortcuts.js';
 import { exportDialog, saveProjectFile, thumbnail, api as exportApi } from './export.js';
 import { renderHome } from './home.js';
@@ -71,6 +71,7 @@ async function closeEditor() {
   // A drag still going (leaving by a key or the back button) ends as if let go.
   editor.endDrag?.();
   editor.closed = true;
+  editor.stopStills();
   unbind();
   window.paperwall = null;
   // Save the design and its thumbnail first; then, if it changed, keep a
@@ -125,6 +126,8 @@ async function openEditor(id) {
     editor.refitAllText();
     pendingFit = false;
   }
+  editor.arrange(); // a document laid out with its fonts measured (before its first look and version)
+  editor.retakeStills(); // (videos saved without a full-size still get one)
   // The first time a design is opened, keep its original as a version; after
   // that, the next version comes after a few minutes of work. The original is
   // copied now (text measured), before any edit can land while storage answers.
@@ -159,6 +162,7 @@ async function openEditor(id) {
     h('div', { class: 'top-group right' },
       iconButton('play', 'Play (animations and page timing)', () => present(editor, canvas, { autoplay: true }), { 'data-testid': 'play' }),
       iconButton('present', 'Present', () => present(editor, canvas), { 'data-testid': 'present' }),
+      iconButton('speaker', 'Presenter view: your notes, the next page and a timer, with the slides in their own window', () => presenterView(editor, canvas), { 'data-testid': 'presenter-view-btn' }),
       iconButton('save', 'Save to file', () => saveProjectFile(editor.doc), { 'data-testid': 'save-file' }),
       iconButton('search', 'Find and replace (Ctrl+F)', () => findDialog(editor), { 'data-testid': 'find-btn' }),
       iconButton('history', 'Version history', () => historyDialog(editor), { 'data-testid': 'history-btn' }),

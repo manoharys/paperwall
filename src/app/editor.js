@@ -5,9 +5,10 @@ import { History } from '../model/history.js';
 import * as cmd from '../model/commands.js';
 import {
   createText, createShape, createLine, createImage, createVideo, createFrame, createDrawing, thinPoints, createIcon, createSticker, createQr, createChart, createTable, addAsset, uid,
-  TEXT_STYLES, versionSnapshot, isEmptyFrame,
+  TEXT_STYLES, versionSnapshot, isEmptyFrame, DOCUMENT, stillIsCurrent, presetById, documentSettings,
 } from '../model/doc.js';
 import { fitHeight } from '../model/text-layout.js';
+import { flowDocument, growBoard } from '../model/flow.js';
 import { curveGeometry } from '../model/render.js';
 import { unionBounds, pointInBox, toLocal, refitGroup } from '../model/geometry.js';
 import { gridBoxes } from '../model/grids.js';
@@ -16,7 +17,7 @@ import { gridLines, marginSize } from '../model/view.js';
 import { maskPath } from '../model/shapes.js';
 
 import { measure, ensureFont } from './fonts.js';
-import { mediaKind, checkSize, videoInfo, audioInfo } from './media.js';
+import { mediaKind, checkSize, videoInfo, audioInfo, VideoFrames } from './media.js';
 import { removePlainBackground } from '../model/bgremove.js';
 import { readFileAsDataUrl, loadImage, toast, debounce } from './ui.js';
 import * as store from './store.js';
@@ -167,16 +168,21 @@ export class Editor {
     }
   }
 
-  /** After any change: save, refresh, keep connectors attached. `edit: false` for corrections (re-measuring), which don't call for a new version. */
+  /** After any change: save, refresh, keep connectors attached. `edit: false` for corrections (re-measuring, a video's still), which don't call for a new version or count as an edit. */
   afterChange(quiet = false, { edit = true } = {}) {
     // Mid-drag, outside change() (text refitted as a font loads): after the
     // drag, which it mustn't cut short.
     if (this.isDragging?.() && !this.changing) return void this.whenIdle(() => this.afterChange(quiet, { edit }));
+    this.arrange();
+    this.retakeStills();
     // Connectors on every page follow what they're attached to (pages
     // without connectors return at once).
     this.syncAllConnectors();
-    this.doc.updatedAt = Date.now();
-    if (edit) this.changedSinceVersion = true;
+    if (edit) {
+      this.doc.updatedAt = Date.now();
+      this.changedSinceVersion = true;
+    }
+    this.looks = (this.looks || 0) + 1; // (every change to how it looks, edits or not)
     this.selection = this.selection.filter((id) => cmd.findElement(this.pageData, id));
     if (!quiet) this.emit('doc');
     this.save();
@@ -201,10 +207,11 @@ export class Editor {
     if (this.isDragging?.() && !this.closed) return void this.thumb(); // not a half-moved picture: after the drag
     try {
       const at = this.doc.updatedAt;
+      const looks = this.looks;
       const url = await this.makeThumb(this.doc);
       // Reused by a version saved soon after, if it's known to show that state
-      // (nothing changed while it was drawn).
-      if (this.doc.updatedAt === at) this.lastThumb = { url, at };
+      // (nothing changed while it was drawn, not even a correction).
+      if (this.looks === looks) this.lastThumb = { url, at, looks };
       // Just the preview: the design itself is saved by persist.
       await store.saveThumb(this.doc.id, url);
     } catch {
@@ -243,7 +250,7 @@ export class Editor {
     try {
       // A small picture of the first page, so the history list needn't load
       // whole designs: the home-screen one if it's up to date, else a new one.
-      const fresh = () => (this.lastThumb?.at === snapshot.updatedAt ? this.lastThumb.url : null);
+      const fresh = () => (this.lastThumb?.at === snapshot.updatedAt && this.lastThumb.looks === this.looks ? this.lastThumb.url : null);
       // A home-screen thumbnail is usually on its way: draw it now and use it for both.
       if (!fresh() && !quick) await this.thumb.flushPending();
       const thumb = fresh() || (quick || !this.makeThumb ? null : await this.makeThumb(snapshot).catch(() => null));
@@ -357,24 +364,73 @@ export class Editor {
 
   // ---------- adding things ----------
 
+  /** A document's blocks flow down its page; a whiteboard grows to hold what's on it (see flow.js). */
+  arrange() {
+    if (this.doc.document) flowDocument(this.doc, measure);
+    else if (this.doc.board) {
+      // (Grown on the left or top: the canvas scrolls by as much, so nothing seems to move.)
+      const moved = growBoard(this.doc);
+      if (moved && (moved.dx || moved.dy)) this.boardMoved = { dx: (this.boardMoved?.dx || 0) + moved.dx, dy: (this.boardMoved?.dy || 0) + moved.dy };
+    }
+  }
+
   insert(el, { center = true } = {}) {
     if (el.type === 'text') this.fitText(el);
+    // (Unless it was put somewhere: dropped between two blocks, say.)
+    const shift = center ? this.newPlace(el) : null;
+    if (shift) {
+      center = false;
+      el.x += shift.dx;
+      el.y += shift.dy;
+    }
     this.change(() => cmd.addElement(this.doc, this.page, el, { center }));
     this.select([el.id]);
     return el;
   }
 
+  /**
+   * Where something new (its box) goes: on a whiteboard, the middle of
+   * what's in view; in a document, the end (where it flows to). How far to
+   * move it there, or null (anywhere else: the middle of the page).
+   */
+  newPlace(box) {
+    if (this.doc.board && this.viewCenter) {
+      const at = this.viewCenter();
+      return { dx: Math.round(at.x - box.w / 2) - box.x, dy: Math.round(at.y - box.h / 2) - box.y };
+    }
+    if (this.doc.document) return { dx: 0, dy: this.pageData.elements.reduce((end, e) => Math.max(end, e.y + e.h), 0) + 1 - box.y };
+    return null;
+  }
+
+  /** How big the page is for sizing new things: its shorter side (a whiteboard's as it began, however it has grown). */
+  get sizeRef() {
+    return Math.min(this.fitW, this.fitH);
+  }
+
+  /** The page's width and height for sizing new things (a whiteboard's as it began, however it has grown). */
+  get fitW() {
+    return this.doc.board ? Math.min(presetById('whiteboard').w, this.doc.width) : this.doc.width;
+  }
+
+  get fitH() {
+    // (A document's: its sheet's, not the long page it has grown to.)
+    if (this.doc.document) return Math.min(this.doc.document.pageHeight, this.doc.height);
+    return this.doc.board ? Math.min(presetById('whiteboard').h, this.doc.height) : this.doc.height;
+  }
+
   /** Scale a new element so it suits the page size. */
+
   scaled(el, share = 0.4) {
-    const s = (Math.min(this.doc.width, this.doc.height) * share) / Math.max(el.w, el.h);
+    const s = (this.sizeRef * share) / Math.max(el.w, el.h);
     if (Math.abs(s - 1) > 0.05) cmd.scaleElement(el, s, s);
     return el;
   }
 
   addText(style = 'body', props = {}) {
     const base = TEXT_STYLES[style] || TEXT_STYLES.body;
-    const k = Math.max(0.3, Math.min(this.doc.width, this.doc.height) / 1080);
-    const el = createText({ ...base, size: Math.round(base.size * k), w: Math.round(this.doc.width * 0.7), ...props });
+    const k = Math.max(0.3, this.sizeRef / 1080);
+    // (On a whiteboard, as wide as on its first canvas.)
+    const el = createText({ ...base, size: Math.round(base.size * k), w: Math.round(this.fitW * 0.7), ...props });
     return this.insert(el);
   }
 
@@ -384,7 +440,7 @@ export class Editor {
 
   addLine(props = {}) {
     const el = createLine(props);
-    const s = (this.doc.width * 0.4) / el.w;
+    const s = (this.fitW * 0.4) / el.w;
     el.w *= s;
     el.strokeWidth = Math.max(2, Math.round(el.strokeWidth * Math.max(1, s * 0.8)));
     el.h = Math.max(24, el.strokeWidth * 8);
@@ -409,7 +465,7 @@ export class Editor {
 
   addTable(props = {}) {
     const el = createTable(props);
-    const s = (this.doc.width * 0.7) / el.w;
+    const s = (this.fitW * 0.7) / el.w;
     cmd.scaleElement(el, s, s);
     return this.insert(el);
   }
@@ -422,16 +478,102 @@ export class Editor {
     const frame = this.single;
     if (!at && isEmptyFrame(this.doc, frame) && !frame.locked) return this.fillFrame(frame.id, upload);
     const assetId = addAsset(this.doc, upload);
-    const maxW = this.doc.width * 0.6;
-    const maxH = this.doc.height * 0.6;
+    const maxW = this.fitW * 0.6;
+    const maxH = this.fitH * 0.6;
     const s = Math.min(1, maxW / upload.width, maxH / upload.height);
     const el = createImage(assetId, { w: Math.round(upload.width * s), h: Math.round(upload.height * s) });
     if (at) {
       el.x = at.x - el.w / 2;
-      el.y = at.y - el.h / 2;
+      // (In a document, its top where it's dropped: blocks go in order of their tops.)
+      el.y = this.doc.document ? at.y : at.y - el.h / 2;
       return this.insert(el, { center: false });
     }
     return this.insert(el);
+  }
+
+  /**
+   * Take a video's still picture (what shows on the page, in thumbnails and
+   * in still downloads) from where it starts, full size (up to 1920 px).
+   * Not an undo step of its own: it follows the video's start point. A
+   * moment after the last call for a video (a start point stepped through
+   * quickly loads the video once). Resolves when it's done.
+   */
+  refreshStill(id) {
+    this.stills ||= new Map(); // video id → { timer, done, taking }
+    const before = this.stills.get(id);
+    if (before && !before.taking) {
+      clearTimeout(before.timer);
+      before.done();
+    }
+    return new Promise((done) => {
+      const entry = { done, taking: false };
+      entry.timer = setTimeout(() => {
+        // (Still listed while it's taken, so changes meanwhile don't start another.)
+        entry.taking = true;
+        const timer = entry.timer;
+        this.takeStill(id).finally(() => {
+          if (this.stills.get(id)?.timer === timer) this.stills.delete(id);
+          this.retakeStills(); // (its start may have moved while it was taken)
+          done();
+        });
+      }, 250);
+      this.stills.set(id, entry);
+    });
+  }
+
+  /** Videos whose still isn't from where they start now (moved, undone, pasted) get a new one. */
+  retakeStills() {
+    // (One at a time, and none once the editor has closed: each loads its
+    // whole video. One waiting to be taken waits on for the latest change.)
+    if (this.closed || [...(this.stills?.values() || [])].some((s) => s.taking)) return;
+    this.stillFailed ||= new Map(); // video id → a start no still could be taken from (not tried again and again)
+    const walk = (els) => {
+      for (const el of els) {
+        if (el.type === 'group' && walk(el.children)) return true;
+        if (el.type !== 'video' || !this.doc.assets[el.assetId]) continue;
+        const start = el.trim?.start || 0;
+        if (stillIsCurrent(this.doc, el) || this.stillFailed.get(el.id) === start) continue;
+        if (!this.stills?.size || this.stills.has(el.id)) this.refreshStill(el.id);
+        return true;
+      }
+    };
+    for (const page of this.doc.pages) if (walk(page.elements)) return;
+  }
+
+  /** Stop taking stills (the editor is closing). */
+  stopStills() {
+    for (const { timer, done } of this.stills?.values() || []) {
+      clearTimeout(timer);
+      done();
+    }
+    this.stills?.clear();
+  }
+
+  async takeStill(id) {
+    if (this.closed) return;
+    const found = locate(this.doc, id, this.pageData.id);
+    if (found?.el.type !== 'video') return;
+    const start = found.el.trim?.start || 0;
+    const frames = new VideoFrames(this.doc);
+    try {
+      const url = await frames.seek(found.el, 0, 1920 / Math.max(found.el.w, found.el.h));
+      if (!url) this.stillFailed?.set(id, start);
+      if (!url || this.closed) return;
+      const img = await loadImage(url);
+      if (this.closed) return;
+      const now = locate(this.doc, id, this.pageData.id)?.el;
+      if (!now) return;
+      if ((now.trim?.start || 0) !== start) return; // moved on meanwhile: retaken from where it starts now, once this is done
+      // (The still it replaces stays while the design is open: undo can bring
+      // it back. Saving leaves it out.)
+      now.still = addAsset(this.doc, { dataUrl: url, mime: url.slice(5, url.indexOf(';')), width: img.naturalWidth, height: img.naturalHeight });
+      now.stillAt = start; // (shown only while it still starts there: an undo can part them)
+      this.afterChange(false, { edit: false });
+    } catch {
+      this.stillFailed?.set(id, start); // the poster stays (and it isn't tried again from there)
+    } finally {
+      frames.dispose();
+    }
   }
 
   /** A video from Uploads, at its own shape, as big as fits nicely (or dropped `at` a point). */
@@ -439,14 +581,15 @@ export class Editor {
     const assetId = addAsset(this.doc, { ...upload, kind: 'video' });
     // (A size it doesn't know: the usual 16:9.)
     const [vw, vh] = upload.width > 0 && upload.height > 0 ? [upload.width, upload.height] : [640, 360];
-    const s = Math.min(1, (this.doc.width * 0.7) / vw, (this.doc.height * 0.7) / vh);
+    const s = Math.min(1, (this.fitW * 0.7) / vw, (this.fitH * 0.7) / vh);
     const el = createVideo(assetId, { w: Math.round(vw * s), h: Math.round(vh * s) });
     if (at) {
       el.x = at.x - el.w / 2;
-      el.y = at.y - el.h / 2;
-      return this.insert(el, { center: false });
+      // (In a document, its top where it's dropped: blocks go in order of their tops.)
+      el.y = this.doc.document ? at.y : at.y - el.h / 2;
     }
-    return this.insert(el);
+    this.insert(el, { center: !at }); // (its full-size still is taken once it's in: see retakeStills)
+    return el;
   }
 
   /** Use a sound from Uploads as the design's soundtrack (null takes it away). */
@@ -616,7 +759,7 @@ export class Editor {
   connect(ids = this.selection, route = 'elbow') {
     const [a, b] = ids.map((id) => cmd.findElement(this.pageData, id)).filter((e) => e && e.type !== 'connector');
     if (!a || !b) return null;
-    const s = Math.min(this.doc.width, this.doc.height);
+    const s = this.sizeRef;
     const el = createConnector({ from: [a.x + a.w / 2, a.y + a.h / 2], to: [b.x + b.w / 2, b.y + b.h / 2], start: a.id, end: b.id, route, strokeWidth: Math.max(2, Math.round(s * 0.004)) });
     this.change(() => {
       // Just under the upper of the two: above the lower one (which may be a
@@ -659,14 +802,20 @@ export class Editor {
 
   /** Fill the page with a grid of empty frames, ready for photos. */
   addGrid(grid) {
-    const s = Math.min(this.doc.width, this.doc.height);
-    const boxes = gridBoxes(grid, this.doc.width, this.doc.height, { margin: Math.round(s * 0.04), gap: Math.round(s * 0.02) });
-    const frames = boxes.map((b) => createFrame('none', b));
-    this.change(() => {
+    // (On a whiteboard or document: the size it began with, or a sheet.)
+    const s = this.sizeRef;
+    const boxes = gridBoxes(grid, this.fitW, this.fitH, { margin: Math.round(s * 0.04), gap: Math.round(s * 0.02) });
+    // (Where new things go, on a whiteboard or in a document.)
+    const shift = this.newPlace(unionBounds(boxes)) || { dx: 0, dy: 0 };
+    const frames = boxes.map((b) => createFrame('none', { ...b, x: b.x + shift.dx, y: b.y + shift.dy }));
+    const group = this.change(() => {
       for (const el of frames) cmd.addElement(this.doc, this.page, el, { center: false });
+      // (In a document, one block: its frames stay a grid as it flows.)
+      if (this.doc.document) return cmd.groupElements(this.doc, this.page, frames.map((el) => el.id));
     });
-    this.select(frames.map((el) => el.id));
-    return frames;
+    this.select(group ? [group] : frames.map((el) => el.id));
+    // (In a document, the group's own: the frames made were copied into it.)
+    return group ? cmd.findElement(this.pageData, group).children : frames;
   }
 
   /** Make a plain background see-through. Returns how much of the picture was cleared (0..1). */
@@ -814,6 +963,7 @@ export class Editor {
     const visit = (list) => {
       for (const el of list) {
         if ((el.type === 'image' || el.type === 'video') && this.doc.assets[el.assetId]) out[el.assetId] = this.doc.assets[el.assetId];
+        if (el.type === 'video' && this.doc.assets[el.still]) out[el.still] = this.doc.assets[el.still];
         if (el.type === 'group') visit(el.children);
       }
     };
@@ -948,6 +1098,18 @@ export class Editor {
     this.emit('strip');
   }
 
+  /** A page's speaker notes (shown in the presenter view, never on the page). */
+  setPageNotes(i, text, key = null) {
+    const page = this.doc.pages[i];
+    const next = text.trim() ? text.slice(0, 10000) : undefined;
+    if (!page || (page.notes || undefined) === next) return;
+    // Notes aren't on the page: nothing to redraw.
+    this.change(() => {
+      if (next) page.notes = next;
+      else delete page.notes;
+    }, { key, quiet: true });
+  }
+
   /** Change a page's motion (anim, duration, transition); undefined clears one. */
   setPageMotion(i, patch, key = null) {
     const page = this.doc.pages[i];
@@ -981,7 +1143,7 @@ export class Editor {
    * Its fonts must already be loaded (see readyTemplate).
    */
   addTemplatePage(templateDoc) {
-    const resized = cmd.resizeDesign(templateDoc, this.doc.width, this.doc.height);
+    const resized = cmd.resizeDesign(templateDoc, this.fitW, this.fitH);
     const first = this.change(() => {
       for (const [id, a] of Object.entries(resized.assets || {})) this.doc.assets[id] = a;
       let at = this.page;
@@ -1007,8 +1169,25 @@ export class Editor {
   }
 
   /** Make a resized copy and open it; the original stays as it was. */
-  async resizeTo(width, height, name) {
-    const copy = cmd.resizeDesign(this.doc, width, height);
+  async resizeTo(width, height, name, preset = null) {
+    // What the copy is: to Document or Whiteboard, one of those; a document to
+    // a paper size stays a document (on that paper); to any other size, a
+    // design of just that size. A custom size keeps the kind it was.
+    const kind = preset?.id === 'doc' ? 'doc'
+      : preset?.id === 'whiteboard' ? 'board'
+      : preset ? (this.doc.document && preset.unit ? 'doc' : 'plain')
+      : this.doc.document ? 'doc' : this.doc.board ? 'board' : 'plain';
+    const copy = cmd.resizeDesign(this.doc, width, height, { asDocument: kind === 'doc' });
+    delete copy.board;
+    if (kind === 'board') copy.board = true;
+    if (kind === 'doc') {
+      // (Its margins in proportion to its width; its sheets at the paper's
+      // resolution: print sizes 300 dpi, the Document size 150.)
+      const k = width / DOCUMENT.width;
+      copy.document ||= { pageHeight: height, margin: Math.round(DOCUMENT.margin * k), gap: Math.round(DOCUMENT.gap * k), dpi: DOCUMENT.dpi };
+      if (preset) copy.document.dpi = preset.unit ? 300 : DOCUMENT.dpi;
+      copy.document = documentSettings(copy.document); // (in range, as when it's opened again)
+    }
     copy.name = name || `${this.doc.name} (${width} × ${height})`;
     copy.createdAt = Date.now();
     await this.flush();

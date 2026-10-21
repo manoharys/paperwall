@@ -140,6 +140,39 @@ test('[VIEW-05] present pages full screen, move with the arrow keys', async () =
   await context.close();
 });
 
+test('[VIEW-08] [VIEW-09] speaker notes, and the presenter view with the slides in their own window', async () => {
+  const { page, context } = await newDesign('slides');
+  await addText(page);
+  await page.click('[data-testid="strip-add-page"]');
+  await page.locator('[data-testid="page-thumb"]').first().locator('.page-thumb').click();
+  // Notes for the first page, typed with nothing selected.
+  await page.evaluate(() => window.paperwall.editor.select([]));
+  await page.fill('[data-testid="page-notes"]', 'Welcome everyone.\nSay the date.');
+  assert.equal(await state(page, (ed) => ed.doc.pages[0].notes), 'Welcome everyone.\nSay the date.');
+  assert.equal(await state(page, (ed) => ed.doc.pages[1].notes ?? null), null, 'only that page');
+  // The presenter view: the slides open in a window of their own.
+  const opened = context.waitForEvent('page');
+  await page.click('[data-testid="presenter-view-btn"]');
+  const slides = await opened;
+  await slides.waitForSelector('[data-testid="presenter"] svg');
+  await page.waitForSelector('[data-testid="presenter-view"]');
+  assert.match(await page.textContent('[data-testid="pv-notes"]'), /Welcome everyone/);
+  assert.equal(await page.textContent('[data-testid="pv-count"]'), '1 / 2');
+  assert.ok(await page.locator('[data-testid="pv-next"] svg').count(), 'the next page shows');
+  // The timer runs.
+  await page.waitForFunction(() => document.querySelector('[data-testid="pv-timer"]').textContent !== '0:00', null, { timeout: 4000 });
+  // Moving on here moves the slides there.
+  await page.click('[data-testid="pv-next-btn"]');
+  assert.equal(await slides.textContent('.slide-count'), '2 / 2');
+  assert.match(await page.textContent('[data-testid="pv-notes"]'), /No notes/);
+  // Ending closes both.
+  await page.click('[data-testid="pv-end"]');
+  assert.equal(await page.locator('[data-testid="presenter-view"]').count(), 0);
+  await slides.waitForEvent('close', { timeout: 3000 }).catch(() => null);
+  assert.ok(slides.isClosed(), 'the slides window closes');
+  await context.close();
+});
+
 /** Real touch input through the DevTools protocol. */
 async function touchDrag(page, from, to, steps = 6) {
   const cdp = await page.context().newCDPSession(page);

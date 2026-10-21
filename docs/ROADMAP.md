@@ -44,12 +44,12 @@ on-device AI models. Not approved: a collaboration server.
 
 ## v0.5 Present, docs and whiteboards
 
-- [ ] Presenter view with notes and a timer
-- [ ] Documents: long text with headings, lists and images
-- [ ] Whiteboards: infinite canvas, sticky notes, connectors
-- [ ] Carried over from v0.4 review: keep pictures, videos and sounds in their own store (as files, not text inside each saved design), so big videos don't slow saving
-- [ ] Carried over from v0.4 review: a video's still picture (on the page, in thumbnails and in PNG, JPG, PDF and SVG downloads) shows the frame it starts at, at full size
-- [ ] Carried over from v0.4 review: faster GIF and video downloads of pages with big photos and videos (still layers drawn once, video frames drawn straight to the canvas), and live videos in Safari when presenting
+- [x] Presenter view with notes and a timer
+- [x] Documents: long text with headings, lists and images
+- [x] Whiteboards: infinite canvas, sticky notes, connectors
+- [x] Carried over from v0.4 review: keep pictures, videos and sounds in their own store (as files, not text inside each saved design), so big videos don't slow saving
+- [x] Carried over from v0.4 review: a video's still picture (on the page, in thumbnails and in PNG, JPG, PDF and SVG downloads) shows the frame it starts at, at full size
+- [x] Carried over from v0.4 review: faster GIF and video downloads of pages with big photos (each made only as big as the frames can show, once)
 
 ## v0.6 Online extras (opt-in)
 
@@ -76,6 +76,7 @@ picked. No ads, accounts or paid tiers.
 - [ ] Interface in 6+ languages
 - [ ] Accessibility pass (screen reader, keyboard-only)
 - [ ] Performance with 50+ pages and large photos
+- [ ] Carried over from v0.5: motion downloads draw still layers once and video frames straight to the canvas; live videos when presenting in Safari
 
 ## Out of scope (by decision)
 

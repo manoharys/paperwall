@@ -5,7 +5,7 @@ import { colorButton, selectField, section, slider } from './widgets.js';
 import { FONTS, FONT_PAIRS } from '../model/fonts.js';
 import { ALL_ICONS, ALL_STICKERS, searchGraphics } from '../model/graphics.js';
 import { renderPage, renderElementOnly } from '../model/render.js';
-import { DRAW_TOOLS, createShape, createFrame, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES } from '../model/doc.js';
+import { DRAW_TOOLS, createShape, createFrame, createIcon, createSticker, createText, createChart, createTable, TEXT_STYLES, DOC_STYLES, NOTE_COLORS, createSticky, DOCUMENT, presetById } from '../model/doc.js';
 import { GRIDS, gridBoxes } from '../model/grids.js';
 import { collectColors, scaleElement } from '../model/commands.js';
 import { TEMPLATES, TEMPLATE_CATEGORIES, TEMPLATE_FORMATS, searchTemplates, templateFormatLabel } from '../templates/index.js';
@@ -198,8 +198,26 @@ export class InsertPanel {
   text() {
     const ed = this.ed;
     const add = (style) => h('button', { type: 'button', class: `text-add ${style}`, 'data-testid': `add-${style}`, onClick: () => ed.addText(style) }, TEXT_STYLES[style].text);
+    // A document's blocks go at its end, in its own sizes.
+    // (Sized to the document's width: its sizes are for a 1240 px sheet.)
+    const block = (style, label) => h('button', { type: 'button', class: `text-add doc-${style}`, 'data-testid': `doc-add-${style}`, onClick: () => {
+      const k = ed.doc.width / DOCUMENT.width;
+      ed.insert(createText({ ...DOC_STYLES[style], size: Math.round(DOC_STYLES[style].size * k) }));
+    } }, label);
+    const notes = section('Sticky notes', h('div', { class: 'note-grid', 'data-testid': 'note-colors' }, NOTE_COLORS.map((c, i) => h('button', {
+      type: 'button', class: 'note-swatch', style: { background: c }, 'aria-label': `Add a sticky note (${i + 1})`, 'data-testid': `note-add-${i}`,
+      // (As big as on a whiteboard as it began: a share of the page's shorter side.)
+      onClick: () => {
+        const note = createSticky(c);
+        return ed.insert(ed.scaled(note, ed.doc.board ? note.w / presetById('whiteboard').h : 0.3));
+      },
+    }))), h('p', { class: 'hint' }, 'Double-click a note to write on it. Connect notes with lines from Elements.'));
     return [
-      section('Add text', add('heading'), add('subheading'), add('body'), h('p', { class: 'hint' }, `Shortcut: T. Double-click text on the page to edit it.`)),
+      ed.doc.document
+        ? section('Add to the document', block('heading', 'Heading'), block('body', 'Paragraph'), block('bullets', '• Bulleted list'), block('numbers', '1. Numbered list'),
+          h('p', { class: 'hint' }, 'New blocks go at the end. Drag a block above or below another to move it; pictures and anything else flow in the same way.'))
+        : section('Add text', add('heading'), add('subheading'), add('body'), h('p', { class: 'hint' }, `Shortcut: T. Double-click text on the page to edit it.`)),
+      ...(ed.doc.board ? [notes] : []),
       section('Combinations', h('div', { class: 'combo-grid', 'data-testid': 'text-combos' }, TEXT_COMBOS.map((c) => {
         const b = h('button', { type: 'button', class: 'combo', title: c.name, 'aria-label': c.name, 'data-testid': `combo-${c.id}`, onClick: () => this.addCombo(c) });
         lazily(b, async () => {
@@ -213,6 +231,7 @@ export class InsertPanel {
         h('div', { class: 'pair-grid', 'data-testid': 'font-pairs' }, FONT_PAIRS.map((p) => h('button', { type: 'button', class: 'pair', 'data-testid': `pair-${p.name}`, onClick: () => this.addPair(p) },
           h('b', { style: { fontFamily: `"${p.heading}"` } }, p.name),
           h('small', { style: { fontFamily: `"${p.body}"` } }, `${p.heading} + ${p.body}`))))),
+      ...(ed.doc.board ? [] : [notes]),
     ];
   }
 

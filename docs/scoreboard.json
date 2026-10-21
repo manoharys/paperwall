@@ -1,14 +1,14 @@
 {
   "summary": {
     "date": "2026-10-21",
-    "total": 163,
-    "verified": 162,
+    "total": 170,
+    "verified": 169,
     "failing": 0,
     "todo": 1,
-    "e2eTests": 143,
-    "e2ePassing": 143,
-    "unitTests": 143,
-    "unitPassing": 143
+    "e2eTests": 148,
+    "e2ePassing": 148,
+    "unitTests": 153,
+    "unitPassing": 153
   },
   "areas": [
     {
@@ -175,6 +175,16 @@
         {
           "id": "VIEW-07",
           "title": "Grid with snapping, safe margins and print bleed",
+          "status": "verified"
+        },
+        {
+          "id": "VIEW-08",
+          "title": "Speaker notes for each page",
+          "status": "verified"
+        },
+        {
+          "id": "VIEW-09",
+          "title": "Presenter view: notes, the next page and a timer, with the slides in their own window",
           "status": "verified"
         }
       ]
@@ -764,6 +774,37 @@
         {
           "id": "TPL-09",
           "title": "Filter templates by size",
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "id": "DW",
+      "name": "Documents and whiteboards",
+      "features": [
+        {
+          "id": "DW-01",
+          "title": "Documents: headings, paragraphs and lists that flow down the page as you write",
+          "status": "verified"
+        },
+        {
+          "id": "DW-02",
+          "title": "Pictures in documents, and moving a block by dragging it above or below another",
+          "status": "verified"
+        },
+        {
+          "id": "DW-03",
+          "title": "Documents download as PDF and print on sheets of paper, split between blocks",
+          "status": "verified"
+        },
+        {
+          "id": "DW-04",
+          "title": "Whiteboards: a canvas that grows as you add to it",
+          "status": "verified"
+        },
+        {
+          "id": "DW-05",
+          "title": "Sticky notes in six colors, connected with lines",
           "status": "verified"
         }
       ]

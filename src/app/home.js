@@ -69,7 +69,7 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, installPr
             const doc = await readProjectFile(file);
             // A new id if the design is here already, or if history from a
             // deleted copy is still kept under its id (it would attach to this one).
-            if ((await store.loadDesign(doc.id)) || (await store.hasVersions(doc.id))) doc.id = uid('d');
+            if ((await store.hasDesign(doc.id)) || (await store.hasVersions(doc.id))) doc.id = uid('d');
             newDesign(doc);
           } catch (e) {
             toast(e.message, 'error');
@@ -119,10 +119,7 @@ function renameDialog(row, after) {
   const input = h('input', { type: 'text', value: row.name, maxlength: '120', 'aria-label': 'Design name', 'data-testid': 'rename-input' });
   const d = dialog('Rename design', h('form', { class: 'stack', onSubmit: async (e) => {
     e.preventDefault();
-    const doc = await store.loadDesign(row.id);
-    doc.name = input.value.trim() || 'Untitled design';
-    doc.updatedAt = Date.now();
-    await store.saveDesign(doc); // (its preview stays the newest stored)
+    await store.renameDesign(row.id, input.value.trim() || 'Untitled design');
     d.close();
     after();
   } }, input, h('button', { type: 'submit', class: 'btn primary', 'data-testid': 'rename-save' }, 'Save')));

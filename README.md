@@ -45,13 +45,13 @@ end-to-end test in a real browser** or listed as **not done yet**. This table
 is generated from the test run, never written by hand.
 
 <!-- scoreboard:start -->
-**162 of 163 features verified** by browser tests · 1 not done yet · [full scoreboard](SCOREBOARD.md)
+**169 of 170 features verified** by browser tests · 1 not done yet · [full scoreboard](SCOREBOARD.md)
 
 | Area | Verified |
 | --- | --- |
 | Designs | 12 / 12 |
 | Pages | 11 / 11 |
-| Viewing | 7 / 7 |
+| Viewing | 9 / 9 |
 | Selecting and moving | 13 / 13 |
 | Editing | 20 / 20 |
 | Text | 23 / 23 |
@@ -61,6 +61,7 @@ is generated from the test run, never written by hand.
 | Color | 5 / 5 |
 | Brand kit | 3 / 3 |
 | Templates | 9 / 9 |
+| Documents and whiteboards | 5 / 5 |
 | Motion | 8 / 8 |
 | Export | 12 / 12 |
 | The app | 6 / 6 |
@@ -102,8 +103,9 @@ end-to-end tests use Playwright.
 ## Compared with Canva
 
 Paperwall covers making a design on your own, start to finish, including
-animated ones (GIF, MP4, WebM). It has no stock library, AI, collaboration
-or cloud, and no timeline video editor. The honest,
+animated ones (GIF, MP4, WebM), documents, whiteboards and presenting with
+notes. It has no stock library, AI, collaboration or cloud, and no timeline
+video editor. The honest,
 area-by-area comparison is in [docs/PARITY.md](docs/PARITY.md).
 
 ## Contributing

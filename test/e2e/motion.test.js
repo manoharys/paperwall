@@ -231,6 +231,29 @@ test('[MOT-07] add a video: it shows its poster, plays when presenting and moves
   assert.match(asset.poster, /^data:image\/jpeg/);
   assert.equal(Math.round(v.w / v.h * 100), Math.round(320 / 240 * 100), 'its own shape');
   await page.waitForSelector('[data-testid="upload-item"][data-kind="video"]');
+  // Its still picture (on the page and in still downloads) is taken full size from where it starts,
+  // and again when its start point moves.
+  await page.waitForFunction(() => {
+    const ed = window.paperwall.editor;
+    const v = ed.pageData.elements.find((e) => e.type === 'video');
+    return v?.still && ed.doc.assets[v.still]?.type !== 'video' && ed.doc.assets[v.still]?.width === 320;
+  });
+  const stills = await page.evaluate(async () => {
+    const ed = window.paperwall.editor;
+    const v = ed.pageData.elements.find((e) => e.type === 'video');
+    const first = v.still;
+    const firstPicture = ed.doc.assets[first].dataUrl;
+    ed.update({ trim: { start: 0.6 } }, null, [v.id]);
+    await ed.refreshStill(v.id);
+    const now = ed.pageData.elements.find((e) => e.type === 'video');
+    return [first, now.still, firstPicture !== ed.doc.assets[now.still].dataUrl];
+  });
+  assert.notEqual(stills[0], stills[1], 'a new still for the new start');
+  assert.ok(stills[2], 'a different picture');
+  await page.evaluate(() => {
+    const ed = window.paperwall.editor;
+    ed.update({ trim: { start: 0 } }, null, [ed.pageData.elements.find((e) => e.type === 'video').id]);
+  });
   // Its panel: where it starts, looping.
   await page.click('[data-testid="video-loop"]');
   assert.equal((await elements(page)).find((e) => e.type === 'video').loop, false);

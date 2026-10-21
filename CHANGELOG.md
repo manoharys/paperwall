@@ -1,6 +1,22 @@
 # Changelog
 
-## 0.4.0 (unreleased): Motion
+## 0.5.0 (unreleased): Present, docs and whiteboards
+
+- Speaker notes for each page, and a presenter view: the slides in a
+  window of their own (drag it to the projector) and, for you, the page
+  now, the next one, its notes and a timer.
+- Documents: headings, paragraphs, lists and pictures flow down the page
+  as you write; drag a block above or below another to move it. PDF and
+  print split it into sheets between blocks.
+- Whiteboards: a canvas that grows as you add to it, sticky notes in six
+  colors, and lines between things.
+- Files (pictures, videos, sounds, fonts) are stored apart from each saved
+  design, once, so big videos don't slow saving or the home screen.
+- A video's still picture is taken full size from where it starts.
+- GIF and video downloads of pages with big photos are quicker: each photo
+  is made only as big as the frames can show, once.
+
+## 0.4.0: Motion
 
 - Animations for elements as they come in: fade, rise, drop, pan, pop,
   wipe, typewriter, tumble and breathe, each with its own duration and

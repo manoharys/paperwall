@@ -46,7 +46,9 @@
         { "id": "VIEW-04", "title": "Dark mode" },
         { "id": "VIEW-05", "title": "Present pages full screen and move with the arrow keys" },
         { "id": "VIEW-06", "title": "Rulers and guides you drag out, which elements snap to" },
-        { "id": "VIEW-07", "title": "Grid with snapping, safe margins and print bleed" }
+        { "id": "VIEW-07", "title": "Grid with snapping, safe margins and print bleed" },
+        { "id": "VIEW-08", "title": "Speaker notes for each page" },
+        { "id": "VIEW-09", "title": "Presenter view: notes, the next page and a timer, with the slides in their own window" }
       ]
     },
     {
@@ -208,6 +210,17 @@
         { "id": "TPL-07", "title": "Multi-page templates: decks, calendars, menus, planners" },
         { "id": "TPL-08", "title": "Every template passes a quality check: no overflow, no broken words, readable contrast" },
         { "id": "TPL-09", "title": "Filter templates by size" }
+      ]
+    },
+    {
+      "id": "DW",
+      "name": "Documents and whiteboards",
+      "features": [
+        { "id": "DW-01", "title": "Documents: headings, paragraphs and lists that flow down the page as you write" },
+        { "id": "DW-02", "title": "Pictures in documents, and moving a block by dragging it above or below another" },
+        { "id": "DW-03", "title": "Documents download as PDF and print on sheets of paper, split between blocks" },
+        { "id": "DW-04", "title": "Whiteboards: a canvas that grows as you add to it" },
+        { "id": "DW-05", "title": "Sticky notes in six colors, connected with lines" }
       ]
     },
     {
