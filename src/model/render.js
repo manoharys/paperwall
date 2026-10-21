@@ -150,11 +150,21 @@ function renderLine(ctx, el) {
 
 /**
  * How far past its box an element can draw (page px): strokes, outlines,
- * the room around letters, shadows. For pictures of single elements.
+ * the room around letters, shadows. For pictures of single elements. A
+ * group's is as far as its elements reach past its box (each padded, and
+ * turned as it is, in the group's own terms), then its own shadow.
  */
 export function effectPad(el) {
   let pad = 2 + (el.strokeWidth || 0) + (el.outline?.width || 0) * 2;
   if (el.type === 'text') pad += (el.size || 16) * 0.8;
+  if (el.type === 'group') {
+    for (const c of el.children || []) {
+      if (c.hidden) continue;
+      const p = effectPad(c);
+      const b = boundsOf({ x: c.x - p, y: c.y - p, w: c.w + p * 2, h: c.h + p * 2, rotation: c.rotation });
+      pad = Math.max(pad, -b.x, -b.y, b.x + b.w - el.w, b.y + b.h - el.h);
+    }
+  }
   if (el.shadow) pad += Math.abs(el.shadow.x ?? 0) + Math.abs(el.shadow.y ?? 8) + (el.shadow.blur ?? 16) * 1.5;
   return pad;
 }
