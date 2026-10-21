@@ -96,12 +96,13 @@ export function createDesign({ width = 1080, height = 1080, name = 'Untitled des
   };
 }
 
-export function createDesignFromPreset(presetId) {
+/** A blank design of a preset's size. `name` (and a document's `title`) in the person's language, else English. */
+export function createDesignFromPreset(presetId, { name, title } = {}) {
   const p = presetById(presetId);
   if (!p) throw new Error(`Unknown size preset: ${presetId}`);
-  const doc = createDesign({ width: p.w, height: p.h, unit: p.unit || 'px' });
-  if (p.id === 'doc') makeDocument(doc);
-  if (p.id === 'whiteboard') makeBoard(doc);
+  const doc = createDesign({ width: p.w, height: p.h, unit: p.unit || 'px', ...(name ? { name } : {}) });
+  if (p.id === 'doc') makeDocument(doc, { name, title });
+  if (p.id === 'whiteboard') makeBoard(doc, { name });
   return doc;
 }
 
@@ -123,11 +124,11 @@ export const DOC_STYLES = {
 };
 
 /** A design that flows as a document (see flow.js), started with a title and a paragraph. */
-export function makeDocument(doc) {
+export function makeDocument(doc, { name = 'Untitled document', title = DOC_STYLES.title.text } = {}) {
   const { margin, gap, dpi } = DOCUMENT;
   doc.document = { pageHeight: doc.height, margin, gap, dpi };
-  doc.name = 'Untitled document';
-  doc.pages[0].elements.push(createText({ ...DOC_STYLES.title, y: 0 }), createText({ ...DOC_STYLES.body, y: 1 }));
+  doc.name = name;
+  doc.pages[0].elements.push(createText({ ...DOC_STYLES.title, text: title, y: 0 }), createText({ ...DOC_STYLES.body, y: 1 }));
   // (Laid out as text is measured once open; roughly right till then.)
   const m = doc.document.margin;
   let y = m;
@@ -139,9 +140,9 @@ export function makeDocument(doc) {
 }
 
 /** A design that's a whiteboard: a canvas that grows (see flow.js), with a first sticky note. */
-export function makeBoard(doc) {
+export function makeBoard(doc, { name = 'Untitled whiteboard' } = {}) {
   doc.board = true;
-  doc.name = 'Untitled whiteboard';
+  doc.name = name;
   doc.pages[0].background = { type: 'color', color: '#f6f6f2' };
   doc.pages[0].elements.push(createSticky(NOTE_COLORS[0], { x: 600, y: 600, text: 'Ideas go here' }));
   return doc;
@@ -245,6 +246,11 @@ export function createLine(props = {}) {
 }
 
 export const DEFAULT_FILTERS = { brightness: 100, contrast: 100, saturation: 100, grayscale: 0, sepia: 0, blur: 0, warmth: 0, tint: 0, hue: 0, vignette: 0, duotone: null };
+
+/** Whether a picture's or video's filters are all as they start (each unset or at its default). */
+export function hasDefaultFilters(el) {
+  return Object.entries(el.filters || {}).every(([k, v]) => (v ?? null) === (DEFAULT_FILTERS[k] ?? null));
+}
 
 export function createImage(assetId, props = {}) {
   return base('image', {

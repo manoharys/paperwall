@@ -254,6 +254,13 @@ test('[MOT-07] in Safari, a presented video plays live over the slide, where it 
   await page.waitForTimeout(600);
   assert.equal(await page.locator('[data-testid="slide-video-box"]').count(), 0);
   await page.keyboard.press('Escape');
+  // Hanging off the page, it couldn't be cut to the slide over it: pictures too.
+  await page.evaluate(() => window.paperwall.editor.update({ rotation: 0, x: 800 }, null, ['clip-el']));
+  await page.click('[data-testid="present"]');
+  await page.waitForFunction(() => document.querySelector('[data-testid="slide"] image'));
+  await page.waitForTimeout(600);
+  assert.equal(await page.locator('[data-testid="slide-video-box"]').count(), 0, 'not laid over past the slide');
+  await page.keyboard.press('Escape');
   await context.close();
 });
 

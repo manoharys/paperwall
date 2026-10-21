@@ -152,13 +152,14 @@ export class Canvas {
     });
     this.el.addEventListener('dragleave', () => this.el.classList.remove('dropping'));
     this.el.addEventListener('drop', (e) => this.onDrop(e));
+    this.gone = new AbortController(); // (aborted by destroy: the window's listeners go)
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space' && !isTyping(e)) this.spaceDown = true;
-    });
+    }, { signal: this.gone.signal });
     window.addEventListener('keyup', (e) => {
       if (e.code === 'Space') this.spaceDown = false;
-    });
-    editor.on((what) => {
+    }, { signal: this.gone.signal });
+    this.unlisten = editor.on((what) => {
       // Mid-drag: attached connector ends follow what's being moved (group
       // boxes are refitted once the drag ends, in afterChange).
       if (what === 'live') {
@@ -176,6 +177,13 @@ export class Canvas {
       this.frame = 0;
       this.render();
     });
+  }
+
+  /** Let go of the editor and the window (the editor's screen is being taken down). */
+  destroy() {
+    this.unlisten();
+    this.gone.abort();
+    if (this.frame) cancelAnimationFrame(this.frame);
   }
 
   /**

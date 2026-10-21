@@ -90,6 +90,16 @@ test('[APP-08] switching language in the editor keeps the design as it is: undo,
   const { page, context, errors } = await newDesign('square');
   await page.evaluate(() => window.paperwall.editor.addPage());
   const el = await addText(page);
+  // Listeners on the window, the page and the editor: as many after as before (the old screen's go with it).
+  const cdp = await context.newCDPSession(page);
+  const listening = async () => {
+    const count = async (expression) => {
+      const { result } = await cdp.send('Runtime.evaluate', { expression });
+      return (await cdp.send('DOMDebugger.getEventListeners', { objectId: result.objectId })).listeners.length;
+    };
+    return { window: await count('window'), document: await count('document'), editor: await page.evaluate(() => window.paperwall.editor.listeners.size) };
+  };
+  const listeners = await listening();
   const was = await page.evaluate(() => {
     const ed = window.paperwall.editor;
     window.editorBefore = ed;
@@ -106,6 +116,7 @@ test('[APP-08] switching language in the editor keeps the design as it is: undo,
   assert.deepEqual(now, { ...was, same: true, canUndo: true });
   assert.equal((await page.textContent('[data-testid="rail-text"]')).trim(), say('es', 'insert.tabText'));
   assert.equal(await page.locator('[data-testid="page-thumb"]').count(), 2);
+  assert.deepEqual(await listening(), listeners);
   // Undo still takes back the text just added, on the same page.
   await page.click('[data-testid="undo"]');
   assert.deepEqual(await page.evaluate((id) => {

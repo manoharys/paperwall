@@ -38,6 +38,13 @@ test('[DOC-11] print sizes in millimetres and inches', async () => {
   const doc = await state(page);
   assert.deepEqual([doc.width, doc.height, doc.unit], [1748, 2480, 'mm']);
   assert.equal(await page.textContent('[data-testid="design-size"]'), '148 × 210 mm');
+  // The same size reads the same on its card at home and in its versions.
+  await page.click('[data-testid="history-btn"]');
+  await page.waitForFunction(() => /148 × 210 mm/.test(document.querySelector('[role="dialog"]')?.textContent || ''));
+  await page.keyboard.press('Escape');
+  await page.click('[data-testid="home-link"]');
+  await page.waitForSelector('[data-testid="design-card"]');
+  assert.match(await page.textContent('[data-testid="design-card"]'), /148 × 210 mm/);
   await context.close();
 });
 

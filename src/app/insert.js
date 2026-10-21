@@ -83,7 +83,7 @@ export class InsertPanel {
       TABS.map((tab) => h('button', { type: 'button', 'data-tab': tab.id, 'data-testid': `rail-${tab.id}`, onClick: () => this.open(tab.id) }, icon(tab.icon, 22), h('span', null, t(tab.label)))));
     this.el = h('div', { class: 'insert' }, this.rail, h('div', { class: 'insert-panel', 'data-testid': 'insert-panel' }, this.body));
     this.pen = { tool: 'pen', color: '#1a1a2e', size: DRAW_TOOLS.pen.strokeWidth };
-    editor.on((what) => {
+    this.unlisten = editor.on((what) => {
       // Back to Templates without reopening the panel (on phones it may have just been hidden).
       if (what === 'stop-drawing') {
         this.tab = 'templates';
@@ -91,6 +91,11 @@ export class InsertPanel {
       }
     });
     this.render();
+  }
+
+  /** Let go of the editor (the editor's screen is being taken down). */
+  destroy() {
+    this.unlisten();
   }
 
   open(tab) {

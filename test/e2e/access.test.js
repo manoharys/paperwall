@@ -365,6 +365,14 @@ test('[APP-09] Alt+Arrows resize a turned element in place; a hidden one is anno
   assert.ok(now.w > sq.w + 40, 'it got bigger');
   const after = await corner();
   assert.ok(Math.hypot(after[0] - before[0], after[1] - before[1]) < 0.01, `corner stayed: ${before} → ${after}`);
+  // At its smallest, a smaller size changes nothing: no empty undo step, nothing saved.
+  await page.evaluate((id) => window.paperwall.editor.update({ w: 1, h: 1 }, null, [id]), sq.id);
+  await page.waitForTimeout(900); // (past the time repeats merge into one step)
+  const steps = () => page.evaluate(() => ({ undo: window.paperwall.editor.history.past.length, at: window.paperwall.editor.doc.updatedAt }));
+  const was = await steps();
+  await page.keyboard.press('Alt+ArrowLeft');
+  await page.keyboard.press('Alt+ArrowUp');
+  assert.deepEqual(await steps(), was);
   // Hidden, it isn't counted among the elements Tab goes through.
   await addText(page);
   await page.evaluate((id) => {

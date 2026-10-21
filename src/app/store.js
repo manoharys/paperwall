@@ -204,7 +204,7 @@ async function writeDesign(doc, thumb) {
   seen.set(doc.id, known);
   // (A document's height: a sheet's, not the long page it has grown to.)
   // (Its details as they were when the save began, like its pages.)
-  await put('designs', doc.id, { id: doc.id, name: kept.name, updatedAt: kept.updatedAt, width: kept.width, height: kept.document?.pageHeight || kept.height, pages: kept.pages.length, thumb: thumb ?? null, doc: { ...kept, assets } });
+  await put('designs', doc.id, { id: doc.id, name: kept.name, updatedAt: kept.updatedAt, width: kept.width, height: kept.document?.pageHeight || kept.height, unit: kept.unit, pages: kept.pages.length, thumb: thumb ?? null, doc: { ...kept, assets } });
   // Files this design no longer uses go: ones this tab has known it to
   // use (another tab's new file isn't taken for an old one).
   const keep = new Set(Object.values(assets).map((a) => a.stored));
@@ -343,7 +343,7 @@ async function writeVersion(doc, { label = '', thumb = null } = {}) {
   const at = (lastAt = Math.max(Date.now(), lastAt + 1));
   // `doc` is a copy nobody changes (versionSnapshot); the images are stored separately, once.
   const { assets, ...rest } = doc;
-  const details = { key: vKey(doc.id, at), designId: doc.id, at, label, thumb, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, assetIds: Object.keys(assets || {}) };
+  const details = { key: vKey(doc.id, at), designId: doc.id, at, label, thumb, name: doc.name, pages: doc.pages.length, width: doc.width, height: doc.height, unit: doc.unit, assetIds: Object.keys(assets || {}) };
   // Which images are already stored is checked in the same transaction that
   // writes the version, so another tab's clean-up can't remove one in between.
   const [alo, ahi] = range(`${doc.id}|a|`);

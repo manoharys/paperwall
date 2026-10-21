@@ -13,8 +13,8 @@ import { getSetting } from './store.js';
 import { aiWritingSection } from './ai-writing.js';
 import { creditSection } from './photos.js';
 import { smartRemoveBackground, cutoutOf, refineCutout } from './cutout.js';
-import { t, formatNumber, language, ltr } from './i18n.js';
-import { shapeName, maskName, effectName, animName, transitionName, paletteName, duotoneName, presetName, elementName, layerName } from './names.js';
+import { t, language } from './i18n.js';
+import { shapeName, maskName, effectName, animName, transitionName, paletteName, duotoneName, presetName, presetSize, sizeLabel, elementName, layerName } from './names.js';
 
 const DUOTONES = [
   ['Ink', '#1a1a2e', '#f7f4ef'], ['Ocean', '#0b2a45', '#7fd1c7'], ['Sunset', '#5b1a6e', '#ffb36b'], ['Berry', '#3b1426', '#ff8fa3'],
@@ -57,7 +57,7 @@ export class Inspector {
       this.tabButton('layers', t('inspector.layers')));
     this.el = h('aside', { class: 'inspector', 'data-testid': 'inspector', 'aria-label': t('inspector.properties') }, this.tabs, this.body);
     this.stale = false;
-    editor.on((what) => {
+    this.unlisten = editor.on((what) => {
       if (what === 'live') return this.refreshGeometry();
       if (what === 'aids' || what === 'tool' || what === 'stop-drawing' || what === 'strip') return; // not about the selection
       // Don't pull the rug out from under a field or color picker in use.
@@ -68,15 +68,22 @@ export class Inspector {
       }
       this.render();
     });
+    this.gone = new AbortController(); // (aborted by destroy: the page's listeners go)
     document.addEventListener('paperwall:popover-closed', () => {
       if (this.stale) this.render();
-    });
+    }, { signal: this.gone.signal });
     this.el.addEventListener('focusout', () => {
       setTimeout(() => {
         if (this.stale && !this.el.contains(document.activeElement) && !popoverOpen()) this.render();
       }, 0);
     });
     getSetting('brand', { colors: [] }).then((b) => (this.brand = b || { colors: [] }));
+  }
+
+  /** Let go of the editor and the page (the editor's screen is being taken down). */
+  destroy() {
+    this.unlisten();
+    this.gone.abort();
   }
 
   tabButton(id, label) {
@@ -645,7 +652,7 @@ export class Inspector {
     const doc = ed.doc;
     const bg = ed.pageData.background || { type: 'color', color: '#ffffff' };
     const unit = doc.unit || 'px';
-    const size = ltr(unit === 'px' ? `${formatNumber(doc.width)} × ${formatNumber(doc.height)} px` : `${formatNumber(fromPx(doc.width, unit))} × ${formatNumber(fromPx(doc.height, unit))} ${unit}`);
+    const size = sizeLabel(doc.width, doc.height, unit);
     const grad = bg.type === 'gradient' ? bg.gradient : null;
     const notesAt = ed.page; // (the page this panel was made for)
     return [
@@ -758,7 +765,7 @@ export function resizeDialog(editor) {
     toast(t('resize.done'));
   };
   const presets = h('div', { class: 'preset-grid' }, PRESETS.map((p) => h('button', { type: 'button', class: 'preset', 'data-testid': `resize-preset-${p.id}`, onClick: () => go(p.w, p.h, `${doc.name} (${presetName(p)})`, p) },
-    h('span', { class: 'preset-shape', style: { aspectRatio: `${p.w} / ${p.h}` } }), h('b', null, presetName(p)), h('small', null, ltr(`${formatNumber(p.w)} × ${formatNumber(p.h)}`)))));
+    h('span', { class: 'preset-shape', style: { aspectRatio: `${p.w} / ${p.h}` } }), h('b', null, presetName(p)), h('small', null, presetSize(p)))));
   const custom = h('form', { class: 'custom-size', onSubmit: (e) => {
     e.preventDefault();
     const w = toPx(+wIn.value, unit);

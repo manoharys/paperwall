@@ -4,6 +4,7 @@
 
 import { t, hasKey, formatNumber, languageName, ltr } from './i18n.js';
 import { iconById, stickerById } from '../model/graphics.js';
+import { fromPx } from '../model/doc.js';
 
 /** A key made from a name: "Tips & lists" → "tips-lists". */
 export function slug(s) {
@@ -18,13 +19,14 @@ export function named(prefix, id, fallback = id) {
 
 export const presetName = (p) => named('preset', p.id, p.name);
 
-/** A preset's size in its own units: "1080 × 1080 px", "210 × 297 mm". */
-export function presetSize(p) {
-  const n = (v) => formatNumber(v);
-  if (p.unit === 'mm') return ltr(`${n(Math.round((p.w / 300) * 25.4))} × ${n(Math.round((p.h / 300) * 25.4))} mm`);
-  if (p.unit === 'in') return ltr(`${n(p.w / 300)} × ${n(p.h / 300)} in`);
-  return ltr(`${n(p.w)} × ${n(p.h)} px`);
+/** A size (px) in a unit, written the same everywhere: "1080 × 1080 px", "210 × 297 mm". */
+export function sizeLabel(w, h, unit = 'px') {
+  const u = unit === 'mm' || unit === 'in' ? unit : 'px';
+  return ltr(`${formatNumber(fromPx(w, u))} × ${formatNumber(fromPx(h, u))} ${u}`);
 }
+
+/** A preset's size in its own units. */
+export const presetSize = (p) => sizeLabel(p.w, p.h, p.unit);
 
 export const shapeName = (shape) => named('shape', shape);
 export const typeName = (type) => named('type', type);

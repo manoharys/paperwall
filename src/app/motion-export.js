@@ -5,7 +5,7 @@
 
 import { renderFrame } from '../model/render.js';
 import { timeline, frameAt, soundFade, animationsEnd, hasLoop, videosIn, animationOf } from '../model/motion.js';
-import { DEFAULT_FILTERS } from '../model/doc.js';
+import { hasDefaultFilters } from '../model/doc.js';
 import { maskPath } from '../model/shapes.js';
 import { GifEncoder } from '../model/gif.js';
 import { buildWebmParts } from '../model/webm.js';
@@ -81,7 +81,18 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
   // its videos, drawn once, and each video's picture straight from its player.
   const layered = new Map(); // page index → its layers, or null (drawn whole each frame)
   const ends = new Map(); // page index → when its animations are over (Infinity if one loops)
+  // A page's layers go once frames move past it (pages come one after another).
+  const release = (keep = -1) => {
+    for (const [index, layers] of layered) {
+      if (index === keep) continue;
+      for (const layer of layers?.list || []) {
+        if (layer.canvas) layer.canvas.width = layer.canvas.height = 0;
+      }
+      layered.delete(index);
+    }
+  };
   const layersOf = async (frame) => {
+    release(frame.index);
     if (!ends.has(frame.index)) ends.set(frame.index, hasLoop(doc.pages[frame.index]) ? Infinity : animationsEnd(doc.pages[frame.index]));
     if (frame.from || frame.local < ends.get(frame.index)) return null;
     // (Drawn at the first such moment: the same at any later one.)
@@ -137,6 +148,7 @@ async function eachFrame(doc0, pages, { fps, width, height, onProgress, signal, 
       onProgress?.((i + 1) / count);
     }
   } finally {
+    release();
     videos?.dispose();
   }
   return { count, total: tl.total, stuck: !!videos?.stuck };
@@ -215,8 +227,7 @@ async function drawFrame(svg, { ctx, width, height, clear = false }) {
 
 /** Whether a video is drawn just as a picture is: no filters, shadow or animation of its own (those need the whole frame drawn). */
 function plainVideo(page, el) {
-  const filters = Object.entries(el.filters || {}).every(([k, v]) => (v ?? null) === (DEFAULT_FILTERS[k] ?? null));
-  return filters && !el.shadow && !animationOf(page, el);
+  return hasDefaultFilters(el) && !el.shadow && !animationOf(page, el);
 }
 
 /**

@@ -1114,6 +1114,7 @@ export class Editor {
         if (dw) h = Math.max(1, w / r);
         else w = Math.max(1, h * r);
       }
+      const was = [e.x, e.y, e.w, e.h].join();
       // Its top-left corner (as turned) stays put, as when dragging the opposite handle.
       const corner = handlePosition(e, 'nw');
       if (e.type === 'text') {
@@ -1123,7 +1124,9 @@ export class Editor {
       const now = handlePosition(e, 'nw');
       e.x += corner.x - now.x;
       e.y += corner.y - now.y;
-    }, { key: `resize:${el.id}` });
+      // (Nothing changed, as at the smallest size or text refitted back: no undo step, nothing saved.)
+      return [e.x, e.y, e.w, e.h].join() !== was;
+    }, { key: `resize:${el.id}`, unchanged: (changed) => !changed });
   }
 
   selectionBounds() {

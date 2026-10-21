@@ -5,7 +5,7 @@ import { renderPage, renderFrame } from '../model/render.js';
 import { animationsEnd, keepsMoving, hasLoop, soundFade, pageDuration, pageFrame, transitionOf, timeline } from '../model/motion.js';
 import { VideoFrames, videosOn, blobUrlFor } from './media.js';
 import { measure, measureVersion, fontCssFor } from './fonts.js';
-import { visiblePages, soundtrackOf, DEFAULT_FILTERS } from '../model/doc.js';
+import { visiblePages, soundtrackOf, hasDefaultFilters } from '../model/doc.js';
 import { boundsOf, rectsIntersect } from '../model/geometry.js';
 import { t, formatNumber } from './i18n.js';
 import { pageName, pageLabel } from './names.js';
@@ -29,13 +29,18 @@ export class PageStrip {
     this.contents = new WeakMap(); // page → { at, json }: its contents as of the editor's last change
     this.drawnCount = 0;
     this.redraw = debounce(() => this.render(), 250);
-    editor.on((what) => {
+    this.unlisten = editor.on((what) => {
       if (what === 'view') this.zoomLabel.textContent = zoomText(editor.zoom);
       else if (what === 'page') this.redraw.flush(); // now, and once (a 'doc' redraw may be waiting too)
       else if (what === 'doc') this.redraw();
       else if (what === 'strip') this.relabel();
     });
     this.render();
+  }
+
+  /** Let go of the editor (the editor's screen is being taken down). */
+  destroy() {
+    this.unlisten();
   }
 
   /** Titles changed: update the labels, without drawing every page again. */
@@ -333,7 +338,7 @@ export function present(editor, canvas, { autoplay = false, only = false, host =
     taken.clear(); // a page's videos start afresh: no picture from an earlier visit
     const page = doc.pages[shown[at]];
     info = { end: animationsEnd(page), keeps: keepsMoving(page, doc.assets), loops: hasLoop(page), videos: videosOn(doc, [shown[at]]) };
-    info.plain = !LIVE_VIDEO && shownPlainly(page, info.videos);
+    info.plain = !LIVE_VIDEO && shownPlainly(doc, page, info.videos);
     videos.pauseAll();
     videos.start(info.videos, started);
     // Back before the page Play started on: the sound starts over from there
@@ -526,14 +531,16 @@ const LIVE_VIDEO = typeof navigator === 'undefined' || !(/AppleWebKit/.test(navi
 
 /**
  * Whether a page's videos can play over its slide, as they look on it: each
- * on the page itself (not in a group), not turned, flipped, clipped to a
- * shape, filtered or shadowed, and with nothing over it.
+ * on the page itself (not in a group) and wholly inside it (nothing clips
+ * what's laid over the slide), not turned, flipped, clipped to a shape,
+ * filtered or shadowed, and with nothing over it.
  */
-function shownPlainly(page, videos) {
+function shownPlainly(doc, page, videos) {
   return videos.length > 0 && videos.every((el) => {
     const at = page.elements.indexOf(el);
     if (at < 0 || el.rotation % 360 || el.flipX || el.flipY || (el.mask && el.mask !== 'none') || el.shadow) return false;
-    if (!Object.entries(el.filters || {}).every(([k, v]) => (v ?? null) === (DEFAULT_FILTERS[k] ?? null))) return false;
+    if (el.x < 0 || el.y < 0 || el.x + el.w > doc.width || el.y + el.h > doc.height) return false;
+    if (!hasDefaultFilters(el)) return false;
     return page.elements.slice(at + 1).every((o) => o.hidden || !rectsIntersect(boundsOf(o), boundsOf(el)));
   });
 }

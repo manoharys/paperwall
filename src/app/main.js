@@ -197,7 +197,6 @@ async function openEditor(id) {
  * selection and page, stay as they are).
  */
 function drawEditor(editor) {
-  const before = new Set(editor.listeners);
   const canvas = new Canvas(editor);
   const inspector = new Inspector(editor, canvas, { onResizeDesign: () => resizeDialog(editor), onPlay: (how) => present(editor, canvas, { autoplay: true, ...how }) });
   const insert = new InsertPanel(editor);
@@ -243,7 +242,7 @@ function drawEditor(editor) {
     if (window.matchMedia('(max-width: 900px)').matches) requestAnimationFrame(() => canvas.zoomToFit());
   };
   insert.onOpen = () => setSheet('insert');
-  editor.on((what) => {
+  const offSheet = editor.on((what) => {
     if (what === 'selection' && editor.selection.length) setSheet('edit');
   });
   const closeSheet = iconButton('down', t('top.hidePanel'), () => setSheet('none'), { class: 'icon-btn sheet-close', 'data-testid': 'sheet-close' });
@@ -256,8 +255,8 @@ function drawEditor(editor) {
   const skip = h('button', { type: 'button', class: 'skip-link', 'data-testid': 'skip-to-canvas', onClick: () => canvas.el.focus() }, t('a11y.skip'));
   root.append(h('div', { class: 'editor' }, skip, top, workspace, strip.el));
   const unbindKeys = bindShortcuts(editor, canvas, { exportDialog: () => exportDialog(editor), findDialog: () => findDialog(editor) });
-  editor.on(syncTop);
-  editor.on(sayChanges(editor));
+  const offTop = editor.on(syncTop);
+  const offSay = editor.on(sayChanges(editor));
   const onResize = () => canvas.layout();
   window.addEventListener('resize', onResize);
   syncTop();
@@ -284,12 +283,13 @@ function drawEditor(editor) {
   document.fonts.addEventListener('loadingdone', onFontsLoaded);
   // Handy in the console, and used by the end-to-end tests.
   window.paperwall = { editor, canvas, inspector, export: exportApi, store, cutout: cutoutApi };
-  // (What the parts of the screen listen to on the editor, to let go of with them.)
-  const mine = [...editor.listeners].filter((fn) => !before.has(fn));
   return () => {
     document.fonts.removeEventListener('loadingdone', onFontsLoaded);
     unbindKeys();
-    for (const fn of mine) editor.listeners.delete(fn);
+    offSheet();
+    offTop();
+    offSay();
+    for (const part of [canvas, inspector, insert, strip]) part.destroy();
     window.removeEventListener('resize', onResize);
   };
 }
