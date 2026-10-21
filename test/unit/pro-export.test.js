@@ -15,6 +15,8 @@ import { createDesign, createText, createShape, createLine, createImage, createI
 import { createConnector } from '../../src/model/connectors.js';
 import { flowDocument, onPaper } from '../../src/model/flow.js';
 import { approxMeasure, notePad } from '../../src/model/text-layout.js';
+import { renderPage, effectPad } from '../../src/model/render.js';
+import { TEXT_COMBOS, comboGroup } from '../../src/model/text-combos.js';
 import { fontsUsed, fontFile } from '../../src/model/fonts.js';
 import { craft, NDBITS } from '../../scripts/brotli-dict.mjs';
 import { readPdf, find, pageContents, unzip, checkXml, has } from '../formats.js';
@@ -258,6 +260,43 @@ test('[EXP-14] print PDF: page grown by the bleed, TrimBox and BleedBox, crop ma
   assert.equal(rasterScale(createDesign({ width: 1080, height: 1080 }), { print: true }), 300 / 96, '300 per inch for screen designs too');
 });
 
+test('[EXP-13] hard edges in gradients: the stitching function\'s Bounds rise, inside its Domain', () => {
+  const doc = createDesign({ width: 400, height: 400 });
+  const red = '#ff0000';
+  const blue = '#0000ff';
+  const fills = [
+    [{ offset: 0, color: red }, { offset: 0.5, color: red }, { offset: 0.5, color: blue }, { offset: 1, color: blue }],
+    [{ offset: 0, color: red }, { offset: 1, color: red }, { offset: 1, color: blue }],
+    [{ offset: 0, color: red }, { offset: 0, color: blue }, { offset: 1, color: '#00ff00' }],
+    [{ offset: 0, color: red }, { offset: 0.3, color: blue }, { offset: 0.3, color: red }, { offset: 0.3, color: blue }, { offset: 1, color: red }],
+  ];
+  fills.forEach((stops, i) => doc.pages[0].elements.push(createShape('rect', { id: `r${i}`, x: 10 + i * 90, y: 10, w: 80, h: 80, fill: { type: 'linear', angle: 90, stops } })));
+  assert.deepEqual(planVectorPdf(doc, [0], {}), [], 'all drawn as shadings');
+  const pdf = readPdf(buildVectorPdf(doc, [0], {}));
+  const text = [...pdf.objects.values()].map((o) => o.dict).join('\n');
+  const all = [...text.matchAll(/\/Bounds \[([^\]]*)\]/g)].map((m) => m[1].split(' ').map(Number));
+  assert.equal(all.length, fills.length, 'a stitching function each');
+  for (const bounds of all) {
+    const seq = [0, ...bounds, 1];
+    for (let i = 1; i < seq.length; i++) assert.ok(seq[i] > seq[i - 1], `strictly rising inside [0 1]: ${bounds}`);
+  }
+  assert.deepEqual(all[0], [0.5, 0.501], 'the edge where it was put');
+  assert.deepEqual(all[1], [0.999], 'an edge at the end moves back, not past it');
+});
+
+test('[EXP-14] a background drawn as a picture runs into the bleed', () => {
+  const doc = createDesign({ width: 200, height: 100 });
+  doc.pages[0].background = { type: 'color', color: '#0a9396' };
+  doc.pages[0].elements.push(createShape('rect', { id: 'r', x: 10, y: 10, w: 50, h: 50, fill: '#ff0000' }));
+  const view = { x: -10, y: -10, w: 220, h: 120 };
+  const plain = renderPage(doc, 0, { view });
+  assert.match(plain, /<rect width="200" height="100" fill="#0a9396"\/>/, 'just the page without');
+  const svg = renderPage(doc, 0, { view, bleed: 10 });
+  assert.match(svg, /<g transform="translate\(-10 -10\)"><rect width="220" height="120" fill="#0a9396"\/><\/g>/, 'past every edge with');
+  assert.match(svg, /fill="#ff0000"/, 'the elements where they were');
+  assert.doesNotMatch(renderPage(doc, 0, { view, bleed: 10, transparent: true }), /#0a9396/);
+});
+
 // ---------- PowerPoint ----------
 
 function pptxSample() {
@@ -424,4 +463,190 @@ test('[EXP-13] [EXP-15] sticky notes, video stills, credited photos and lines be
   assert.match(pink, new RegExp(`<a:bodyPr wrap="square" lIns="${inset}" tIns="${inset}"`), 'the text inside its edges');
   assert.equal([...slide.matchAll(/<p:pic>/g)].length, 3, 'photo, video still and the line');
   assert.equal([...parts.keys()].filter((n) => n.startsWith('ppt/media/')).length, 3);
+});
+
+test('[EXP-15] PowerPoint: a photo whose picture couldn\'t be read comes as a picture of itself, not left out', () => {
+  const { doc, img, png } = pptxSample();
+  const media = new Map(); // the photo's file couldn't be read
+  assert.equal(pptxKind(doc, doc.pages[0].elements.find((e) => e.id === 'p1')), 'picture');
+  assert.equal(pptxKind(doc, doc.pages[0].elements.find((e) => e.id === 'p1'), media), 'raster');
+  const wants = planPptx(doc, [0], media);
+  assert.deepEqual(wants.map((w) => w.key), ['p1', 'icon', 'glow']);
+  // In a group too: the group comes as one picture.
+  const g = createGroup([createImage(img, { id: 'inner', x: 0, y: 0, w: 100, h: 100 }), createShape('rect', { x: 120, y: 0, w: 100, h: 100 })], { id: 'grp', x: 100, y: 100, w: 220, h: 100 });
+  assert.equal(pptxKind(doc, g), 'group');
+  assert.equal(pptxKind(doc, g, media), 'raster');
+  const pictures = new Map(wants.map((w) => [`${w.page}:${w.key}`, new Uint8Array(png)]));
+  const parts = unzip(buildPptx(doc, [0], { media, pictures }));
+  const slide = parts.get('ppt/slides/slide1.xml').toString();
+  checkXml(slide, 'slide1.xml');
+  assert.equal([...slide.matchAll(/<p:pic>/g)].length, 3, 'the photo, the icon and the neon text, each a picture');
+  assert.equal([...parts.keys()].filter((n) => n.startsWith('ppt/media/')).length, 3);
+});
+
+test('[EXP-13] effect copies and the outline under letters are no text of their own: the words come once', () => {
+  const doc = createDesign({ width: 1000, height: 800 });
+  const els = [
+    createText({ id: 'echo', x: 50, y: 50, w: 900, h: 120, text: 'Echoing', size: 60, effect: { type: 'echo' } }),
+    createText({ id: 'splice', x: 50, y: 200, w: 900, h: 120, text: 'Spliced', size: 60, effect: { type: 'splice' } }),
+    createText({ id: 'glitch', x: 50, y: 350, w: 900, h: 120, text: 'Glitchy', size: 60, effect: { type: 'glitch' } }),
+    createText({ id: 'outlined', x: 50, y: 500, w: 900, h: 120, text: 'Outlined', size: 60, outline: { width: 3, color: '#ff0000' } }),
+  ];
+  doc.pages[0].elements.push(...els);
+  // The page marks which copies are only for looks.
+  const svg = renderPage(doc, 0, { measure: approxMeasure });
+  assert.equal((svg.match(/data-copy="1"/g) || []).length, 5, 'two echoes, one splice, two glitch copies');
+  const fonts = new Map();
+  for (const { font, weight } of fontsUsed(doc)) fonts.set(`${font.name}|${weight}`, fontBytes(fontFile(font.slug, weight)));
+  assert.deepEqual(planVectorPdf(doc, [0], { fonts }), [], 'all drawn as text');
+  const bytes = buildVectorPdf(doc, [0], { fonts });
+  const pdf = readPdf(bytes);
+  const streams = [...pdf.objects.values()].filter((o) => o.data).map((o) => {
+    try {
+      return zlib.inflateSync(o.data).toString('latin1');
+    } catch {
+      return o.data.toString('latin1');
+    }
+  }).join('\n');
+  const shown = [...streams.matchAll(/(\/Span << \/ActualText \(\) >> BDC )?BT [^]*? Tj ET/g)];
+  assert.equal(shown.length, 4 + 5 + 1, 'each word, five copies, one outline pass');
+  assert.equal(shown.filter((m) => !m[1]).length, 4, 'only the words themselves are text');
+  assert.equal([...streams.matchAll(/\/Artifact BMC \/Span << \/ActualText \(\) >> BDC BT [^]*? Tj ET EMC EMC/g)].length, 6, 'the rest are artifacts');
+  if (has('pdftotext', ['-v'])) {
+    const dir = mkdtempSync(join(tmpdir(), 'paperwall-unit-'));
+    writeFileSync(join(dir, 'a.pdf'), bytes);
+    const words = execFileSync('pdftotext', ['-raw', join(dir, 'a.pdf'), '-']).toString().split(/\s+/).filter(Boolean);
+    assert.deepEqual(words, ['Echoing', 'Spliced', 'Glitchy', 'Outlined'], 'copied and searched once');
+  }
+});
+
+test('[EXP-15] PowerPoint: numbered lists count on over blank lines', () => {
+  const doc = createDesign({ width: 1920, height: 1080 });
+  doc.pages[0].elements.push(createText({ id: 'n', x: 100, y: 100, w: 900, h: 600, text: 'One\nTwo\n\nThree\nFour\n \nFive', list: 'number', size: 40 }));
+  doc.pages[0].elements.push(createText({ id: 'later', x: 1000, y: 100, w: 800, h: 600, text: 'Seven\n\nEight', list: 'number', listStart: 7, size: 40 }));
+  const slide = unzip(buildPptx(doc, [0], {})).get('ppt/slides/slide1.xml').toString();
+  checkXml(slide, 'slide1.xml');
+  const paras = (id) => {
+    const sp = [...slide.matchAll(/<p:sp>.*?<\/p:sp>/g)].map((m) => m[0]).find((x) => x.includes(`<a:t>${id}</a:t>`));
+    return [...sp.matchAll(/<a:p>(.*?)<\/a:p>/g)].map((m) => {
+      const num = /<a:buAutoNum type="arabicPeriod"(?: startAt="(\d+)")?\/>/.exec(m[1]);
+      return num ? `#${num[1] || 1}` : 'none';
+    });
+  };
+  // A blank line ends PowerPoint's run: the next run starts where the count is.
+  assert.deepEqual(paras('One'), ['#1', '#1', 'none', '#3', '#3', 'none', '#5']);
+  assert.deepEqual(paras('Seven'), ['#7', 'none', '#8']);
+});
+
+test('[EXP-15] PowerPoint: linear gradients run as the page draws them, stretched with their box', () => {
+  const doc = createDesign({ width: 1920, height: 1080 });
+  const stops = [{ offset: 0, color: '#ff0000' }, { offset: 0.5, color: '#ff0000' }, { offset: 0.5, color: '#0000ff' }, { offset: 1, color: '#0000ff' }];
+  doc.pages[0].elements.push(createShape('rect', { id: 'wide', x: 0, y: 0, w: 400, h: 100, fill: { type: 'linear', angle: 45, stops } }));
+  doc.pages[0].elements.push(createShape('rect', { id: 'down', x: 0, y: 200, w: 400, h: 100, fill: { type: 'linear', angle: 180, stops } }));
+  const slide = unzip(buildPptx(doc, [0], {})).get('ppt/slides/slide1.xml').toString();
+  const grads = [...slide.matchAll(/<a:gradFill[^>]*>(.*?)<\/a:gradFill>/g)].map((m) => ({
+    ang: +/<a:lin ang="(\d+)" scaled="0"\/>/.exec(m[1])[1] / 60000,
+    pos: [...m[1].matchAll(/<a:gs pos="(\d+)">/g)].map((g) => +g[1]),
+  }));
+  // The page's 45° in a 400 × 100 box: its colors change along (sin a / w, -cos a / h),
+  // so the edge between them runs corner to corner, as the page has it.
+  const want = (((Math.atan2(-Math.cos(Math.PI / 4) / 100, Math.sin(Math.PI / 4) / 400) * 180) / Math.PI) + 360) % 360;
+  assert.ok(Math.abs(grads[0].ang - want) < 0.001, `${grads[0].ang} vs ${want}`);
+  assert.ok(Math.abs(grads[0].ang - 284.04) < 0.01);
+  // PowerPoint's run reaches the corners (√2 times the page's at 45°): the stops move in, the ends padded.
+  const k = 1 / Math.SQRT2;
+  assert.deepEqual(grads[0].pos, [0, Math.round((0.5 - 0.5 * k) * 100000), 50000, 50000, Math.round((0.5 + 0.5 * k) * 100000), 100000]);
+  assert.deepEqual(grads[1], { ang: 90, pos: [0, 50000, 50000, 100000] }, 'straight down, as before');
+});
+
+test('[EXP-13] [EXP-15] a group drawn as one picture has room for its elements\' glows, shadows and turns', () => {
+  // The neon sign: its words glow well past the group's box.
+  const g = comboGroup(TEXT_COMBOS.find((c) => c.id === 'neon-open'), approxMeasure, { cx: 540, cy: 540 });
+  const neon = g.children[0];
+  assert.equal(neon.effect.type, 'neon');
+  const reach = effectPad(neon) - neon.x; // how far its letters' room goes past the group's left edge
+  assert.ok(reach > 50, `${reach}`);
+  assert.ok(effectPad(g) >= reach, `${effectPad(g)} covers ${reach}`);
+  // A shadowed square turned 45° in the corner of a group of its size; and the group's own shadow on top.
+  const sq = createShape('rect', { x: 0, y: 0, w: 100, h: 100, rotation: 45, shadow: { x: 0, y: 0, blur: 10 } });
+  const grp = createGroup([sq], { x: 0, y: 0, w: 100, h: 100 });
+  const inner = 2 + 15; // the square's own pad: 2, and its shadow's blur × 1.5
+  const turned = (100 + inner * 2) * Math.SQRT2; // its padded box, turned
+  assert.ok(Math.abs(effectPad(grp) - (turned - 100) / 2) < 1e-9, `${effectPad(grp)}`);
+  grp.shadow = { x: 4, y: 8, blur: 16 };
+  assert.ok(Math.abs(effectPad(grp) - ((turned - 100) / 2 + 4 + 8 + 24)) < 1e-9);
+  // Hidden elements don't count; a plain group is as it was.
+  sq.hidden = true;
+  assert.equal(effectPad(grp), 2 + 4 + 8 + 24);
+  assert.equal(effectPad(createGroup([createShape('rect', { x: 10, y: 10, w: 50, h: 50 })], { x: 0, y: 0, w: 100, h: 100 })), 2);
+  // PowerPoint and the PDF use it: the group's picture covers the glow.
+  const doc = createDesign({ width: 1080, height: 1080 });
+  g.shadow = { x: 0, y: 4, blur: 8 };
+  doc.pages[0].elements.push(g);
+  const [want] = planPptx(doc, [0]);
+  assert.equal(want.key, g.id);
+  assert.ok(want.box.x <= g.x + neon.x - effectPad(neon) + 0.5, 'the glow inside the picture');
+  const [pdfWant] = planVectorPdf(doc, [0], {});
+  assert.ok(pdfWant.box.x <= g.x + neon.x - effectPad(neon) + 0.5);
+});
+
+test('[EXP-15] PowerPoint: line and letter spacing, outlines and indents within the schema\'s ranges', () => {
+  const doc = createDesign({ width: 1080, height: 1080 });
+  doc.pages[0].elements.push(createText({ x: 0, y: 0, w: 1000, h: 1000, text: 'Huge', size: 2000, lineHeight: 3, letterSpacing: 9000, outline: { width: 30000, color: '#000000' }, list: 'bullet' }));
+  doc.pages[0].elements.push(createText({ x: 0, y: 0, w: 1000, h: 1000, text: 'Tight', size: 40, letterSpacing: -9000 }));
+  const slide = unzip(buildPptx(doc, [0], {})).get('ppt/slides/slide1.xml').toString();
+  checkXml(slide, 'slide1.xml');
+  const nums = (re) => [...slide.matchAll(re)].map((m) => +m[1]);
+  assert.ok(nums(/<a:spcPts val="(-?\d+)"\/>/g).every((v) => v >= 0 && v <= 158400));
+  assert.ok(nums(/<a:spcPts val="(-?\d+)"\/>/g).includes(158400), 'clamped, not 450000');
+  assert.deepEqual(nums(/ spc="(-?\d+)"/g).sort((a, b) => a - b).filter((v, i, a) => a.indexOf(v) === i), [-400000, 400000]);
+  assert.ok(nums(/<a:ln w="(\d+)">/g).every((v) => v <= 20116800));
+  assert.ok(nums(/ marL="(\d+)"/g).every((v) => v <= 51206400));
+  assert.ok(nums(/<a:rPr [^>]*sz="(\d+)"/g).every((v) => v >= 100 && v <= 400000));
+});
+
+test('[EXP-13] a space the font lacks doesn\'t make every space read back as it', () => {
+  const doc = createDesign({ width: 1000, height: 400 });
+  // Inter has no em space: it's drawn with the space's glyph.
+  doc.pages[0].elements.push(createText({ x: 50, y: 50, w: 900, h: 300, text: 'Wide gap then plain words', size: 40 }));
+  const fonts = new Map();
+  for (const { font, weight } of fontsUsed(doc)) fonts.set(`${font.name}|${weight}`, fontBytes(fontFile(font.slug, weight)));
+  const font = parseFont(fonts.values().next().value);
+  assert.equal(glyphFor(font, 0x2003), 0, 'Inter has no em space');
+  const bytes = buildVectorPdf(doc, [0], { fonts });
+  const pdf = readPdf(bytes);
+  const [type0] = find(pdf, /\/Subtype \/Type0/);
+  const cmap = pdf.objects.get(+/\/ToUnicode (\d+) 0 R/.exec(type0.dict)[1]).data;
+  let text;
+  try {
+    text = zlib.inflateSync(cmap).toString('latin1');
+  } catch {
+    text = cmap.toString('latin1');
+  }
+  const space = glyphFor(font, 32).toString(16).toUpperCase().padStart(4, '0');
+  assert.match(text, new RegExp(`<${space}> <0020>`), 'the space glyph reads back as a space');
+  assert.doesNotMatch(text, /<2003>/);
+  if (has('pdftotext', ['-v'])) {
+    const dir = mkdtempSync(join(tmpdir(), 'paperwall-unit-'));
+    writeFileSync(join(dir, 'a.pdf'), bytes);
+    assert.match(execFileSync('pdftotext', ['-enc', 'UTF-8', '-raw', join(dir, 'a.pdf'), '-']).toString(), /gap then plain words/);
+  }
+});
+
+test('[EXP-15] PowerPoint: a background photo that can\'t be read comes as a picture of the background', () => {
+  const { doc, img, png } = pptxSample();
+  doc.pages[0].background = { type: 'image', assetId: img, color: '#ffffff' };
+  const media = new Map(); // its file couldn't be read
+  const wants = planPptx(doc, [0], media);
+  assert.deepEqual(wants[0], { page: 0, key: '@bg', box: { x: 0, y: 0, w: doc.width, h: doc.height } });
+  assert.equal(planPptx(doc, [0]).some((w) => w.key === '@bg'), false, 'without media, as before');
+  const pictures = new Map(wants.map((w) => [`${w.page}:${w.key}`, new Uint8Array(png)]));
+  const slide = unzip(buildPptx(doc, [0], { media, pictures })).get('ppt/slides/slide1.xml').toString();
+  checkXml(slide, 'slide1.xml');
+  const first = /<p:spTree>.*?<\/p:grpSpPr>(<p:pic>.*?<\/p:pic>)/.exec(slide)[1];
+  assert.match(first, /<a:off x="0" y="0"\/><a:ext cx="18288000" cy="10287000"\/>/, 'behind everything, the whole slide');
+  // Readable, it's the photo itself, as before.
+  const ok = new Map([[`asset:${img}:file`, { bytes: new Uint8Array(png), ext: 'png', width: 192, height: 192 }]]);
+  assert.equal(planPptx(doc, [0], ok).some((w) => w.key === '@bg'), false);
+  assert.match(unzip(buildPptx(doc, [0], { media: ok })).get('ppt/slides/slide1.xml').toString(), /name="Background"/);
 });

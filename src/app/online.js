@@ -75,7 +75,8 @@ export async function providerFetch(id, url, init = {}) {
   } catch {
     throw new Error(id === 'ollama' ? t('online.noOllama') : t('online.unreachable', { name: p.name }));
   }
-  if (res.status === 401 || res.status === 403) throw new Error(t('online.badKey', { name: p.name }));
+  if ((res.status === 401 || res.status === 403) && p.key) throw new Error(t('online.badKey', { name: p.name }));
+  if (res.status === 403 && id === 'ollama') throw new Error(t('online.ollamaRefused'));
   if (res.status === 429) throw new Error(t('online.tooMany', { name: p.name }));
   if (!res.ok) {
     // (The provider's own reason, when it gives one: a low balance, too long a request.)

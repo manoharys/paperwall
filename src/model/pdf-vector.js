@@ -10,7 +10,7 @@
 // A "print" PDF is the same, with the page grown by the bleed so pictures
 // and backgrounds run past the edge, a TrimBox and BleedBox, and crop marks.
 
-import { elementMarkup, backgroundMarkup, transformOf } from './render.js';
+import { elementMarkup, backgroundMarkup, transformOf, effectPad } from './render.js';
 import { parseSvg, byId } from './svg-read.js';
 import { parseFont, subsetFont, glyphFor } from './sfnt.js';
 import { deflate } from './deflate.js';
@@ -376,7 +376,7 @@ const rgb = (c) => c.slice(0, 3).map(num).join(' ');
 
 const INHERITED = ['fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset',
   'fill-opacity', 'stroke-opacity', 'color', 'font-family', 'font-size', 'font-weight', 'font-style', 'letter-spacing', 'text-anchor', 'paint-order',
-  'fill-rule', 'clip-rule', 'xml:space'];
+  'fill-rule', 'clip-rule', 'xml:space', 'data-copy'];
 const ROOT_STYLE = { fill: '#000000', stroke: 'none', 'stroke-width': '1', 'stroke-linecap': 'butt', 'stroke-linejoin': 'miter', 'stroke-miterlimit': '4', color: '#000000', 'font-size': '16', 'font-weight': '400' };
 // Attributes that change how a picture looks in ways PDF doesn't do.
 const UNSUPPORTED_ATTRS = ['filter', 'mask', 'mix-blend-mode', 'style'];
@@ -641,22 +641,27 @@ function readStops(node, current) {
   if (!stops.length) return null;
   if (stops[0].offset > 0) stops.unshift({ ...stops[0], offset: 0 });
   if (stops[stops.length - 1].offset < 1) stops.push({ ...stops[stops.length - 1], offset: 1 });
-  // Two stops at one place make a hard edge: nudge them apart a hair.
-  for (let i = 1; i < stops.length; i++) if (stops[i].offset <= stops[i - 1].offset) stops[i] = { ...stops[i], offset: Math.min(1, stops[i - 1].offset + 1e-4) };
   if (stops.length === 1) stops.push({ ...stops[0], offset: 1 });
-  return stops;
+  // Two stops at one place make a hard edge: nudge them apart a hair. In
+  // thousandths, as the file writes them, so the stitching function's
+  // Bounds rise and stay inside its Domain (0 and 1, the ends' places).
+  const end = stops.length - 1;
+  if (end > 1000) no('gradient with too many stops');
+  const t = stops.map((s, i) => (i === 0 ? 0 : i === end ? 1000 : Math.round(s.offset * 1000)));
+  for (let i = 1; i < end; i++) t[i] = Math.max(t[i], t[i - 1] + 1);
+  for (let i = end - 1; i > 0; i--) t[i] = Math.min(t[i], t[i + 1] - 1);
+  return stops.map((s, i) => (s.offset === t[i] / 1000 ? s : { ...s, offset: t[i] / 1000 }));
 }
 
 // ---------- drawing a page ----------
 
 class Painter {
-  constructor(res, env, ctm) {
+  constructor(res, env) {
     this.res = res;
     this.env = env;
     this.ops = [];
-    this.ctm = ctm;
     this.defs = new Map();
-    this.glyphs = []; // [fontRecord key, gid, text] used, committed with the element
+    this.glyphs = []; // [fontRecord key, gid, text, stand-in?] used, committed with the element
     this.images = [];
   }
 
@@ -706,12 +711,8 @@ class Painter {
     const clip = a['clip-path'];
     const plain = isId(m) && opacity >= 0.999 && !clip;
     if (plain) return draw();
-    const outer = this.ctm;
     this.ops.push('q');
-    if (!isId(m)) {
-      this.ops.push(cm(m));
-      this.ctm = mul(m, this.ctm);
-    }
+    if (!isId(m)) this.ops.push(cm(m));
     if (clip) this.clip(clip);
     if (opacity < 0.999) {
       // See-through as one: a transparency group, painted at that opacity.
@@ -724,7 +725,6 @@ class Painter {
       this.ops.push(`/${this.res.gs(opacity)} gs /${form} Do`);
     } else draw();
     this.ops.push('Q');
-    this.ctm = outer;
   }
 
   group(node, style) {
@@ -925,10 +925,14 @@ class Painter {
     const spacing = parseFloat(style['letter-spacing']) || 0;
     const chars = [...text];
     const space = glyphFor(font, 32);
-    const gids = chars.map((ch) => {
+    const standIn = new Set(); // letters drawn with another's glyph (a space the font lacks, as a plain one)
+    const gids = chars.map((ch, i) => {
       const g = glyphFor(font, ch.codePointAt(0));
       if (g) return g;
-      if (/\s/.test(ch) && space) return space;
+      if (/\s/.test(ch) && space) {
+        standIn.add(i);
+        return space;
+      }
       return no(`${font.name} has no "${ch}"`);
     });
     // Width as PDF will set it, and as the browser measured it.
@@ -946,15 +950,20 @@ class Painter {
     const fo = style['fill-opacity'] === undefined ? 1 : parseFloat(style['fill-opacity']);
     const so = style['stroke-opacity'] === undefined ? 1 : parseFloat(style['stroke-opacity']);
     const name = this.fontName(key, font);
-    for (let i = 0; i < gids.length; i++) this.glyphs.push([key, gids[i], chars[i]]);
+    for (let i = 0; i < gids.length; i++) this.glyphs.push([key, gids[i], chars[i], standIn.has(i)]);
     const glyphHex = gids.map(hex4).join('');
     // Synthetic italic leans the letters a quarter; synthetic bold thickens their outline (as browsers do).
     const tm = `1 0 ${italic && !/italic|oblique/i.test(font.name) ? 0.25 : 0} -1 ${num(x0)} ${num(y)} Tm`;
     const bold = fakeBold ? size * (size <= 9 ? 1 / 24 : size >= 36 ? 1 / 32 : 1 / 24 + ((size - 9) / 27) * (1 / 32 - 1 / 24)) : 0;
+    // A copy drawn for looks (an effect's echo), or the outline under the
+    // letters, is no text of its own: an artifact, with an empty ActualText
+    // (which readers that skip no artifacts honour), so the words are copied,
+    // searched and read aloud once.
+    const copy = style['data-copy'] !== undefined;
     const passes = [];
     const strokeOn = stroke && sw > 0;
     if (strokeOn && style['paint-order']?.startsWith('stroke') && fill) {
-      passes.push({ mode: 1, stroke, width: sw + bold });
+      passes.push({ mode: 1, stroke, width: sw + bold, artifact: true });
       passes.push({ mode: bold ? 2 : 0, fill, stroke: bold ? fill : null, width: bold });
     } else if (fill || strokeOn) {
       const mode = fill && (strokeOn || bold) ? 2 : fill ? 0 : 1;
@@ -967,22 +976,29 @@ class Painter {
       if (ca < 0.999 || CA < 0.999) ops.push(`/${this.res.gs(ca, CA)} gs`);
       if (p.fill) ops.push(`${rgb(p.fill)} rg`);
       if (p.stroke) ops.push(`${rgb(p.stroke)} RG ${num(p.width)} w 1 j`);
-      ops.push(`BT /${name} ${num(size)} Tf ${num(spacing + extra)} Tc ${p.mode} Tr ${tm} <${glyphHex}> Tj ET Q`);
+      const text = `BT /${name} ${num(size)} Tf ${num(spacing + extra)} Tc ${p.mode} Tr ${tm} <${glyphHex}> Tj ET`;
+      ops.push(copy || p.artifact ? `/Artifact BMC /Span << /ActualText () >> BDC ${text} EMC EMC` : text, 'Q');
       this.ops.push(ops.join(' '));
     }
   }
 
   fontName(key, font) {
-    if (!this.res.fonts.has(key)) this.res.fonts.set(key, { name: `F${this.res.fonts.size + 1}`, font, glyphs: new Map(), committed: false });
+    if (!this.res.fonts.has(key)) this.res.fonts.set(key, { name: `F${this.res.fonts.size + 1}`, font, glyphs: new Map(), standIns: new Set(), committed: false });
     return this.res.fonts.get(key).name;
   }
 
   /** Keep what this element used: its glyphs, pictures and see-through groups. */
   commit() {
-    for (const [key, gid, ch] of this.glyphs) {
+    // A glyph reads back as its own letter: a stand-in's (an em space drawn
+    // as a space) only until the letter itself uses it.
+    for (const [key, gid, ch, standIn] of this.glyphs) {
       const r = this.res.fonts.get(key);
       r.committed = true;
-      if (!r.glyphs.has(gid)) r.glyphs.set(gid, ch);
+      if (!r.glyphs.has(gid) || (!standIn && r.standIns.has(gid))) {
+        r.glyphs.set(gid, ch);
+        if (standIn) r.standIns.add(gid);
+        else r.standIns.delete(gid);
+      }
     }
     for (const img of this.images) this.res.useImage(img);
     for (const [name, ops] of this.formsPending || []) {
@@ -1015,9 +1031,7 @@ export function rasterScale(doc, { print = false } = {}) {
 
 /** The page-px box a picture of `el` needs (under the matrix m of the groups around it). */
 function rasterBox(el, m, area) {
-  let pad = 2 + (el.strokeWidth || 0) + (el.outline?.width || 0) * 2;
-  if (el.type === 'text') pad += (el.size || 16) * 0.8;
-  if (el.shadow) pad += Math.abs(el.shadow.x ?? 0) + Math.abs(el.shadow.y ?? 8) + (el.shadow.blur ?? 16) * 1.5;
+  const pad = effectPad(el);
   const t = mul(parseTransform(transformOf(el)), m);
   const pts = [[-pad, -pad], [el.w + pad, -pad], [el.w + pad, el.h + pad], [-pad, el.h + pad]].map(([x, y]) => apply(t, x, y));
   const x0 = Math.max(area.x, Math.min(...pts.map((p) => p[0])));
@@ -1059,14 +1073,14 @@ function drawPage(doc, index, env, res, geo, wants) {
     const inv = invert(m);
     ops.push(`q ${isId(inv) ? '' : `${cm(inv)} `}${cm([box.w, 0, 0, -box.h, box.x, box.y + box.h])} /${name} Do Q`);
   };
-  const vector = (markup, m) => {
-    const p = new Painter(res, env, mul(m, base));
+  const vector = (markup) => {
+    const p = new Painter(res, env);
     p.draw(parseSvg(markup.markup), parseSvg(markup.defs));
     return p;
   };
   // The background, run into the bleed for print.
   try {
-    const p = vector(backgroundMarkup(doc, page, area.w, area.h, opts), [1, 0, 0, 1, area.x, area.y]);
+    const p = vector(backgroundMarkup(doc, page, area.w, area.h, opts));
     p.commit();
     ops.push(`q 1 0 0 1 ${num(area.x)} ${num(area.y)} cm`, ...p.ops, 'Q');
   } catch (e) {
@@ -1085,7 +1099,7 @@ function drawPage(doc, index, env, res, geo, wants) {
       return;
     }
     try {
-      const p = vector(elementMarkup(doc, el, opts), m);
+      const p = vector(elementMarkup(doc, el, opts));
       p.commit();
       ops.push(...p.ops);
     } catch (e) {

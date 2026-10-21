@@ -40,7 +40,7 @@ function aborted() {
  * One answer from the provider picked for a feature. Refused (before anything
  * is sent) while the feature is off. `signal` stops it.
  */
-export async function complete({ feature, system, prompt, json = false, maxTokens = 1024, signal }) {
+export async function complete({ feature, system, prompt, json = false, maxTokens = 4096, signal }) {
   if (!(await isOn(feature))) throw new Error(t('ai.off', { feature: featureName(feature, FEATURES[feature].name) }));
   const id = await providerFor(feature);
   const key = PROVIDERS[id].key ? await keyFor(id) : '';
@@ -125,6 +125,7 @@ export function aiSetup(feature, { onDone, onCancel } = {}) {
     };
     let filled = null; // the latest fill, which Save waits for (its rows are the ones read)
     pick.addEventListener('change', () => {
+      if (pick.value === id) return; // (the same one again: what's typed stays)
       id = pick.value;
       show('');
       filled = fill();

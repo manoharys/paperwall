@@ -316,6 +316,14 @@ test('[ON-05] online settings: each feature off until turned on, a provider each
 
   // Turned on stays on; picks stay picked.
   await page.check('[data-testid="online-on-photos"]');
+  // (Kept on this device before the page goes: saving is quick, not instant.)
+  await page.waitForFunction(() => new Promise((ok) => {
+    const req = indexedDB.open('paperwall');
+    req.onsuccess = () => {
+      const get = req.result.transaction('settings').objectStore('settings').get('online|on|photos');
+      get.onsuccess = () => ok(get.result === true);
+    };
+  }));
   await page.keyboard.press('Escape');
   await page.reload();
   await page.click('[data-testid="home-online"]');

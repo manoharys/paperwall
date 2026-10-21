@@ -11,6 +11,7 @@ import { sortedStops, normalizeHex } from './color.js';
 import { printDpi, DEFAULT_FILTERS, stillIsCurrent } from './doc.js';
 import { notePad } from './text-layout.js';
 import { parsePath } from './pdf-vector.js';
+import { effectPad } from './render.js';
 
 const enc = new TextEncoder();
 
@@ -26,6 +27,15 @@ const EMU_PER_INCH = 914400;
 // PowerPoint's limits on a slide's size.
 const MIN_SIDE = 914400;
 const MAX_SIDE = 51206400;
+
+/** A whole number within the schema's range for it. */
+const within = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(v)));
+// The schema's ranges: line spacing in points (ST_TextSpacingPoint), letter
+// spacing (ST_TextPoint), line widths (ST_LineWidth), margins and indents.
+const MAX_SPACING = 158400;
+const MAX_LETTER_SPACING = 400000;
+const MAX_LINE_WIDTH = 20116800;
+const MAX_MARGIN = 51206400;
 
 /** Text for XML: escaped, without the control characters XML forbids. */
 export function xmlText(s) {
@@ -49,8 +59,19 @@ const hasFilters = (el) => el.filters && Object.entries(DEFAULT_FILTERS).some(([
 
 const PRESET_TEXT = new Set(['none', undefined, null]);
 
-/** How an element goes into a slide: 'text', 'note', 'shape', 'line', 'picture', 'path', 'group', or 'raster'. */
-export function pptxKind(doc, el) {
+/** The picture a photo or video shows: "asset:<id>:file" (a video's still, where it starts) or a video's ":poster". */
+function pictureToken(doc, el) {
+  if (el.type !== 'video') return `asset:${el.assetId}:file`;
+  return stillIsCurrent(doc, el) ? `asset:${el.still}:file` : `asset:${el.assetId}:poster`;
+}
+
+/**
+ * How an element goes into a slide: 'text', 'note', 'shape', 'line',
+ * 'picture', 'path', 'group', or 'raster'. With `media` (the pictures there
+ * are, as buildPptx takes them), a photo whose picture isn't there is a
+ * 'raster' too.
+ */
+export function pptxKind(doc, el, media = null) {
   if (el.shadow) return 'raster';
   switch (el.type) {
     case 'text':
@@ -68,10 +89,11 @@ export function pptxKind(doc, el) {
       const asset = doc.assets[el.assetId];
       if (!asset) return el.assetId ? 'raster' : 'skip'; // an empty frame shows nothing in downloads
       if (el.type === 'video' && !asset.poster && !stillIsCurrent(doc, el)) return 'raster';
+      if (media && !media.has(pictureToken(doc, el))) return 'raster';
       return hasFilters(el) ? 'raster' : 'picture';
     }
     case 'group':
-      return (el.opacity ?? 1) >= 1 && el.children.every((c) => c.hidden || ['text', 'note', 'shape', 'line', 'path', 'picture', 'group', 'skip'].includes(pptxKind(doc, c))) ? 'group' : 'raster';
+      return (el.opacity ?? 1) >= 1 && el.children.every((c) => c.hidden || ['text', 'note', 'shape', 'line', 'path', 'picture', 'group', 'skip'].includes(pptxKind(doc, c, media))) ? 'group' : 'raster';
     default:
       return 'raster';
   }
@@ -79,9 +101,7 @@ export function pptxKind(doc, el) {
 
 /** The page-px box of an element turned by its rotation, padded for shadows and glows. */
 function pictureBox(doc, el) {
-  let pad = 2 + (el.strokeWidth || 0) + (el.outline?.width || 0) * 2;
-  if (el.type === 'text') pad += (el.size || 16) * 0.8;
-  if (el.shadow) pad += Math.abs(el.shadow.x ?? 0) + Math.abs(el.shadow.y ?? 8) + (el.shadow.blur ?? 16) * 1.5;
+  const pad = effectPad(el);
   const r = ((el.rotation || 0) * Math.PI) / 180;
   const cw = Math.abs(el.w * Math.cos(r)) + Math.abs(el.h * Math.sin(r));
   const ch = Math.abs(el.w * Math.sin(r)) + Math.abs(el.h * Math.cos(r));
@@ -94,12 +114,20 @@ function pictureBox(doc, el) {
   return x1 - x0 > 0 && y1 - y0 > 0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
 }
 
-/** Which elements of these pages need a picture: [{ page, key, box }] (box in page px). */
-export function planPptx(doc, pages) {
+/**
+ * Which elements of these pages need a picture: [{ page, key, box }] (box in
+ * page px; key '@bg' for a background photo whose picture isn't in `media`,
+ * when given, as for pptxKind).
+ */
+export function planPptx(doc, pages, media = null) {
   const wants = [];
   for (const i of pages) {
+    const bg = doc.pages[i].background;
+    if (media && bg?.type === 'image' && doc.assets[bg.assetId] && !media.has(`asset:${bg.assetId}:file`)) {
+      wants.push({ page: i, key: '@bg', box: { x: 0, y: 0, w: doc.width, h: doc.height } });
+    }
     for (const el of doc.pages[i].elements) {
-      if (el.hidden || pptxKind(doc, el) !== 'raster') continue;
+      if (el.hidden || pptxKind(doc, el, media) !== 'raster') continue;
       const box = pictureBox(doc, el);
       if (box) wants.push({ page: i, key: el.id, box });
     }
@@ -116,21 +144,33 @@ function color(hex, alpha = 1) {
   return a < 100000 ? `<a:srgbClr val="${h}"><a:alpha val="${a}"/></a:srgbClr>` : `<a:srgbClr val="${h}"/>`;
 }
 
-/** A fill: a color, a gradient, or none. */
-function fill(paint, alpha = 1) {
+/** A fill for a w × h box: a color, a gradient, or none. */
+function fill(paint, alpha = 1, w = 1, h = 1) {
   if (!paint) return '<a:noFill/>';
   if (typeof paint === 'string') {
     if (!normalizeHex(paint)) return '<a:noFill/>';
     return `<a:solidFill>${color(paint, alpha)}</a:solidFill>`;
   }
-  const stops = sortedStops(paint);
-  if (!stops.length) return '<a:noFill/>';
-  const gs = (stops.length === 1 ? [stops[0], { ...stops[0], offset: 1 }] : stops)
-    .map((s) => `<a:gs pos="${Math.round(Math.max(0, Math.min(1, s.offset)) * 100000)}">${color(s.color, alpha * (s.opacity ?? 1))}</a:gs>`).join('');
-  if (paint.type === 'radial') return `<a:gradFill rotWithShape="1"><a:gsLst>${gs}</a:gsLst><a:path path="circle"><a:fillToRect l="50000" t="50000" r="50000" b="50000"/></a:path></a:gradFill>`;
-  // Our angle points the way the colors go (0 up, 90 right); PowerPoint's turns clockwise from "right".
-  const ang = ((((paint.angle ?? 180) - 90) % 360) + 360) % 360;
-  return `<a:gradFill rotWithShape="1"><a:gsLst>${gs}</a:gsLst><a:lin ang="${Math.round(ang * 60000)}" scaled="0"/></a:gradFill>`;
+  const sorted = sortedStops(paint);
+  if (!sorted.length) return '<a:noFill/>';
+  let stops = (sorted.length === 1 ? [sorted[0], { ...sorted[0], offset: 1 }] : sorted).map((s) => ({ ...s, offset: Math.max(0, Math.min(1, s.offset)) }));
+  const gs = () => stops.map((s) => `<a:gs pos="${Math.round(s.offset * 100000)}">${color(s.color, alpha * (s.opacity ?? 1))}</a:gs>`).join('');
+  if (paint.type === 'radial') return `<a:gradFill rotWithShape="1"><a:gsLst>${gs()}</a:gsLst><a:path path="circle"><a:fillToRect l="50000" t="50000" r="50000" b="50000"/></a:path></a:gradFill>`;
+  // The page draws it in the box's own units (objectBoundingBox): from one
+  // side of the middle to the other along our angle (0 up, 90 right) in a
+  // unit square, stretched to w × h. So the colors run, on the slide, along
+  // (sin a / w, -cos a / h); PowerPoint's angle turns clockwise from "right".
+  const a = ((paint.angle ?? 180) * Math.PI) / 180;
+  const ang = ((((Math.atan2(-Math.cos(a) / (h || 1), Math.sin(a) / (w || 1)) * 180) / Math.PI) % 360) + 360) % 360;
+  // PowerPoint's run of colors reaches the box's corners, |sin a| + |cos a|
+  // times the page's: the stops move in toward the middle by as much, with
+  // the end colors on beyond them, as the page pads them.
+  const reach = Math.abs(Math.sin(a)) + Math.abs(Math.cos(a));
+  if (reach > 1.0001) {
+    stops = stops.map((s) => ({ ...s, offset: 0.5 + (s.offset - 0.5) / reach }));
+    stops = [{ ...stops[0], offset: 0 }, ...stops, { ...stops[stops.length - 1], offset: 1 }];
+  }
+  return `<a:gradFill rotWithShape="1"><a:gsLst>${gs()}</a:gsLst><a:lin ang="${Math.round(ang * 60000) % 21600000}" scaled="0"/></a:gradFill>`;
 }
 
 function line(el, emu, alpha) {
@@ -139,7 +179,7 @@ function line(el, emu, alpha) {
   const dash = el.dash === 'dashed' ? '<a:prstDash val="dash"/>' : el.dash === 'dotted' ? '<a:prstDash val="sysDot"/>' : '';
   const round = el.type === 'draw' || el.dash === 'dotted' || el.dash === 'dashed';
   const ends = el.type === 'line' ? `${el.startCap === 'arrow' ? '<a:headEnd type="triangle" w="med" len="med"/>' : ''}${el.endCap === 'arrow' ? '<a:tailEnd type="triangle" w="med" len="med"/>' : ''}` : '';
-  return `<a:ln w="${Math.round(sw * emu)}"${round ? ' cap="rnd"' : ''}><a:solidFill>${color(el.stroke, alpha)}</a:solidFill>${dash}<a:round/>${ends}</a:ln>`;
+  return `<a:ln w="${within(sw * emu, 0, MAX_LINE_WIDTH)}"${round ? ' cap="rnd"' : ''}><a:solidFill>${color(el.stroke, alpha)}</a:solidFill>${dash}<a:round/>${ends}</a:ln>`;
 }
 
 /** Where an element sits: offset, size, turn and flips. */
@@ -180,10 +220,11 @@ function geometry(shape, el, emu, d) {
 // ---------- slides ----------
 
 class Slide {
-  constructor(doc, emu, media) {
+  constructor(doc, emu, media, have) {
     this.doc = doc;
     this.emu = emu;
     this.media = media; // token -> the picture, with its file name once used
+    this.have = have; // the pictures there are (env.media), for pptxKind
     this.rels = []; // [rId, type, target]
     this.nextId = 2;
     this.images = new Map(); // media name -> rId
@@ -203,7 +244,7 @@ class Slide {
   }
 
   element(el) {
-    switch (pptxKind(this.doc, el)) {
+    switch (pptxKind(this.doc, el, this.have)) {
       case 'text':
         return this.text(el);
       case 'note':
@@ -229,7 +270,7 @@ class Slide {
 
   shape(el) {
     const a = el.opacity ?? 1;
-    return `<p:sp>${this.nv('Sp', `Shape ${this.nextId}`)}<p:spPr>${xfrm(el, this.emu)}${geometry(el.shape, el, this.emu, shapePath(el))}${fill(el.fill, a)}${line(el, this.emu, a)}</p:spPr></p:sp>`;
+    return `<p:sp>${this.nv('Sp', `Shape ${this.nextId}`)}<p:spPr>${xfrm(el, this.emu)}${geometry(el.shape, el, this.emu, shapePath(el))}${fill(el.fill, a, el.w, el.h)}${line(el, this.emu, a)}</p:spPr></p:sp>`;
   }
 
   line(el) {
@@ -246,8 +287,7 @@ class Slide {
 
   picture(el) {
     // (A video shows its still, where it starts, else the poster taken when it was added.)
-    const token = el.type !== 'video' ? `asset:${el.assetId}:file` : stillIsCurrent(this.doc, el) ? `asset:${el.still}:file` : `asset:${el.assetId}:poster`;
-    const m = this.media(token);
+    const m = this.media(pictureToken(this.doc, el));
     if (!m) return '';
     const rid = this.imageRel(m.name);
     const c = el.crop || { x: 0, y: 0, w: 1, h: 1 };
@@ -285,19 +325,23 @@ class Slide {
       el.underline ? 'u="sng"' : '',
       el.strike ? 'strike="sngStrike"' : '',
       el.caps ? 'cap="all"' : '',
-      el.letterSpacing ? `spc="${Math.round(pt(el.letterSpacing) * 100)}"` : '',
+      el.letterSpacing ? `spc="${within(pt(el.letterSpacing) * 100, -MAX_LETTER_SPACING, MAX_LETTER_SPACING)}"` : '',
       'dirty="0"',
     ].filter(Boolean).join(' ');
-    const outline = el.outline?.width ? `<a:ln w="${Math.round(el.outline.width * 2 * emu)}"><a:solidFill>${color(el.outline.color, a)}</a:solidFill></a:ln>` : '';
+    const outline = el.outline?.width ? `<a:ln w="${within(el.outline.width * 2 * emu, 0, MAX_LINE_WIDTH)}"><a:solidFill>${color(el.outline.color, a)}</a:solidFill></a:ln>` : '';
     const highlight = el.highlight?.color && normalizeHex(el.highlight.color) ? `<a:highlight>${color(el.highlight.color)}</a:highlight>` : '';
     const font = xmlText(el.font || 'Inter');
     const rPr = (tag) => `<a:${tag} ${run}>${outline}<a:solidFill>${color(el.color, a)}</a:solidFill>${highlight}<a:latin typeface="${font}"/><a:cs typeface="${font}"/></a:${tag}>`;
     const algn = { left: 'l', center: 'ctr', right: 'r', justify: 'just' }[el.align] || 'l';
-    const spacing = `<a:lnSpc><a:spcPts val="${Math.round(pt(el.size * (el.lineHeight || 1.2)) * 100)}"/></a:lnSpc>`;
-    const indent = Math.round(el.size * 1.1 * emu);
+    const spacing = `<a:lnSpc><a:spcPts val="${within(pt(el.size * (el.lineHeight || 1.2)) * 100, 0, MAX_SPACING)}"/></a:lnSpc>`;
+    const indent = within(el.size * 1.1 * emu, 0, MAX_MARGIN);
     // (A document's text cut for its sheets numbers on from `listStart`, and
     // when it `continues` a list item, its first line has no mark of its own.)
-    const startAt = el.list === 'number' && el.listStart > 1 ? ` startAt="${Math.round(el.listStart)}"` : '';
+    // Numbers count on over blank lines, as the page counts them. A paragraph
+    // without a number ends PowerPoint's run of numbers, so the run after it
+    // starts where the count is (startAt), as does a piece that starts later.
+    let next = Math.max(1, Math.round(el.listStart || 1));
+    let runStart = 0; // the number the run of numbered paragraphs began at (0: not in one)
     const paras = String(el.text ?? '').split('\n').map((t, i) => {
       let bullet = '<a:buNone/>';
       let margin = '';
@@ -307,9 +351,12 @@ class Slide {
         bullet = '<a:buFont typeface="Arial"/><a:buChar char="•"/>';
         margin = ` marL="${indent}" indent="-${indent}"`;
       } else if (el.list === 'number' && t.trim()) {
-        bullet = `<a:buFont typeface="+mj-lt"/><a:buAutoNum type="arabicPeriod"${startAt}/>`;
+        if (!runStart) runStart = next;
+        next++;
+        bullet = `<a:buFont typeface="+mj-lt"/><a:buAutoNum type="arabicPeriod"${runStart > 1 ? ` startAt="${runStart}"` : ''}/>`;
         margin = ` marL="${indent}" indent="-${indent}"`;
       }
+      if (!bullet.includes('buAutoNum')) runStart = 0;
       const pPr = `<a:pPr algn="${algn}"${margin}>${spacing}${bullet}</a:pPr>`;
       return `<a:p>${pPr}${t ? `<a:r>${rPr('rPr')}<a:t>${xmlText(t)}</a:t></a:r>` : ''}${rPr('endParaRPr')}</a:p>`;
     }).join('');
@@ -333,7 +380,7 @@ class Slide {
   background(page) {
     const bg = page.background;
     if (!bg) return '';
-    const f = bg.type === 'color' ? fill(bg.color) : bg.type === 'gradient' ? fill(bg.gradient) : bg.type === 'image' ? fill(bg.color || '#ffffff') : null;
+    const f = bg.type === 'color' ? fill(bg.color) : bg.type === 'gradient' ? fill(bg.gradient, 1, this.doc.width, this.doc.height) : bg.type === 'image' ? fill(bg.color || '#ffffff') : null;
     return f ? `<p:bg><p:bgPr>${f}<a:effectLst/></p:bgPr></p:bg>` : '';
   }
 
@@ -415,7 +462,7 @@ function notesOf(page) {
  * The .pptx file. env: { media: Map(token -> { bytes, ext: 'png'|'jpeg',
  * width, height }) for the design's pictures ("asset:<id>:file", or
  * ":poster" for a video's), pictures: Map("<page>:<key>" -> PNG bytes) for
- * the elements planPptx listed, title }.
+ * the elements planPptx (given the same media) listed, title }.
  */
 export function buildPptx(doc, pages, env = {}) {
   if (!pages.length) throw new Error('A presentation needs at least one slide');
@@ -435,23 +482,25 @@ export function buildPptx(doc, pages, env = {}) {
     }
     return named.get(token);
   };
-  const plan = new Map(planPptx(doc, pages).map((w) => [`${w.page}:${w.key}`, w.box]));
+  const plan = new Map(planPptx(doc, pages, env.media).map((w) => [`${w.page}:${w.key}`, w.box]));
   const withNotes = pages.filter((i) => notesOf(doc.pages[i]));
   const slides = pages.map((index, n) => {
     const page = doc.pages[index];
-    const s = new Slide(doc, emu, media);
+    const s = new Slide(doc, emu, media, env.media);
     s.rel(`${REL}/slideLayout`, '../slideLayouts/slideLayout1.xml');
-    const behind = s.backgroundPicture(page);
+    // A planned picture (made by the app) as it is, upright in its box.
+    const planned = (key) => {
+      const png = env.pictures?.get(key);
+      if (!png) return '';
+      const name = `image${mediaFiles.length + 1}.png`;
+      mediaFiles.push([name, png]);
+      return s.raster(name, plan.get(key));
+    };
+    // (A background photo that couldn't be read comes as a picture of the background.)
+    const behind = plan.has(`${index}:@bg`) ? planned(`${index}:@bg`) : s.backgroundPicture(page);
     const shapes = page.elements.filter((el) => !el.hidden).map((el) => {
       const key = `${index}:${el.id}`;
-      if (plan.has(key)) {
-        const png = env.pictures?.get(key);
-        if (!png) return '';
-        const name = `image${mediaFiles.length + 1}.png`;
-        mediaFiles.push([name, png]);
-        return s.raster(name, plan.get(key));
-      }
-      return s.element(el);
+      return plan.has(key) ? planned(key) : s.element(el);
     }).join('');
     if (notesOf(page)) s.rel(`${REL}/notesSlide`, `../notesSlides/notesSlide${withNotes.indexOf(index) + 1}.xml`);
     const xml = `${XML}<p:sld ${NS}><p:cSld>${s.background(page)}<p:spTree>${GROUP_ROOT}${behind}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;

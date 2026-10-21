@@ -91,6 +91,9 @@ export function parseResponse(provider, data) {
   // An answer cut off at the length limit isn't used: it would replace whole text with part of it.
   const cut = { claude: data.stop_reason === 'max_tokens', openai: data.choices?.[0]?.finish_reason === 'length', gemini: data.candidates?.[0]?.finishReason === 'MAX_TOKENS', ollama: data.done_reason === 'length' }[provider];
   if (cut) throw new Error('The answer was too long and got cut off. Try a shorter text, or a shorter request.');
+  // Stopped partway by the provider's own checks: not used either (it would be part of an answer).
+  const stopped = { claude: data.stop_reason === 'refusal', openai: data.choices?.[0]?.finish_reason === 'content_filter', gemini: ['SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII'].includes(data.candidates?.[0]?.finishReason) }[provider];
+  if (stopped) throw new Error('The provider stopped its answer partway. Try different words.');
   if (!text.trim()) throw new Error('The answer came back empty. Try again.');
   return text;
 }

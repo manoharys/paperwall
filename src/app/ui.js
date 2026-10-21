@@ -313,6 +313,25 @@ export function loadImage(src) {
   });
 }
 
+// Pictures drawn for downloads are kept to a size every browser's canvas can hold.
+const MAX_SIDE = 16000;
+const MAX_PIXELS = 120e6;
+
+/** The scale to draw a w × h px picture at: as wanted, or less to fit those limits. */
+export function canvasScale(w, h, wanted) {
+  const side = MAX_SIDE / Math.max(w, h);
+  const area = Math.sqrt(MAX_PIXELS / (w * h));
+  return Math.max(0.05, Math.min(wanted, side, area));
+}
+
+export function toBlob(canvas, type, quality) {
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error(t('export.tooLarge')))), type, quality));
+}
+
+export async function blobBytes(blob) {
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
 export function download(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = h('a', { href: url, download: filename, style: { display: 'none' } });

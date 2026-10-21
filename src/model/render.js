@@ -148,6 +148,27 @@ function renderLine(ctx, el) {
   return out;
 }
 
+/**
+ * How far past its box an element can draw (page px): strokes, outlines,
+ * the room around letters, shadows. For pictures of single elements. A
+ * group's is as far as its elements reach past its box (each padded, and
+ * turned as it is, in the group's own terms), then its own shadow.
+ */
+export function effectPad(el) {
+  let pad = 2 + (el.strokeWidth || 0) + (el.outline?.width || 0) * 2;
+  if (el.type === 'text') pad += (el.size || 16) * 0.8;
+  if (el.type === 'group') {
+    for (const c of el.children || []) {
+      if (c.hidden) continue;
+      const p = effectPad(c);
+      const b = boundsOf({ x: c.x - p, y: c.y - p, w: c.w + p * 2, h: c.h + p * 2, rotation: c.rotation });
+      pad = Math.max(pad, -b.x, -b.y, b.x + b.w - el.w, b.y + b.h - el.h);
+    }
+  }
+  if (el.shadow) pad += Math.abs(el.shadow.x ?? 0) + Math.abs(el.shadow.y ?? 8) + (el.shadow.blur ?? 16) * 1.5;
+  return pad;
+}
+
 function renderImage(ctx, el) {
   return renderPicture(ctx, el, el.assetId ? ctx.href(el.assetId) : '');
 }
@@ -305,7 +326,9 @@ function textEffect(ctx, el, draw) {
   const off = (fx.offset ?? 0.08) * s;
   const thick = Math.max(1, (fx.thickness ?? 0.035) * s);
   const hollow = ` fill="none" stroke="${esc(el.color)}" stroke-width="${f(thick)}" stroke-linejoin="round"`;
-  const at = (dx, dy, paint, extra = '') => `<g transform="translate(${f(dx)} ${f(dy)})"${extra}>${draw(paint)}</g>`;
+  // An offset copy, for looks only: marked so writers of text (the PDF) know
+  // it isn't the words themselves.
+  const at = (dx, dy, paint, extra = '') => `<g transform="translate(${f(dx)} ${f(dy)})" data-copy="1"${extra}>${draw(paint)}</g>`;
   const glowFilter = (blur, strength) => {
     const id = ctx.id('glow');
     const blurs = strength > 1 ? `<feGaussianBlur in="SourceAlpha" stdDeviation="${f(blur)}" result="b1"/><feGaussianBlur in="SourceAlpha" stdDeviation="${f(blur / 3)}" result="b2"/>` : `<feGaussianBlur in="SourceAlpha" stdDeviation="${f(blur)}" result="b1"/>`;
@@ -555,7 +578,8 @@ function renderBackground(ctx, bg, w, h) {
 /**
  * Render one page as a complete SVG document.
  * opts: measure, assetHref, fontCss (embedded @font-face rules), transparent,
- * editor (adds data-id attributes), idPrefix, scale (output size multiplier).
+ * editor (adds data-id attributes), idPrefix, scale (output size multiplier),
+ * bleed (page px the background runs past each edge, as the print PDF's does).
  */
 export function renderPage(doc, pageIndex, opts = {}) {
   const page = doc.pages[pageIndex];
@@ -608,7 +632,8 @@ function svgDocument(ctx, body, w, h, opts, extra = '') {
  * began), animated elements are drawn where they are at that moment.
  */
 function pageBody(ctx, page, w, h, opts) {
-  const bg = opts.transparent ? '' : renderBackground(ctx, page.background, w, h);
+  const b = opts.bleed || 0;
+  const bg = opts.transparent ? '' : b > 0 ? `<g transform="translate(${f(-b)} ${f(-b)})">${renderBackground(ctx, page.background, f(w + b * 2), f(h + b * 2))}</g>` : renderBackground(ctx, page.background, w, h);
   if (opts.time === undefined) return bg + page.elements.map((el) => renderElement(ctx, el)).join('');
   const before = ctx.motion;
   ctx.motion = { page, order: readingOrder(page), time: opts.time, size: Math.min(w, h) };
