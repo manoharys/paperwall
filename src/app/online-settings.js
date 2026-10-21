@@ -6,6 +6,7 @@ import { h, toast, dialog } from './ui.js';
 import { toggle, selectField } from './widgets.js';
 import { PROVIDERS, FEATURES, providersFor, isOn, setOn, providerFor, setProviderFor, keyFor, setKey, forgetKeys, ollamaUrl, setOllamaUrl, providerFetch } from './online.js';
 import { searchUrl, authHeaders } from '../model/photos.js';
+import { authHeaders as aiHeaders } from '../model/ai.js';
 
 /** What each feature sends to its provider, in plain words. */
 const SENDS = {
@@ -23,10 +24,10 @@ export async function testProvider(id) {
   const key = p.key ? await keyFor(id) : '';
   if (p.key && !key) throw new Error(`Add your ${p.name} key first.`);
   if (p.for.includes('photos')) return providerFetch(id, searchUrl(id, 'flower', 1, 1), { headers: authHeaders(id, key) });
-  if (id === 'claude') return providerFetch(id, 'https://api.anthropic.com/v1/models', { headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' } });
-  if (id === 'openai') return providerFetch(id, 'https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${key}` } });
-  // (The key in a header, never in an address where logs would keep it.)
-  if (id === 'gemini') return providerFetch(id, 'https://generativelanguage.googleapis.com/v1beta/models', { headers: { 'x-goog-api-key': key } });
+  // (The same headers real requests send: src/model/ai.js.)
+  if (id === 'claude') return providerFetch(id, 'https://api.anthropic.com/v1/models', { headers: aiHeaders(id, key) });
+  if (id === 'openai') return providerFetch(id, 'https://api.openai.com/v1/models', { headers: aiHeaders(id, key) });
+  if (id === 'gemini') return providerFetch(id, 'https://generativelanguage.googleapis.com/v1beta/models', { headers: aiHeaders(id, key) });
   if (id === 'ollama') return providerFetch(id, `${await ollamaUrl()}/api/tags`);
   throw new Error(`There's no test for ${p.name} yet.`);
 }

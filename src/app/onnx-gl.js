@@ -187,7 +187,11 @@ export function glRunner({ software = false } = {}) {
     return null;
   }
   const gl = canvas.getContext('webgl2', { antialias: false, depth: false, stencil: false, alpha: true, premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
-  if (!gl || !gl.getExtension('EXT_color_buffer_float')) return null;
+  if (!gl) return null;
+  if (!gl.getExtension('EXT_color_buffer_float')) {
+    gl.getExtension('WEBGL_lose_context')?.loseContext(); // (not kept: browsers allow only a few)
+    return null;
+  }
   if (!software && isSoftware(gl)) {
     gl.getExtension('WEBGL_lose_context')?.loseContext();
     return null;

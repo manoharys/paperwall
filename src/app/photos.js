@@ -22,6 +22,8 @@ async function pictureBlob(provider, url) {
   return new Blob([blob], { type: mime });
 }
 
+let listening = null; // the Photos view showing now, told when online settings change
+
 /**
  * The Photos view of the Uploads tab. `state` lives on the insert panel, so
  * results stay while other tabs are open.
@@ -203,7 +205,10 @@ export function photosView(ed, state) {
   };
 
   // Settings changed elsewhere (the Online extras dialog): show them, while this is on screen.
+  // (One view listens at a time: an older one, replaced, stops.)
+  window.removeEventListener('paperwall:online-changed', listening);
   const onChange = () => (wrap.isConnected ? fill() : window.removeEventListener('paperwall:online-changed', onChange));
+  listening = onChange;
   window.addEventListener('paperwall:online-changed', onChange);
   fill();
   return wrap;

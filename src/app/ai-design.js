@@ -31,12 +31,14 @@ export function aiDesignBlock({ newDesign }) {
       controller = null;
       return say(aiSetup('design', { onDone: () => (say(), make()), onCancel: () => say() }));
     }
+    const providerId = await providerFor('design');
+    if (job.signal.aborted) return void (controller = null); // (stopped meanwhile: AI setup was opened)
     const preset = presetById(size.value);
     const n = +count.value;
     go.disabled = true;
     say(h('div', { class: 'ai-progress', role: 'status', 'data-testid': 'ai-design-progress' },
       h('span', { class: 'ai-spinner', 'aria-hidden': 'true' }),
-      h('span', null, `Designing with ${PROVIDERS[await providerFor('design')].name}…`),
+      h('span', null, `Designing with ${PROVIDERS[providerId].name}…`),
       h('button', { type: 'button', class: 'btn small', 'data-testid': 'ai-design-cancel', onClick: () => job.abort() }, 'Cancel')));
     try {
       const { system, prompt } = designPrompt(description, { width: preset.w, height: preset.h, count: n });
