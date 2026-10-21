@@ -5,15 +5,27 @@
 import { en } from './locales/en.js';
 import { es } from './locales/es.js';
 import { fr } from './locales/fr.js';
+import { de } from './locales/de.js';
+import { ptBR } from './locales/pt-BR.js';
+import { hi } from './locales/hi.js';
+import { ar } from './locales/ar.js';
+import { ja } from './locales/ja.js';
+import { kn } from './locales/kn.js';
 
 /** Every language the interface speaks, named in itself. */
 export const LANGUAGES = [
   { code: 'en', name: 'English' },
   { code: 'es', name: 'Español' },
   { code: 'fr', name: 'Français' },
+  { code: 'de', name: 'Deutsch' },
+  { code: 'pt-BR', name: 'Português (Brasil)' },
+  { code: 'hi', name: 'हिन्दी' },
+  { code: 'ar', name: 'العربية', rtl: true },
+  { code: 'ja', name: '日本語' },
+  { code: 'kn', name: 'ಕನ್ನಡ' },
 ];
 
-export const CATALOGS = { en, es, fr };
+export const CATALOGS = { en, es, fr, de, 'pt-BR': ptBR, hi, ar, ja, kn };
 
 let lang = 'en';
 

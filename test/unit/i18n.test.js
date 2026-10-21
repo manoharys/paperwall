@@ -10,6 +10,13 @@ const en = CATALOGS.en;
 const same = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
 const show = (s) => `{${[...s].join(', ')}}`;
 
+test('at least eight languages, one of them right to left', () => {
+  assert.ok(LANGUAGES.length >= 8);
+  for (const code of ['en', 'es', 'fr', 'de', 'pt-BR', 'hi', 'ar', 'ja']) assert.ok(CATALOGS[code], code);
+  assert.deepEqual(LANGUAGES.filter((l) => l.rtl).map((l) => l.code), ['ar']);
+  assert.deepEqual(Object.keys(CATALOGS).sort(), LANGUAGES.map((l) => l.code).sort());
+});
+
 for (const { code } of LANGUAGES.filter((l) => l.code !== 'en')) {
   test(`${code} has every key, with the same placeholders`, () => {
     const cat = CATALOGS[code];
@@ -49,6 +56,8 @@ test('every t() key in the app is in the English catalog', () => {
 
 test('the browser\'s language picks the interface, near matches included', () => {
   assert.equal(pickLanguage(['es-MX', 'en']), 'es');
+  assert.equal(pickLanguage(['pt-PT']), 'pt-BR');
+  assert.equal(pickLanguage(['de-AT']), 'de');
   assert.equal(pickLanguage(['zz', 'fr-CA']), 'fr');
   assert.equal(pickLanguage(['zz']), 'en');
   assert.equal(pickLanguage([]), 'en');
@@ -65,6 +74,11 @@ test('t fills placeholders, picks plural forms and falls back to English', () =>
     assert.equal(language(), 'es');
     assert.equal(t('common.pages', { n: 2 }), '2 páginas');
     assert.equal(formatNumber(1.5), '1,5');
+    setLanguage('ar');
+    // Arabic has six plural forms; two pages is its own.
+    assert.notEqual(t('common.pages', { n: 2 }), t('common.pages', { n: 3 }));
+    setLanguage('ja');
+    assert.ok(t('common.pages', { n: 5 }).includes('5'));
   } finally {
     setLanguage('en');
   }
