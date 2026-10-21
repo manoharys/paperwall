@@ -74,7 +74,8 @@ export async function providerFetch(id, url, init = {}) {
   } catch {
     throw new Error(id === 'ollama' ? "Couldn't reach Ollama. Is it running, with OLLAMA_ORIGINS set to allow this page?" : `Couldn't reach ${p.name}. Are you online?`);
   }
-  if (res.status === 401 || res.status === 403) throw new Error(`${p.name} didn't accept the key. Check it in Settings → Online extras.`);
+  if ((res.status === 401 || res.status === 403) && p.key) throw new Error(`${p.name} didn't accept the key. Check it in Settings → Online extras.`);
+  if (res.status === 403 && id === 'ollama') throw new Error('Ollama turned this page away. Start it with OLLAMA_ORIGINS set to allow this page.');
   if (res.status === 429) throw new Error(`${p.name} says too many requests. Try again in a little while.`);
   if (!res.ok) {
     // (The provider's own reason, when it gives one: a low balance, too long a request.)

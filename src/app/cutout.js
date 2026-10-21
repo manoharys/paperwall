@@ -191,7 +191,7 @@ export function refineCutout(ed, el, refine) {
     if (!id) return;
     cuts.set(id, { ...cut, refine });
     ed.emit('selection'); // (the panel shows Refine edges for the new picture)
-  }).catch(() => null);
+  }).catch((e) => toast(e?.message || "Those edges couldn't be redone.", 'error'));
   refining.set(el.id, job);
   job.then(() => refining.get(el.id) === job && refining.delete(el.id));
   return job;

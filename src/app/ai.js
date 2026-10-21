@@ -38,7 +38,7 @@ function aborted() {
  * One answer from the provider picked for a feature. Refused (before anything
  * is sent) while the feature is off. `signal` stops it.
  */
-export async function complete({ feature, system, prompt, json = false, maxTokens = 1024, signal }) {
+export async function complete({ feature, system, prompt, json = false, maxTokens = 4096, signal }) {
   if (!(await isOn(feature))) throw new Error(`${FEATURES[feature].name} is off. Turn it on first.`);
   const id = await providerFor(feature);
   const key = PROVIDERS[id].key ? await keyFor(id) : '';
