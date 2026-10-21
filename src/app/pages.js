@@ -2,7 +2,7 @@
 
 import { h, icon, iconButton, clear, debounce, dialog, toast, lazily, forget, pressable } from './ui.js';
 import { renderPage, renderFrame } from '../model/render.js';
-import { animationsEnd, hasLoop, soundFade, pageDuration, pageFrame, transitionOf, timeline } from '../model/motion.js';
+import { animationsEnd, keepsMoving, hasLoop, soundFade, pageDuration, pageFrame, transitionOf, timeline } from '../model/motion.js';
 import { VideoFrames, videosOn, blobUrlFor } from './media.js';
 import { measure } from './fonts.js';
 import { visiblePages, pageName, pageLabel, soundtrackOf } from '../model/doc.js';
@@ -241,8 +241,7 @@ export function present(editor, canvas, { autoplay = false, only = false } = {})
     live = false;
     taken.clear(); // a page's videos start afresh: no picture from an earlier visit
     const page = doc.pages[shown[at]];
-    info = { end: animationsEnd(page), loops: hasLoop(page), videos: videosOn(doc, [shown[at]]) };
-    info.keeps = info.loops || info.videos.length > 0; // (as keepsMoving)
+    info = { end: animationsEnd(page), keeps: keepsMoving(page, doc.assets), loops: hasLoop(page), videos: videosOn(doc, [shown[at]]) };
     videos.pauseAll();
     videos.start(info.videos, started);
     // Back before the page Play started on: the sound starts over from there

@@ -245,7 +245,8 @@ export class VideoFrames {
   /** Whatever `el`'s video is showing now, at `scale` (screen px per page px). */
   capture(el, scale = 1.5) {
     const p = this.players.get(el.id);
-    return p && p.video.readyState >= 2 ? this.grab(p, el, scale) : null;
+    // Not while starting over or seeking: it'd be a picture from another moment.
+    return p && !p.fresh && !p.video.seeking && p.video.readyState >= 2 ? this.grab(p, el, scale) : null;
   }
 
   grab({ video: v, alpha }, el, scale = 1.5) {

@@ -3,6 +3,8 @@
 // says where everything is, so playing, presenting and every download
 // (GIF, video) show exactly the same thing.
 
+import { boundsOf } from './geometry.js';
+
 /** Animations an element can come in with. `loop` ones keep moving after. */
 export const ANIMATIONS = {
   none: { name: 'None' },
@@ -65,7 +67,8 @@ export function transitionOf(page) {
 export function readingOrder(page) {
   // Rows first (an element within 8 px of the row's top joins it), then each
   // row left to right: the same order whatever the layers' order.
-  const els = page.elements.filter((el) => !el.hidden).sort((a, b) => a.y - b.y || a.x - b.x);
+  // Where each element shows (a turned one by its turned outline).
+  const els = page.elements.filter((el) => !el.hidden).map((el) => ({ id: el.id, ...boundsOf(el) })).sort((a, b) => a.y - b.y || a.x - b.x);
   const rows = [];
   for (const el of els) {
     const row = rows[rows.length - 1];
