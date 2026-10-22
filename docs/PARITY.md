@@ -90,4 +90,3 @@ smaller way.
 | Real-time collaboration, comments, share links | Not planned: there's no server. You can send the design file. |
 | Cloud sync across devices | Left out on purpose. Save to a file to move a design. |
 | Websites, social scheduling, print ordering | Out of scope. |
-

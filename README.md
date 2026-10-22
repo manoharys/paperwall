@@ -136,7 +136,6 @@ their templates, fonts, icons, illustrations, text or look. The rules are in
 [CLEAN_ROOM.md](CLEAN_ROOM.md). Every template, icon and sticker was made for
 Paperwall.
 
-
 ## License
 
 [MIT](LICENSE) © 2026 Manohar. Templates, icons and stickers made for Paperwall
