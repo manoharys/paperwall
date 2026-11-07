@@ -45,7 +45,9 @@ npm run scoreboard   # everything, and regenerates SCOREBOARD.md
   as CC0.
 - **Icons and stickers.** Draw them yourself on the 24 × 24 (icons) or
   100 × 100 (stickers) grid in `src/model/graphics.js`. CC0.
-- **Translations** of the interface (coming: one file per language).
+- **Translations.** Each language is one file in `src/app/locales` (nine so
+  far). Copy `en.js`, translate it, add it to the list in `src/app/i18n.js`.
+  A unit test checks every language has every key.
 - Anything listed as "not done yet" in [SCOREBOARD.md](SCOREBOARD.md).
 
 ## Pull requests
