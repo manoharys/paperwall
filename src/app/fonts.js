@@ -143,6 +143,7 @@ async function fileAsDataUrl(file) {
   if (direct) return direct;
   if (dataCache.has(file)) return dataCache.get(file);
   const res = await fetch(fontUrl(file));
+  if (!res.ok) throw new Error(`Font ${file}: ${res.status}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
   const url = `data:font/woff2;base64,${bytesToBase64(bytes)}`;
   dataCache.set(file, url);

@@ -401,19 +401,20 @@ async function boot() {
 }
 
 /**
- * Once the worker is in charge, ask it to fetch every font in the background,
- * so any design opens offline later. window.paperwallFontsCached turns true
- * when that is done (the offline test waits for it).
+ * Once the worker is in charge, have it fetch every font in the background,
+ * a batch at a time, so any design opens offline later. It stops when a
+ * batch makes no progress (offline), and starts again on the next visit.
  */
 function cacheFontsForOffline() {
-  window.paperwallFontsCached = false;
-  navigator.serviceWorker.addEventListener('message', (e) => {
-    if (e.data === 'fonts-cached') window.paperwallFontsCached = true;
+  const sw = navigator.serviceWorker;
+  const ask = () => sw.controller?.postMessage('cache-fonts');
+  sw.addEventListener('message', (e) => {
+    if (e.data?.type === 'fonts' && e.data.left > 0 && e.data.cached > 0) ask();
   });
-  navigator.serviceWorker.ready.then((reg) => {
-    // A moment after the home screen is up, so the first click is not competing with 150 files.
-    setTimeout(() => (navigator.serviceWorker.controller || reg.active)?.postMessage('cache-fonts'), 1500);
-  }).catch(() => null);
+  // A new worker owns the page after a deploy: give it the same job.
+  sw.addEventListener('controllerchange', () => setTimeout(ask, 1500));
+  // A moment after the home screen is up, so the first click is not competing with the downloads.
+  sw.ready.then(() => setTimeout(ask, 1500)).catch(() => null);
 }
 
 boot();

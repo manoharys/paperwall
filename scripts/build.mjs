@@ -72,11 +72,14 @@ export function bundle(entry) {
 
 // ---------- assets ----------
 
+function fontFileNames() {
+  return readdirSync(join(root, 'assets/fonts')).filter((f) => f.endsWith('.woff2')).sort();
+}
+
 function fontData() {
-  const dir = join(root, 'assets/fonts');
   const fonts = {};
-  for (const f of readdirSync(dir).filter((f) => f.endsWith('.woff2')).sort()) {
-    fonts[f] = `data:font/woff2;base64,${readFileSync(join(dir, f)).toString('base64')}`;
+  for (const f of fontFileNames()) {
+    fonts[f] = `data:font/woff2;base64,${readFileSync(join(root, 'assets/fonts', f)).toString('base64')}`;
   }
   return fonts;
 }
@@ -131,41 +134,40 @@ export function buildHtml({ pwa = false } = {}) {
   return { html, files };
 }
 
-function fontFileNames() {
-  return readdirSync(join(root, 'assets/fonts')).filter((f) => f.endsWith('.woff2')).sort();
-}
-
 function serviceWorker(version) {
   return `// Paperwall works offline: this caches the app on the first visit, and then
 // every font in the background, so any design opens offline later.
 const CACHE = 'paperwall-${version}';
+const FONT_CACHE = 'paperwall-fonts'; // kept across versions: font files do not change
 const FILES = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 const FONTS = ${JSON.stringify(fontFileNames().map((f) => `./fonts/${f}`))};
+const isFont = (url) => /\\/fonts\\/[^/]+\\.woff2$/.test(new URL(url).pathname);
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
-});
-async function cacheFonts() {
-  const c = await caches.open(CACHE);
-  const missing = [];
-  for (const f of FONTS) if (!(await c.match(f))) missing.push(f);
-  for (let i = 0; i < missing.length; i += 8) {
-    await Promise.all(missing.slice(i, i + 8).map((f) => c.add(f).catch(() => null)));
-  }
-}
-self.addEventListener('message', (e) => {
-  if (e.data !== 'cache-fonts') return;
-  e.waitUntil(cacheFonts().then(() => e.source?.postMessage('fonts-cached')));
+  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== FONT_CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || fetch(e.request).then((res) => {
     const copy = res.clone();
-    if (res.ok) caches.open(CACHE).then((c) => c.put(e.request, copy));
+    if (res.ok) caches.open(isFont(e.request.url) ? FONT_CACHE : CACHE).then((c) => c.put(e.request, copy));
     return res;
-  }).catch(() => caches.match('./index.html'))));
+  }).catch(() => (e.request.mode === 'navigate' ? caches.match('./index.html') : Response.error()))));
+});
+// The page asks for fonts one batch at a time (each message is its own short
+// job, so a slow connection cannot outlive the worker) and hears how many are left.
+self.addEventListener('message', (e) => {
+  if (e.data !== 'cache-fonts') return;
+  e.waitUntil((async () => {
+    const c = await caches.open(FONT_CACHE);
+    const have = new Set((await c.keys()).map((r) => new URL(r.url).pathname));
+    const missing = FONTS.filter((f) => !have.has(new URL(f, self.location.href).pathname));
+    const batch = missing.slice(0, 12);
+    const done = await Promise.all(batch.map((f) => c.add(f).then(() => 1, () => 0)));
+    e.source?.postMessage({ type: 'fonts', cached: done.reduce((a, b) => a + b, 0), left: missing.length - batch.length });
+  })());
 });
 `;
 }
