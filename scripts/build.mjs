@@ -118,7 +118,8 @@ export function buildHtml({ pwa = false } = {}) {
     ? '<link rel="manifest" href="manifest.webmanifest">\n<link rel="apple-touch-icon" href="icons/icon-192.png">\n' +
       '<meta property="og:title" content="Paperwall: design anything, free and offline">\n' +
       '<meta property="og:description" content="An open-source design tool that runs on your device. No account, no watermark, no paywall.">\n' +
-      '<meta property="og:image" content="og.png">\n<meta name="twitter:card" content="summary_large_image">'
+      '<meta property="og:url" content="https://manoharys.github.io/paperwall/">\n' +
+      '<meta property="og:image" content="https://manoharys.github.io/paperwall/og.png">\n<meta name="twitter:card" content="summary_large_image">'
     : '');
   // Function replacements, so "$&" and friends in the code stay literal.
   html = html.replace('<link rel="stylesheet" href="/src/app/styles.css">', () => `<style>\n${css}\n</style>`);
