@@ -79,7 +79,7 @@ Not done yet: nothing.
 ## Use it
 
 - **In your browser:** [manoharys.github.io/paperwall](https://manoharys.github.io/paperwall/). Install it from the address bar to get an app that works offline.
-- **As one file:** download `paperwall.html` from the [latest release](https://github.com/manoharys/paperwall/releases/latest) and double-click it. That's the whole app (about 5 MB, all 92 fonts included).
+- **As one file:** download `paperwall.html` from the [latest release](https://github.com/manoharys/paperwall/releases/latest) and double-click it. That's the whole app (about 6 MB, all 92 fonts included).
 - **From source:**
 
   ```bash
