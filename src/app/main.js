@@ -395,8 +395,25 @@ async function boot() {
   route();
   if ('serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:' && globalThis.PAPERWALL_SW) {
     navigator.serviceWorker.register(globalThis.PAPERWALL_SW).catch(() => null);
+    cacheFontsForOffline();
   }
   document.body.classList.add('ready');
+}
+
+/**
+ * Once the worker is in charge, ask it to fetch every font in the background,
+ * so any design opens offline later. window.paperwallFontsCached turns true
+ * when that is done (the offline test waits for it).
+ */
+function cacheFontsForOffline() {
+  window.paperwallFontsCached = false;
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data === 'fonts-cached') window.paperwallFontsCached = true;
+  });
+  navigator.serviceWorker.ready.then((reg) => {
+    // A moment after the home screen is up, so the first click is not competing with 150 files.
+    setTimeout(() => (navigator.serviceWorker.controller || reg.active)?.postMessage('cache-fonts'), 1500);
+  }).catch(() => null);
 }
 
 boot();

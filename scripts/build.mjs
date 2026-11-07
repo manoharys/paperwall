@@ -91,11 +91,12 @@ function csp(scriptHashes, pwa) {
     `script-src ${scriptHashes.join(' ')}`,
     "style-src 'unsafe-inline'",
     pwa ? "img-src 'self' data: blob:" : 'img-src data: blob:',
-    'font-src data:',
+    pwa ? "font-src 'self' data:" : 'font-src data:',
     'media-src data: blob:',
     // Only the online extras' providers, and only once someone turns one on
-    // (src/app/online.js); nothing else, ever.
-    `connect-src ${onlineHosts().join(' ')}`,
+    // (src/app/online.js); nothing else, ever. The hosted page may also fetch
+    // its own font files.
+    `connect-src ${[...(pwa ? ["'self'"] : []), ...onlineHosts()].join(' ')}`,
     "worker-src 'self'",
     "manifest-src 'self'",
     "base-uri 'none'",
@@ -108,7 +109,9 @@ function csp(scriptHashes, pwa) {
 export function buildHtml({ pwa = false } = {}) {
   const { code, files } = bundle(join(root, 'src/app/main.js'));
   const css = readFileSync(join(root, 'src/app/styles.css'), 'utf8');
-  const assets = `globalThis.PAPERWALL_ASSETS = ${JSON.stringify({ fonts: fontData() })};\n` +
+  // The one-file app carries every font inside it. The hosted page stays light:
+  // its fonts sit beside it in fonts/ and arrive as designs need them.
+  const assets = (pwa ? 'globalThis.PAPERWALL_FONTS = "fonts/";\n' : `globalThis.PAPERWALL_ASSETS = ${JSON.stringify({ fonts: fontData() })};\n`) +
     `globalThis.PAPERWALL_VERSION = ${JSON.stringify(pkg.version)};\n` +
     (pwa ? 'globalThis.PAPERWALL_SW = "sw.js";\n' : '');
   const scripts = [assets, code];
@@ -128,15 +131,33 @@ export function buildHtml({ pwa = false } = {}) {
   return { html, files };
 }
 
+function fontFileNames() {
+  return readdirSync(join(root, 'assets/fonts')).filter((f) => f.endsWith('.woff2')).sort();
+}
+
 function serviceWorker(version) {
-  return `// Paperwall works offline: this caches the app on the first visit.
+  return `// Paperwall works offline: this caches the app on the first visit, and then
+// every font in the background, so any design opens offline later.
 const CACHE = 'paperwall-${version}';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
+const FONTS = ${JSON.stringify(fontFileNames().map((f) => `./fonts/${f}`))};
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+});
+async function cacheFonts() {
+  const c = await caches.open(CACHE);
+  const missing = [];
+  for (const f of FONTS) if (!(await c.match(f))) missing.push(f);
+  for (let i = 0; i < missing.length; i += 8) {
+    await Promise.all(missing.slice(i, i + 8).map((f) => c.add(f).catch(() => null)));
+  }
+}
+self.addEventListener('message', (e) => {
+  if (e.data !== 'cache-fonts') return;
+  e.waitUntil(cacheFonts().then(() => e.source?.postMessage('fonts-cached')));
 });
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
@@ -173,6 +194,8 @@ export function build() {
   const hosted = buildHtml({ pwa: true });
   writeFileSync(join(dist, 'paperwall.html'), single.html);
   writeFileSync(join(dist, 'index.html'), hosted.html);
+  mkdirSync(join(dist, 'fonts'), { recursive: true });
+  for (const f of fontFileNames()) copyFileSync(join(root, 'assets/fonts', f), join(dist, 'fonts', f));
   writeFileSync(join(dist, 'sw.js'), serviceWorker(pkg.version));
   writeFileSync(join(dist, 'manifest.webmanifest'), manifest());
   for (const f of ['icon-192.png', 'icon-512.png']) copyFileSync(join(root, 'assets/icons', f), join(dist, 'icons', f));
