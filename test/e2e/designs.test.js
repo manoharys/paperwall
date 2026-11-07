@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { openApp, newDesign, waitForEditor, state, elements, addText, teardown, setup, distFile, mod, openTab, makePng, uploadImages } from './helpers.js';
 import { onlineHosts } from '../../src/model/providers.js';
@@ -269,11 +269,18 @@ test('[APP-01] [APP-06] installable, and works offline after the first visit', a
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+  // The hosted page is light: fonts live beside it, not inside it...
+  const hosted = readFileSync(distFile('index.html'), 'utf8');
+  assert.ok(!/data:font\/woff2;base64,[A-Za-z0-9+/]{64}/.test(hosted) && hosted.includes('PAPERWALL_FONTS = "fonts/"'), 'hosted page without embedded fonts');
+  // ...and the worker fetches the whole set in the background, so every design works offline later.
+  const fontCount = readdirSync(new URL('../../dist/fonts', import.meta.url)).filter((f) => f.endsWith('.woff2')).length;
+  await page.waitForFunction(async (n) => (await (await caches.open('paperwall-fonts')).keys()).length >= n, fontCount, { timeout: 60000 });
   await context.setOffline(true);
   await page.reload();
   await page.waitForSelector('[data-testid="presets"]');
-  await page.click('[data-testid="preset-square"]');
+  await page.click('[data-testid="template-summer-sale"]');
   await waitForEditor(page);
+  await page.waitForFunction(() => [...document.fonts].some((f) => f.family.replace(/"/g, '') === 'Archivo Black' && f.status === 'loaded'));
   await context.close();
 });
 

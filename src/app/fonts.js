@@ -1,5 +1,6 @@
 // Loading fonts in the browser, measuring text with them, and embedding them
-// in exports. In the one-file build the font files are inlined as data URLs.
+// in exports. In the one-file build the font files are inlined as data URLs;
+// the hosted page fetches them from fonts/ as designs need them.
 
 import { FONTS, fontFiles, fontsUsed, nearestWeight } from '../model/fonts.js';
 import { forgetLayouts } from '../model/text-layout.js';
@@ -10,8 +11,9 @@ const inlined = () => globalThis.PAPERWALL_ASSETS?.fonts || null;
 const dataCache = new Map();
 const customFonts = new Map(); // family -> dataUrl
 
+/** Where a bundled font file is: inlined, beside the hosted page, or in the source tree. */
 export function fontUrl(file) {
-  return inlined()?.[file] || `/assets/fonts/${file}`;
+  return inlined()?.[file] || `${globalThis.PAPERWALL_FONTS || '/assets/fonts/'}${file}`;
 }
 
 const faces = new Map(); // "Family|weight" -> [FontFace]
@@ -141,6 +143,7 @@ async function fileAsDataUrl(file) {
   if (direct) return direct;
   if (dataCache.has(file)) return dataCache.get(file);
   const res = await fetch(fontUrl(file));
+  if (!res.ok) throw new Error(`Font ${file}: ${res.status}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
   const url = `data:font/woff2;base64,${bytesToBase64(bytes)}`;
   dataCache.set(file, url);
