@@ -77,7 +77,7 @@ function quickLanguage(value) {
 /** The words that live in the page itself, in the interface's language. */
 function relabelPage() {
   document.querySelector('meta[name="description"]')?.setAttribute('content', t('app.description'));
-  const loading = document.querySelector('.boot');
+  const loading = document.querySelector('.boot-text');
   if (loading) loading.textContent = t('app.loading');
 }
 
@@ -389,15 +389,22 @@ function sayChanges(editor) {
 
 async function boot() {
   liveRegions();
-  await applyTheme();
-  await applyLanguage();
-  await loadFonts();
+  try {
+    await applyTheme();
+    await applyLanguage();
+    await loadFonts();
+  } catch {
+    /* a blocked store or a failed font must not keep the boot screen up: the app opens with its defaults */
+  }
   route();
   if ('serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:' && globalThis.PAPERWALL_SW) {
     navigator.serviceWorker.register(globalThis.PAPERWALL_SW).catch(() => null);
     cacheFontsForOffline();
   }
   document.body.classList.add('ready');
+  // The boot screen fades out over the home screen, then leaves the page.
+  const splash = document.getElementById('boot');
+  if (splash) setTimeout(() => splash.remove(), 400);
 }
 
 /**

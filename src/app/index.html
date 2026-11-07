@@ -13,7 +13,22 @@
 <link rel="stylesheet" href="/src/app/styles.css">
 </head>
 <body>
-<div id="app"><div class="boot">Paperwall is loading…</div></div>
+<div id="boot" role="status">
+  <div class="boot-scene" aria-hidden="true">
+    <div class="boot-page">
+      <span class="boot-wash"></span>
+      <span class="boot-line boot-line-a"></span>
+      <span class="boot-line boot-line-b"></span>
+      <span class="boot-line boot-line-c"></span>
+      <span class="boot-dot"></span>
+      <span class="boot-sticker"></span>
+    </div>
+  </div>
+  <div class="brand" aria-hidden="true"><span class="logo"></span>Paperwall</div>
+  <p class="boot-text">Paperwall is loading…</p>
+  <div class="boot-bar" aria-hidden="true"><i></i></div>
+</div>
+<div id="app"></div>
 <noscript>Paperwall needs JavaScript. Everything runs on your device; nothing is sent anywhere.</noscript>
 <script type="module" src="/src/app/main.js"></script>
 </body>
