@@ -261,6 +261,10 @@ test('[APP-01] [APP-06] installable, and works offline after the first visit', a
   assert.equal(manifest.display, 'standalone');
   assert.ok(manifest.icons.some((i) => i.sizes === '512x512'));
   assert.ok(manifest.icons.some((i) => i.sizes === '192x192'));
+  // Link previews need absolute URLs: X, Bluesky and chat apps ignore relative ones.
+  const og = async (prop) => page.getAttribute(`meta[property="${prop}"]`, 'content');
+  assert.equal(await og('og:url'), 'https://manoharys.github.io/paperwall/');
+  assert.equal(await og('og:image'), 'https://manoharys.github.io/paperwall/og.png');
   // The service worker takes control and caches the app.
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
