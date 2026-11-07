@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.0 (unreleased): Everyone
+## 0.8.0 (2026-11-07): Everyone
 
 - The interface in nine languages: English, Spanish, French, German,
   Portuguese (Brazil), Hindi, Arabic, Japanese and Kannada. It follows the
