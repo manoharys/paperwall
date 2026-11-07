@@ -62,7 +62,7 @@ test('[APP-08] switching language changes the interface at once and is kept afte
   await page.click('[data-testid="preset-square"]');
   await waitForEditor(page);
   assert.equal((await page.textContent('[data-testid="download"]')).trim(), say('de', 'common.download'));
-  assert.equal(await page.getAttribute('[data-testid="undo"]', 'aria-label'), say('de', 'top.undo').replace('{keys}', 'Ctrl+Z'));
+  assert.equal(await page.getAttribute('[data-testid="undo"]', 'aria-label'), say('de', 'top.undo').replace('{keys}', process.platform === 'darwin' ? '⌘+Z' : 'Ctrl+Z'));
   assert.equal((await page.textContent('[data-testid="rail-text"]')).trim(), say('de', 'insert.tabText'));
   await addText(page);
   assert.equal(await page.textContent('[data-testid="selection-title"]'), say('de', 'type.text'));

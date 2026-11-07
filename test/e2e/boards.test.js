@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { newDesign, state, elements, teardown, openTab, downloadVia, makePng, uploadImages } from './helpers.js';
+import { newDesign, state, elements, teardown, openTab, downloadVia, makePng, uploadImages, mod } from './helpers.js';
 
 after(teardown);
 
@@ -61,7 +61,7 @@ test('[DW-04] [DW-05] a whiteboard: sticky notes in colors, lines between them, 
   // Written on: double-click and type.
   await page.dblclick(`[data-testid="page"] [data-id="${note.id}"]`);
   await page.waitForSelector('[data-testid="text-editor"]');
-  await page.keyboard.press('Control+a');
+  await page.keyboard.press(`${mod}+a`);
   await page.keyboard.type('Ship it');
   await page.keyboard.press('Escape');
   assert.equal((await elements(page)).find((e) => e.id === note.id).text, 'Ship it');
