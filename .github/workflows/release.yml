@@ -17,7 +17,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha256sum dist/paperwall.html > dist/paperwall.html.sha256
+          (cd dist && sha256sum paperwall.html > paperwall.html.sha256)
           gh release create "$GITHUB_REF_NAME" dist/paperwall.html dist/paperwall.html.sha256 \
             --title "Paperwall $GITHUB_REF_NAME" \
             --notes "Download paperwall.html and open it in your browser. That's the whole app: it works offline and never sends your designs anywhere. Check the file with paperwall.html.sha256. Only download Paperwall from this page."
