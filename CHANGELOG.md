@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.1 (2026-11-08): Faster first visit
+
+- The hosted page is about 0.7 MB on the wire instead of 4 MB: fonts now
+  sit beside it and arrive as designs need them, and after the first visit
+  the service worker caches the whole set so every template opens offline.
+- A boot screen where a small design assembles itself, running from the
+  first bytes, with a fade into the home screen.
+- The home screen opens even when the interface font is slow to arrive.
+- Shared links show a preview card on X, Bluesky and chat apps.
+- The release checksum file names paperwall.html without a path.
+- Browser tests use the platform's modifier key, so they pass on a Mac.
+
 ## 0.8.0 (2026-11-07): Everyone
 
 - The interface in nine languages: English, Spanish, French, German,
