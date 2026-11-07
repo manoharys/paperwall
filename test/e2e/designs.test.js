@@ -256,6 +256,10 @@ test('[APP-01] [APP-06] installable, and works offline after the first visit', a
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto(baseUrl);
+  // A boot screen is in the page's first bytes and leaves once the app is ready, so nothing sits over the home screen.
+  assert.match(readFileSync(distFile('index.html'), 'utf8'), /<div id="boot" role="status">[\s\S]*<div id="app">/);
+  await page.waitForSelector('[data-testid="presets"]');
+  await page.waitForFunction(() => !document.getElementById('boot'));
   const manifestHref = await page.getAttribute('link[rel="manifest"]', 'href');
   const manifest = JSON.parse(readFileSync(distFile(manifestHref), 'utf8'));
   assert.equal(manifest.display, 'standalone');
