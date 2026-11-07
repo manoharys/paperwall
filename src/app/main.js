@@ -389,9 +389,13 @@ function sayChanges(editor) {
 
 async function boot() {
   liveRegions();
-  await applyTheme();
-  await applyLanguage();
-  await loadFonts();
+  try {
+    await applyTheme();
+    await applyLanguage();
+    await loadFonts();
+  } catch {
+    /* a blocked store or a failed font must not keep the boot screen up: the app opens with its defaults */
+  }
   route();
   if ('serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:' && globalThis.PAPERWALL_SW) {
     navigator.serviceWorker.register(globalThis.PAPERWALL_SW).catch(() => null);
