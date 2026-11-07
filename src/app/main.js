@@ -392,7 +392,9 @@ async function boot() {
   try {
     await applyTheme();
     await applyLanguage();
-    await loadFonts();
+    // The interface font is worth a short wait, not a long one: on a slow
+    // connection the home screen opens in a fallback font and swaps when it lands.
+    await Promise.race([loadFonts(), new Promise((r) => setTimeout(r, 1500))]);
   } catch {
     /* a blocked store or a failed font must not keep the boot screen up: the app opens with its defaults */
   }

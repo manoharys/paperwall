@@ -251,6 +251,20 @@ test('[APP-05] makes no network requests after loading, enforced by the browser'
   await context.close();
 });
 
+test('[APP-01] the home screen does not wait on a font that is slow to arrive', async () => {
+  const { browser, baseUrl } = await setup();
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  // The interface font never answers (a dying connection): the home screen still opens, in a fallback font.
+  await context.route(/\/fonts\/inter-.*\.woff2$/, () => new Promise(() => null));
+  const t0 = Date.now();
+  await page.goto(baseUrl);
+  await page.waitForSelector('[data-testid="presets"]', { timeout: 8000 });
+  await page.waitForFunction(() => !document.getElementById('boot'));
+  assert.ok(Date.now() - t0 < 8000, 'opened without the font');
+  await context.close();
+});
+
 test('[APP-01] [APP-06] installable, and works offline after the first visit', async () => {
   const { browser, baseUrl } = await setup();
   const context = await browser.newContext();
