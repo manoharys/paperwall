@@ -3,7 +3,13 @@
 
 import { FONT_CATALOG } from './font-catalog.js';
 
-export const FONTS = FONT_CATALOG;
+// Two display fonts are everywhere already, so they stay available but sit at
+// the end of every list instead of leading it.
+const LESS_SUGGESTED = new Set(['Lobster', 'Pacifico']);
+export const FONTS = [
+  ...FONT_CATALOG.filter((f) => !LESS_SUGGESTED.has(f.name)),
+  ...FONT_CATALOG.filter((f) => LESS_SUGGESTED.has(f.name)),
+];
 
 export const FONT_KINDS = ['Sans', 'Serif', 'Display', 'Script', 'Mono'];
 
@@ -15,7 +21,6 @@ export const FONT_PAIRS = [
   { name: 'Friendly', heading: 'Poppins', body: 'Inter' },
   { name: 'Editorial', heading: 'DM Serif Display', body: 'Inter' },
   { name: 'Handmade', heading: 'Caveat', body: 'Poppins' },
-  { name: 'Script', heading: 'Pacifico', body: 'Montserrat' },
   { name: 'Tech', heading: 'Space Grotesk', body: 'Space Grotesk' },
   { name: 'Headline', heading: 'Archivo Black', body: 'Roboto Slab' },
   { name: 'Wedding', heading: 'Dancing Script', body: 'Playfair Display' },
@@ -32,6 +37,7 @@ export const FONT_PAIRS = [
   { name: 'Calligraphy', heading: 'Great Vibes', body: 'Josefin Sans' },
   { name: 'Arcade', heading: 'Press Start 2P', body: 'Space Mono' },
   { name: 'Hindi friendly', heading: 'Mukta', body: 'Hind' },
+  { name: 'Script', heading: 'Pacifico', body: 'Montserrat' },
 ];
 
 export function fontByName(name) {
