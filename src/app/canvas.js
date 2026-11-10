@@ -16,6 +16,7 @@ import { notePad } from '../model/text-layout.js';
 import { h, toast, pickFile } from './ui.js';
 import * as store from './store.js';
 import { t } from './i18n.js';
+import { smartQuote } from '../model/smart-quotes.js';
 
 const PAD = 64;
 const RATIO_LOCKED = new Set([...KEEPS_RATIO, 'group']);
@@ -882,6 +883,14 @@ export class Canvas {
       }
       this.positionTextarea();
       ed.emit('live');
+    });
+    // A typed ' or " becomes a real quote; execCommand keeps the box's own undo.
+    ta.addEventListener('beforeinput', (e) => {
+      if (e.inputType !== 'insertText' || e.isComposing) return;
+      const quote = smartQuote(e.data, ta.value.slice(0, ta.selectionStart));
+      if (!quote) return;
+      e.preventDefault();
+      if (!document.execCommand('insertText', false, quote)) ta.setRangeText(quote, ta.selectionStart, ta.selectionEnd, 'end'), ta.dispatchEvent(new Event('input'));
     });
     ta.addEventListener('keydown', (e) => {
       e.stopPropagation();

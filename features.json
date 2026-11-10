@@ -122,7 +122,8 @@
         { "id": "TXT-20", "title": "Use your own font file" },
         { "id": "TXT-21", "title": "90+ open-license font families in a searchable picker, loaded only when used" },
         { "id": "TXT-22", "title": "Text effects: lift, hollow, splice, echo, glitch, glow, neon" },
-        { "id": "TXT-23", "title": "Ready-made text combinations" }
+        { "id": "TXT-23", "title": "Ready-made text combinations" },
+        { "id": "TXT-24", "title": "Typed quotes and apostrophes become real ones" }
       ]
     },
     {
