@@ -153,3 +153,11 @@ test('[APP-08] templates are found by words in every language: the hint\'s, the 
     setLanguage('en');
   }
 });
+
+test('template words use real apostrophes and quotes, not typewriter ones', () => {
+  const straight = /\w'\w|\s'\w|\w'\s|"/;
+  for (const t of TEMPLATES) {
+    const words = [t.name, ...templateDoc(t).pages.flatMap((p) => p.elements.filter((e) => e.type === 'text').map((e) => e.text))];
+    for (const w of words) assert.ok(!straight.test(w), `${t.id}: "${w}" has a straight quote, use ’ or “ ”`);
+  }
+});

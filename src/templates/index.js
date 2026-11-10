@@ -61,8 +61,8 @@ const BUILDERS = [
     build: () => design(1500, 2100, { type: 'color', color: '#fff4f7' }, [
       K('confetti', { x: 0, y: 0, w: 1500, h: 700, opacity: 0.9 }),
       S('ellipse', { x: 300, y: 560, w: 900, h: 900, fill: '#ffffff', shadow: { x: 0, y: 20, blur: 60, color: '#ff4d6d', opacity: 0.18 } }),
-      T("You're invited", { x: 300, y: 700, w: 900, size: 110, font: 'Dancing Script', weight: 700, color: '#ff4d6d', align: 'center' }),
-      T("MAYA'S 7TH\nBIRTHDAY", { x: 300, y: 880, w: 900, size: 120, font: 'Archivo Black', color: '#16161d', align: 'center', lineHeight: 1 }),
+      T("You’re invited", { x: 300, y: 700, w: 900, size: 110, font: 'Dancing Script', weight: 700, color: '#ff4d6d', align: 'center' }),
+      T("MAYA’S 7TH\nBIRTHDAY", { x: 300, y: 880, w: 900, size: 120, font: 'Archivo Black', color: '#16161d', align: 'center', lineHeight: 1 }),
       I('cake', { x: 680, y: 1160, w: 140, h: 140, color: '#ff4d6d', strokeWidth: 1.6 }),
       T('SATURDAY, JUNE 14 · 3 PM', { x: 150, y: 1560, w: 1200, size: 54, font: 'Montserrat', weight: 700, color: '#16161d', align: 'center', letterSpacing: 4 }),
       T('The Garden Room, 4 Elm Avenue\nPlease reply by June 7', { x: 150, y: 1660, w: 1200, size: 46, font: 'Lora', color: '#5a5a6e', align: 'center', lineHeight: 1.5 }),
@@ -120,11 +120,11 @@ const BUILDERS = [
     ]),
   },
   {
-    id: 'hiring', name: "We're hiring", category: 'Hiring', tags: 'hiring job recruit career team',
+    id: 'hiring', name: "We’re hiring", category: 'Hiring', tags: 'hiring job recruit career team',
     build: () => design(1080, 1080, { type: 'color', color: '#eef6ff' }, [
       S('rect', { x: 60, y: 60, w: 960, h: 960, radius: 48, fill: '#ffffff', shadow: { x: 0, y: 16, blur: 48, color: '#3a86ff', opacity: 0.18 } }),
       I('briefcase', { x: 130, y: 140, w: 110, h: 110, color: '#3a86ff' }),
-      T("We're\nhiring!", { x: 130, y: 290, w: 820, size: 150, font: 'Poppins', weight: 700, color: '#16161d', lineHeight: 1 }),
+      T("We’re\nhiring!", { x: 130, y: 290, w: 820, size: 150, font: 'Poppins', weight: 700, color: '#16161d', lineHeight: 1 }),
       T('Frontend engineer\nRemote · Full time', { x: 130, y: 640, w: 820, size: 48, font: 'Inter', color: '#3d3d4e', lineHeight: 1.4 }),
       S('rect', { x: 130, y: 850, w: 380, h: 100, radius: 50, fill: '#3a86ff' }),
       T('Apply today', { x: 130, y: 875, w: 380, size: 40, font: 'Poppins', weight: 700, color: '#ffffff', align: 'center' }),
