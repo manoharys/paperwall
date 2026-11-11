@@ -231,3 +231,15 @@ test('[TXT-23] ready-made text combinations', async () => {
   assert.equal(await state(page, (ed) => ed.selection[0]), g.id);
   await context.close();
 });
+
+test('[TXT-24] quotes and apostrophes you type become real ones', async () => {
+  const { page, context, t } = await heading();
+  const c = await elementCenter(page, t.id);
+  await page.mouse.dblclick(c.x, c.y);
+  await page.waitForSelector('[data-testid="text-editor"]');
+  await page.keyboard.press(`${mod}+a`);
+  await page.keyboard.type('He said "it\'s Maya\'s turn" and \'then\' left');
+  await page.keyboard.press('Escape');
+  assert.equal((await el(page)).text, 'He said “it’s Maya’s turn” and ‘then’ left');
+  await context.close();
+});
