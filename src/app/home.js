@@ -8,6 +8,7 @@ import * as store from './store.js';
 import { readProjectFile } from './export.js';
 import { aiDesignBlock } from './ai-design.js';
 import { openOnlineSettings } from './online-settings.js';
+import { isOn } from './online.js';
 import { languagePicker } from './widgets.js';
 import { t, tn, formatAgo } from './i18n.js';
 import { presetName, presetSize, sizeLabel } from './names.js';
@@ -27,6 +28,18 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, changeLan
       newDesign(doc, { fit: true });
     },
   });
+
+  // AI design is an online extra: its box shows only once it's turned on in Online extras.
+  const aiSlot = h('div', { 'data-testid': 'ai-design-slot' });
+  const showAi = async () => {
+    if (!aiSlot.isConnected && aiSlot.dataset.ready) return window.removeEventListener('paperwall:online-changed', showAi);
+    aiSlot.dataset.ready = '1';
+    const on = await isOn('design').catch(() => false);
+    if (on && !aiSlot.firstChild) aiSlot.append(aiDesignBlock({ newDesign }));
+    else if (!on) clear(aiSlot);
+  };
+  window.addEventListener('paperwall:online-changed', showAi);
+  showAi();
 
   const fillDesigns = async () => {
     const rows = await store.listDesigns();
@@ -106,7 +119,7 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, changeLan
           h('b', null, presetName(p)),
           h('small', null, presetSize(p))))),
         custom),
-      aiDesignBlock({ newDesign }),
+      aiSlot,
       h('section', { class: 'block' },
         h('div', { class: 'block-head' }, h('h2', null, t('home.templates'))),
         ...templates,
