@@ -91,6 +91,10 @@ Not done yet: nothing.
 There are no dependencies. Node 20+ runs the dev server and the build; the
 end-to-end tests use Playwright.
 
+## How it was made
+
+Paperwall was built with Claude Code and other AI assistants.
+
 ## How it's built
 
 - **Plain JavaScript, no framework, no dependencies.** The design model,
