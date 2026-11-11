@@ -222,6 +222,12 @@ export function designPrompt(description, { width = 1080, height = 1080, count =
   return { system, prompt: `The page is ${width} × ${height} px (${shape}).\nWhat to make: ${String(description).trim()}\n${ask}` };
 }
 
+/** The same request as one piece of text, to paste into any AI chat (no key, nothing sent by the app). */
+export function chatPrompt(description, opts = {}) {
+  const { system, prompt } = designPrompt(description, opts);
+  return `${system}\n\n${prompt}`;
+}
+
 /** The first balanced {...} in some text (strings and escapes respected), or null. */
 function firstObject(s) {
   const start = s.indexOf('{');

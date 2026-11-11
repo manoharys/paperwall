@@ -313,3 +313,35 @@ test('[ON-04] AI design offers three to pick from, and explains an answer it can
   assert.equal(doc.pages[0].elements.filter((e) => e.type === 'text').length, 3);
   await context.close();
 });
+
+test('[ON-06] AI design without a key: copy a prompt for any AI chat, paste its answer, and the design opens', async () => {
+  const { page, context, errors } = await openApp();
+  const seen = await mockProviders(context, () => 'should never be asked');
+  await page.fill('[data-testid="ai-design-prompt"]', 'a poster for a bake sale on Saturday, pastel');
+  await page.selectOption('[data-testid="ai-design-size"]', 'portrait');
+  await page.click('[data-testid="ai-design-copy"]');
+  const prompt = await page.inputValue('[data-testid="ai-design-chat-prompt"]');
+  assert.match(prompt, /bake sale/);
+  assert.match(prompt, /1080 × 1350/);
+  assert.equal(await page.locator('[data-testid="ai-setup"]').count(), 0, 'no key asked for');
+  await page.fill('[data-testid="ai-design-answer"]', `Sure! Here it is:\n\`\`\`json\n${JSON.stringify(SPEC)}\n\`\`\``);
+  await page.click('[data-testid="ai-design-from-answer"]');
+  await waitForEditor(page);
+  const doc = await page.evaluate(() => JSON.parse(JSON.stringify(window.paperwall.editor.doc)));
+  assert.equal(doc.name, 'Bake sale poster');
+  assert.deepEqual([doc.width, doc.height], [1080, 1350]);
+  assert.equal(seen.length, 0, 'nothing was sent anywhere');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('[ON-06] a pasted answer that is not a design is explained, and nothing opens', async () => {
+  const { page, context } = await openApp();
+  await page.fill('[data-testid="ai-design-prompt"]', 'a menu for a cafe');
+  await page.click('[data-testid="ai-design-copy"]');
+  await page.fill('[data-testid="ai-design-answer"]', 'Sorry, I cannot help with that.');
+  await page.click('[data-testid="ai-design-from-answer"]');
+  await page.waitForSelector('[data-testid="ai-design-error"]');
+  assert.equal(await page.locator('[data-testid="presets"]').count(), 1, 'still on the home screen');
+  await context.close();
+});

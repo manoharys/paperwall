@@ -266,7 +266,8 @@
         { "id": "ON-02", "title": "Unsplash and Pexels photo search with your own key, credited as they ask" },
         { "id": "ON-03", "title": "AI writing: write, rewrite, shorten and translate text with Claude, OpenAI, Gemini (your key) or Ollama" },
         { "id": "ON-04", "title": "AI design: describe a design and get an editable one" },
-        { "id": "ON-05", "title": "Online settings: off until turned on, a provider per feature, test a key, forget keys" }
+        { "id": "ON-05", "title": "Online settings: off until turned on, a provider per feature, test a key, forget keys" },
+        { "id": "ON-06", "title": "AI design without a key: copy a prompt for any AI chat and paste its answer back" }
       ]
     },
     {

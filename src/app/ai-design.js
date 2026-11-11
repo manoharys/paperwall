@@ -5,7 +5,7 @@
 import { h, clear, toast } from './ui.js';
 import { PROVIDERS, providerFor } from './online.js';
 import { complete, aiReady, aiSetup, isAbort } from './ai.js';
-import { DESIGN_SIZES, designPrompt, parseJsonReply, designSpecs, specFonts, designsFromReply } from '../model/ai.js';
+import { DESIGN_SIZES, designPrompt, chatPrompt, parseJsonReply, designSpecs, specFonts, designsFromReply } from '../model/ai.js';
 import { presetById } from '../model/doc.js';
 import { renderPage } from '../model/render.js';
 import { ensureFont, measure } from './fonts.js';
@@ -23,6 +23,45 @@ export function aiDesignBlock({ newDesign }) {
   let controller = null;
 
   const say = (...nodes) => clear(status).append(...nodes);
+  // An answer (from a provider, or pasted from any AI chat) opens as a design, or three to pick from.
+  const open = async (answer, preset, description, signal) => {
+    // Its fonts first, so text is measured as it will look.
+    const specs = designSpecs(parseJsonReply(answer));
+    await Promise.all(specs.flatMap(specFonts).map(({ font, weight }) => ensureFont(font, weight)));
+    if (signal?.aborted) throw new DOMException('Stopped', 'AbortError');
+    const docs = designsFromReply(answer, { preset: preset.id, measure, description });
+    if (docs.length === 1) return newDesign(docs[0], { fit: true });
+    say(h('p', { class: 'hint' }, t('aiDesign.pick')),
+      h('div', { class: 'ai-choices', 'data-testid': 'ai-design-choices' }, docs.map((doc, i) => h('button', {
+        type: 'button', class: 'ai-choice', 'aria-label': t('aiDesign.open', { n: i + 1, name: doc.name }), 'data-testid': 'ai-design-choice',
+        onClick: () => newDesign(doc, { fit: true }),
+      }, h('span', { class: 'ai-choice-img', style: { aspectRatio: `${doc.width} / ${doc.height}` }, html: renderPage(doc, 0, { measure, noSize: true, idPrefix: `ai${i}-` }) }), h('small', null, doc.name)))));
+  };
+  // No key: the prompt to paste into any AI chat, and a place for its answer. Nothing is sent by the app.
+  const copyPrompt = () => {
+    const description = text.value.trim();
+    if (!description) return text.focus();
+    controller?.abort();
+    const preset = presetById(size.value);
+    const promptText = chatPrompt(description, { width: preset.w, height: preset.h, count: +count.value });
+    const shown = h('textarea', { class: 'ai-chat-prompt', rows: '4', readonly: true, 'aria-label': t('aiDesign.chatPrompt'), 'data-testid': 'ai-design-chat-prompt' });
+    shown.value = promptText;
+    const answer = h('textarea', { rows: '4', placeholder: t('aiDesign.answerPlaceholder'), 'aria-label': t('aiDesign.answer'), 'data-testid': 'ai-design-answer' });
+    const error = h('div');
+    const fromAnswer = h('button', { type: 'button', class: 'btn primary', 'data-testid': 'ai-design-from-answer', onClick: async () => {
+      if (!answer.value.trim()) return answer.focus();
+      clear(error);
+      try {
+        await open(answer.value, preset, description);
+      } catch (e) {
+        error.append(h('p', { class: 'ai-error', role: 'alert', 'data-testid': 'ai-design-error' }, e.message));
+      }
+    } }, t('aiDesign.fromAnswer'));
+    say(h('div', { class: 'ai-paste', 'data-testid': 'ai-design-paste' },
+      h('p', { class: 'hint' }, t('aiDesign.copied')), shown, answer, h('div', { class: 'row' }, fromAnswer), error));
+    shown.select();
+    navigator.clipboard?.writeText(promptText).catch(() => null);
+  };
   const make = async () => {
     const description = text.value.trim();
     if (!description) return text.focus();
@@ -45,17 +84,7 @@ export function aiDesignBlock({ newDesign }) {
     try {
       const { system, prompt } = designPrompt(description, { width: preset.w, height: preset.h, count: n });
       const answer = await complete({ feature: 'design', system, prompt, json: true, maxTokens: n > 1 ? 8000 : 4000, signal: job.signal });
-      // Its fonts first, so text is measured as it will look.
-      const specs = designSpecs(parseJsonReply(answer));
-      await Promise.all(specs.flatMap(specFonts).map(({ font, weight }) => ensureFont(font, weight)));
-      if (job.signal.aborted) throw new DOMException('Stopped', 'AbortError');
-      const docs = designsFromReply(answer, { preset: preset.id, measure, description });
-      if (docs.length === 1) return newDesign(docs[0], { fit: true });
-      say(h('p', { class: 'hint' }, t('aiDesign.pick')),
-        h('div', { class: 'ai-choices', 'data-testid': 'ai-design-choices' }, docs.map((doc, i) => h('button', {
-          type: 'button', class: 'ai-choice', 'aria-label': t('aiDesign.open', { n: i + 1, name: doc.name }), 'data-testid': 'ai-design-choice',
-          onClick: () => newDesign(doc, { fit: true }),
-        }, h('span', { class: 'ai-choice-img', style: { aspectRatio: `${doc.width} / ${doc.height}` }, html: renderPage(doc, 0, { measure, noSize: true, idPrefix: `ai${i}-` }) }), h('small', null, doc.name)))));
+      await open(answer, preset, description, job.signal);
     } catch (e) {
       if (isAbort(e)) return void (status.querySelector('.ai-progress') && say()); // (AI setup may be showing instead)
       say(h('p', { class: 'ai-error', role: 'alert', 'data-testid': 'ai-design-error' }, e.message));
@@ -75,7 +104,8 @@ export function aiDesignBlock({ newDesign }) {
     h('form', { class: 'ai-design-form', onSubmit: (e) => {
       e.preventDefault();
       if (!controller) make();
-    } }, text, h('div', { class: 'row' }, size, count, go)),
+    } }, text, h('div', { class: 'row' }, size, count, go,
+      h('button', { type: 'button', class: 'btn', 'data-testid': 'ai-design-copy', onClick: copyPrompt }, t('aiDesign.copyPrompt')))),
     h('p', { class: 'fine' }, t('aiDesign.fine')),
     status);
 }
