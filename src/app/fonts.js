@@ -77,7 +77,7 @@ export async function onPaper(doc, pages) {
 /** Boot: register everything, load the interface font. */
 export async function loadFonts() {
   registerFonts();
-  await Promise.all([ensureFont('Inter', 400), ensureFont('Inter', 700)]);
+  await Promise.all([ensureFont('IBM Plex Sans', 400), ensureFont('IBM Plex Sans', 700)]);
 }
 
 /** Add a font from a file the user picked. Returns its family name. */
