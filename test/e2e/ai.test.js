@@ -56,6 +56,14 @@ async function setUp(page, provider, key) {
   else await page.waitForSelector('[data-testid="ai-setup-key"]', { state: 'detached' });
 }
 
+// AI design shows on the home screen only once it's turned on in Online extras.
+async function designOn(page) {
+  await page.click('[data-testid="home-online"]');
+  await page.check('[data-testid="online-on-design"]');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('[data-testid="ai-design"]');
+}
+
 const textEl = async (page, id) => (await elements(page)).find((e) => e.id === id);
 
 /** Every key goes only to its own provider. */
@@ -242,11 +250,12 @@ const SPEC = {
 test('[ON-04] AI design: describe a design, pick a size, and it opens as an editable design', async () => {
   const { page, context } = await openApp();
   const seen = await mockProviders(context, () => `Here you go:\n\`\`\`json\n${JSON.stringify(SPEC, null, 2)}\n\`\`\``);
+  await designOn(page);
   await page.fill('[data-testid="ai-design-prompt"]', 'a poster for a bake sale on Saturday, pastel');
   await page.selectOption('[data-testid="ai-design-size"]', 'portrait');
   await page.click('[data-testid="ai-design-go"]');
   await page.waitForSelector('[data-testid="ai-setup"]');
-  assert.equal(seen.length, 0, 'nothing sent before AI design is turned on');
+  assert.equal(seen.length, 0, 'nothing sent before a key is set');
   await setUp(page, 'claude', 'sk-ant-design');
   await page.click('[data-testid="ai-setup-save"]');
   await waitForEditor(page);
@@ -284,6 +293,7 @@ test('[ON-04] AI design offers three to pick from, and explains an answer it can
   const seen = await mockProviders(context, () => (bad ? 'Sorry, I cannot design that { not json' : JSON.stringify({
     designs: [SPEC, { ...SPEC, name: 'Second take', background: '#1f3a2e' }, { ...SPEC, name: 'Third take', background: '#fff8d6' }],
   })));
+  await designOn(page);
   await page.click('[data-testid="ai-design-settings"]');
   await setUp(page, 'gemini', 'gm-design-key');
   await page.click('[data-testid="ai-setup-save"]');
@@ -317,6 +327,7 @@ test('[ON-04] AI design offers three to pick from, and explains an answer it can
 test('[ON-06] AI design without a key: copy a prompt for any AI chat, paste its answer, and the design opens', async () => {
   const { page, context, errors } = await openApp();
   const seen = await mockProviders(context, () => 'should never be asked');
+  await designOn(page);
   await page.fill('[data-testid="ai-design-prompt"]', 'a poster for a bake sale on Saturday, pastel');
   await page.selectOption('[data-testid="ai-design-size"]', 'portrait');
   await page.click('[data-testid="ai-design-copy"]');
@@ -337,11 +348,25 @@ test('[ON-06] AI design without a key: copy a prompt for any AI chat, paste its 
 
 test('[ON-06] a pasted answer that is not a design is explained, and nothing opens', async () => {
   const { page, context } = await openApp();
+  await designOn(page);
   await page.fill('[data-testid="ai-design-prompt"]', 'a menu for a cafe');
   await page.click('[data-testid="ai-design-copy"]');
   await page.fill('[data-testid="ai-design-answer"]', 'Sorry, I cannot help with that.');
   await page.click('[data-testid="ai-design-from-answer"]');
   await page.waitForSelector('[data-testid="ai-design-error"]');
   assert.equal(await page.locator('[data-testid="presets"]').count(), 1, 'still on the home screen');
+  await context.close();
+});
+
+test('[ON-05] the AI design box shows on the home screen only once AI design is turned on', async () => {
+  const { page, context, errors } = await openApp();
+  await page.waitForSelector('[data-testid="presets"]');
+  assert.equal(await page.locator('[data-testid="ai-design"]').count(), 0, 'not shown while it is off');
+  await designOn(page);
+  await page.click('[data-testid="home-online"]');
+  await page.uncheck('[data-testid="online-on-design"]');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('[data-testid="ai-design"]', { state: 'detached' });
+  assert.deepEqual(errors, []);
   await context.close();
 });
