@@ -161,3 +161,14 @@ test('template words use real apostrophes and quotes, not typewriter ones', () =
     for (const w of words) assert.ok(!straight.test(w), `${t.id}: "${w}" has a straight quote, use ’ or “ ”`);
   }
 });
+
+test('overused display fonts stay available but are not suggested first', async () => {
+  const { FONTS, FONT_PAIRS } = await import('../../src/model/fonts.js');
+  const names = FONTS.map((f) => f.name);
+  for (const name of ['Lobster', 'Pacifico']) {
+    assert.ok(names.includes(name), `${name} is still bundled`);
+    assert.ok(names.indexOf(name) >= names.length - 2, `${name} sits at the end of the list`);
+  }
+  assert.equal(FONT_PAIRS.at(-1).heading, 'Pacifico', 'the Pacifico pair is last');
+  assert.equal(new Set(names).size, names.length, 'no font is listed twice');
+});
