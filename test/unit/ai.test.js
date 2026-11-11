@@ -201,3 +201,13 @@ test('[ON-04] helpers: icons by id or name, fonts to load, clamping', () => {
   assert.deepEqual(clampOntoPage({ x: -50, y: 900, w: 300, h: 300 }, 1000, 1000), { x: 0, y: 700, w: 300, h: 300 });
   assert.deepEqual(clampOntoPage({ x: 10, y: 10, w: 3000, h: 50 }, 1000, 1000), { x: 0, y: 10, w: 1000, h: 50 });
 });
+
+test('[ON-06] a prompt for any AI chat: the rules, the size and the request in one piece of text', async () => {
+  const { chatPrompt, designPrompt } = await import('../../src/model/ai.js');
+  const text = chatPrompt('a poster for a bake sale', { width: 1080, height: 1350 });
+  const { system, prompt } = designPrompt('a poster for a bake sale', { width: 1080, height: 1350 });
+  assert.ok(text.includes(system) && text.includes(prompt), 'everything the provider would get');
+  assert.match(text, /1080 × 1350/);
+  assert.match(text, /bake sale/);
+  assert.match(text, /JSON/);
+});

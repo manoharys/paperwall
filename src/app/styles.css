@@ -540,6 +540,9 @@ textarea.notes { width: 100%; resize: vertical; font: inherit; }
 @media (prefers-reduced-motion: reduce) { .ai-spinner { animation: none; } }
 .ai-error { color: var(--danger); font-size: 13px; margin: 0; }
 .ai-design-form { display: flex; flex-direction: column; gap: 10px; max-width: 720px; }
+.ai-paste { display: grid; gap: 8px; max-width: 720px; }
+.ai-paste textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--ink); font: inherit; resize: vertical; }
+.ai-paste .ai-chat-prompt { font: 12px/1.5 ui-monospace, monospace; color: var(--muted); }
 .ai-design-form textarea { width: 100%; resize: vertical; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
 .ai-design-form select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
 .ai-status { display: flex; flex-direction: column; gap: 10px; max-width: 720px; margin-top: 10px; }
