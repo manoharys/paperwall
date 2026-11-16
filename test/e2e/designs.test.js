@@ -4,6 +4,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { openApp, newDesign, waitForEditor, state, elements, addText, teardown, setup, distFile, mod, openTab, makePng, uploadImages } from './helpers.js';
 import { onlineHosts } from '../../src/model/providers.js';
+import { shareLink } from '../../src/model/share-link.js';
+import { TEMPLATES, templateDoc } from '../../src/templates/index.js';
 
 after(teardown);
 
@@ -347,5 +349,106 @@ test('[DOC-12] version history on your device', async () => {
     return new Promise((ok) => (db.transaction('versions').objectStore('versions').count().onsuccess = (e) => ok(e.target.result)));
   });
   assert.ok(count >= 3, `${count} versions`);
+  await context.close();
+});
+
+test('[DOC-13] share a design as a link: a fresh browser opens it, asks first, and keeps its own copy', async () => {
+  const { page, context, errors } = await newDesign('square');
+  const text = await addText(page, 'heading');
+  const senderId = await page.evaluate(() => window.paperwall.editor.doc.id);
+  await page.click('[data-testid="share-btn"]');
+  const link = await page.inputValue('[data-testid="share-link"]');
+  assert.match(link, /^http:\/\/127\.0\.0\.1:\d+\/#share=[A-Za-z0-9_-]+$/);
+  await context.close();
+
+  // Someone else: no designs, nothing in storage.
+  const other = await openApp();
+  await other.page.goto(link);
+  await other.page.waitForSelector('[data-testid="share-open-dialog"] .share-preview svg');
+  assert.equal(await other.page.evaluate(() => location.hash), '#/', 'the link is off the address bar: a reload won\'t ask again');
+  await other.page.click('[data-testid="share-open"]');
+  await waitForEditor(other.page);
+  const els = await elements(other.page);
+  assert.equal(els.find((e) => e.type === 'text')?.text, text.text);
+  // A copy of its own, not the sender's id.
+  assert.notEqual(await other.page.evaluate(() => window.paperwall.editor.doc.id), senderId);
+  assert.deepEqual(other.errors, []);
+  assert.deepEqual(errors, []);
+  await other.context.close();
+});
+
+test('[DOC-13] a shared link can be turned down, and a damaged one is explained', async () => {
+  const { page, context } = await newDesign('square');
+  await addText(page, 'heading');
+  await page.click('[data-testid="share-btn"]');
+  const link = await page.inputValue('[data-testid="share-link"]');
+  await context.close();
+
+  const other = await openApp();
+  await other.page.goto(link);
+  await other.page.click('[data-testid="share-cancel"]');
+  assert.equal(await other.page.locator('[data-testid="share-open-dialog"]').count(), 0);
+  assert.equal(await other.page.locator('[data-testid="design-card"]').count(), 0, 'nothing kept');
+
+  await other.page.goto(`${link.split('#')[0]}#share=not-a-design`);
+  await other.page.waitForSelector('.toast', { state: 'attached' });
+  assert.match(await other.page.locator('.toast').last().textContent(), /doesn't hold a design/);
+  assert.equal(await other.page.locator('[data-testid="share-open-dialog"]').count(), 0);
+  assert.equal(await other.page.evaluate(() => location.hash), '#/');
+  await other.context.close();
+});
+
+test('[DOC-13] a design too big for a link offers a file instead', async () => {
+  const { page, context, errors } = await newDesign('square');
+  await page.evaluate(() => {
+    const bytes = new Uint8Array(200000);
+    for (let i = 0; i < bytes.length; i += 65536) crypto.getRandomValues(bytes.subarray(i, i + 65536));
+    const doc = window.paperwall.editor.doc;
+    doc.assets.photo = { type: 'image', dataUrl: `data:image/jpeg;base64,${btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''))}` };
+    doc.pages[0].elements.push({ id: 'pic', type: 'image', assetId: 'photo', x: 0, y: 0, w: 10, h: 10, rotation: 0, opacity: 1 });
+  });
+  await page.click('[data-testid="share-btn"]');
+  await page.waitForSelector('[data-testid="share-too-big"]');
+  assert.equal(await page.locator('[data-testid="share-link"]').count(), 0);
+  const [file] = await Promise.all([page.waitForEvent('download'), page.click('[data-testid="share-save-file"]')]);
+  assert.match(file.suggestedFilename(), /\.paperwall\.json$/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('[DOC-13] a shared link from anyone: its words stay words, its fonts wait until it is opened and never replace the app\'s own', async () => {
+  const { page, context, errors, url } = await openApp();
+  const doc = templateDoc(TEMPLATES[0]);
+  doc.name = '<img src=x onerror="window.pwned=1">Poster';
+  const text = doc.pages[0].elements.find((e) => e.type === 'text');
+  text.text = '<script>window.pwned=1</script>';
+  // A font that claims the interface's name, with a source made to point elsewhere.
+  doc.assets.sneaky = { type: 'font', family: 'IBM Plex Sans', dataUrl: 'data:font/woff2;base64,AAAA),url(https://example.invalid/t' };
+  const before = await page.evaluate(() => [...document.fonts].filter((f) => f.family.replace(/"/g, '') === 'IBM Plex Sans').length);
+  await page.goto(shareLink(doc, url).link);
+  const dialogEl = page.locator('[data-testid="share-open-dialog"]');
+  await dialogEl.waitFor();
+  assert.equal(await dialogEl.locator('.share-name').textContent(), doc.name, 'the name, as words');
+  assert.equal(await dialogEl.locator('img, script').count(), 0);
+  assert.equal(await page.evaluate(() => window.pwned), undefined);
+  const during = await page.evaluate(() => [...document.fonts].filter((f) => f.family.replace(/"/g, '') === 'IBM Plex Sans').length);
+  assert.equal(during, before, 'no font added before it is opened');
+  await page.click('[data-testid="share-open"]');
+  await waitForEditor(page);
+  const after = await page.evaluate(() => [...document.fonts].filter((f) => f.family.replace(/"/g, '') === 'IBM Plex Sans').length);
+  assert.equal(after, before, 'and none takes the interface\'s name after');
+  assert.equal(await page.evaluate(() => window.pwned), undefined);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('[DOC-13] a shared link from a newer Paperwall is explained, not silent', async () => {
+  const { page, context, url } = await openApp();
+  const doc = templateDoc(TEMPLATES[0]);
+  doc.version = 999;
+  await page.goto(shareLink(doc, url).link);
+  await page.waitForSelector('.toast');
+  assert.match(await page.locator('.toast').last().textContent(), /doesn't hold a design/);
+  assert.equal(await page.locator('[data-testid="share-open-dialog"]').count(), 0);
   await context.close();
 });

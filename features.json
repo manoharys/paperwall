@@ -16,7 +16,8 @@
         { "id": "DOC-09", "title": "Save a design to a file and open it again later or on another computer" },
         { "id": "DOC-10", "title": "Resize a design to another format with everything rescaled to fit" },
         { "id": "DOC-11", "title": "Print sizes in millimetres and inches" },
-        { "id": "DOC-12", "title": "Version history on your device: go back to an earlier version" }
+        { "id": "DOC-12", "title": "Version history on your device: go back to an earlier version" },
+        { "id": "DOC-13", "title": "Share a design as a link: the design travels inside the link, nothing is uploaded" }
       ]
     },
     {

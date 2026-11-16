@@ -80,10 +80,16 @@ export async function loadFonts() {
   await Promise.all([ensureFont('IBM Plex Sans', 400), ensureFont('IBM Plex Sans', 700)]);
 }
 
+// A font of one's own never takes a bundled font's name (the interface's among
+// them): it would quietly restyle the app and every design using that font.
+const BUNDLED = new Set(FONTS.map((f) => f.name.toLowerCase()));
+
 /** Add a font from a file the user picked. Returns its family name. */
 export async function addCustomFont(name, dataUrl) {
-  const family = name.replace(/\.(woff2?|ttf|otf)$/i, '').replace(/[^\w\s-]/g, '').trim() || 'My font';
-  const face = new FontFace(family, `url(${dataUrl})`);
+  let family = name.replace(/\.(woff2?|ttf|otf)$/i, '').replace(/[^\w\s-]/g, '').trim() || 'My font';
+  if (BUNDLED.has(family.toLowerCase())) family = `${family} (yours)`;
+  // (Its bytes, not its URL: a design from anyone can't point a font elsewhere.)
+  const face = new FontFace(family, dataUrlToBytes(dataUrl).bytes);
   await face.load();
   document.fonts.add(face);
   customFonts.set(family, dataUrl);
@@ -97,7 +103,8 @@ export function customFontNames() {
 /** Make sure fonts stored inside a design are registered. */
 export async function registerDesignFonts(doc) {
   for (const a of Object.values(doc.assets || {})) {
-    if (a.type === 'font' && !customFonts.has(a.family)) {
+    // (One named like a bundled font: the bundled one stands in.)
+    if (a.type === 'font' && !customFonts.has(a.family) && !BUNDLED.has(String(a.family).toLowerCase())) {
       try {
         await addCustomFont(a.family, a.dataUrl);
       } catch {
