@@ -5,6 +5,7 @@
 import { renderPage, textRuns } from '../model/render.js';
 import { buildPdf } from '../model/pdf.js';
 import { buildZip } from '../model/zip.js';
+import { isBackup, backupDesigns, BACKUP_VERSION } from '../model/backup.js';
 import { validateDesign, clone, visiblePages, printDpi, versionSnapshot, soundtrackOf, keptAssets } from '../model/doc.js';
 import { measure, fontCssFor, registerDesignFonts, onPaper } from './fonts.js';
 import { h, icon, dialog, download, safeFilename, toast, readFileAsText, dataUrlToBytes, loadImage, canvasScale, toBlob, blobBytes } from './ui.js';
@@ -119,16 +120,25 @@ export function saveProjectFile(doc) {
   download(projectBlob(doc), `${safeFilename(doc.name)}.paperwall.json`);
 }
 
-export async function readProjectFile(file) {
-  let doc;
+/**
+ * A design file or a backup, read and checked: { doc } for one design, or
+ * { designs, unreadable } for a backup of many.
+ */
+export async function readDesignFile(file) {
+  let data;
   try {
-    doc = JSON.parse(await readFileAsText(file));
+    data = JSON.parse(await readFileAsText(file));
   } catch {
     throw new Error(t('export.notDesignFile', { name: file.name }));
   }
-  validateDesign(doc);
-  await registerDesignFonts(doc);
-  return doc;
+  // (A backup's fonts are registered when each design is opened.)
+  if (isBackup(data)) {
+    if (data.version !== BACKUP_VERSION) throw new Error(t('backup.newer', { name: file.name }));
+    return backupDesigns(data);
+  }
+  validateDesign(data);
+  await registerDesignFonts(data);
+  return { doc: data };
 }
 
 // ---------- the download dialog ----------
