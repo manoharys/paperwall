@@ -111,8 +111,11 @@ function fixedCodes() {
   return FIXED;
 }
 
-/** Inflate zlib data (or raw deflate data with { raw: true }). */
-export function inflate(bytes, { raw = false } = {}) {
+/**
+ * Inflate zlib data (or raw deflate data with { raw: true }). `max` caps the
+ * size it may grow to: data from anyone can't unpack into gigabytes.
+ */
+export function inflate(bytes, { raw = false, max = Infinity } = {}) {
   let start = 0;
   if (!raw) {
     if (bytes.length < 2 || (bytes[0] & 0x0f) !== 8 || ((bytes[0] << 8) | bytes[1]) % 31) throw new Error('Not zlib data');
@@ -123,6 +126,7 @@ export function inflate(bytes, { raw = false } = {}) {
   let out = new Uint8Array(Math.max(1024, bytes.length * 4));
   let n = 0;
   const room = (k) => {
+    if (n + k > max) throw new Error('Compressed data is too big once unpacked');
     if (n + k <= out.length) return;
     const bigger = new Uint8Array(Math.max(out.length * 2, n + k));
     bigger.set(out.subarray(0, n));

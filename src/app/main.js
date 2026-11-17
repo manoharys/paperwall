@@ -9,6 +9,7 @@ import { InsertPanel } from './insert.js';
 import { PageStrip, present, presenterView } from './pages.js';
 import { bindShortcuts, cheatSheet } from './shortcuts.js';
 import { exportDialog, saveProjectFile, thumbnail, api as exportApi } from './export.js';
+import { shareDialog, offerSharedDesign } from './share.js';
 import { renderHome } from './home.js';
 import { loadFonts, registerDesignFonts, ensureDesignFonts, clearMeasureCache } from './fonts.js';
 import * as store from './store.js';
@@ -116,7 +117,10 @@ const stale = (run) => run !== routing;
 function route() {
   const run = ++routing;
   const m = location.hash.match(/^#\/d\/([\w-]+)/);
-  return m ? openEditor(m[1], run) : showHome(run);
+  if (m) return openEditor(m[1], run);
+  // (Opened from a shared link: home first, then the design it holds, asking before keeping it.)
+  const shared = location.hash;
+  return showHome(run).then(() => !stale(run) && offerSharedDesign(shared, { newDesign: startDesign }));
 }
 
 async function closeEditor() {
@@ -146,12 +150,7 @@ async function showHome(run) {
   document.title = t('app.title');
   renderHome(root, {
     openDesign: (id) => (location.hash = `#/d/${id}`),
-    newDesign: async (doc, opts) => {
-      await registerDesignFonts(doc);
-      await store.saveDesign(doc, null);
-      pendingFit = !!opts?.fit;
-      location.hash = `#/d/${doc.id}`;
-    },
+    newDesign: startDesign,
     toggleTheme,
     changeLanguage: (code) => changeLanguage(code, { focus: 'language-select' }),
     installPrompt: () => deferredInstall,
@@ -159,6 +158,14 @@ async function showHome(run) {
 }
 
 let pendingFit = false;
+
+/** Keep a new design (from a template, a file, AI or a shared link) and open it. */
+async function startDesign(doc, opts) {
+  await registerDesignFonts(doc);
+  await store.saveDesign(doc, null);
+  pendingFit = !!opts?.fit;
+  location.hash = `#/d/${doc.id}`;
+}
 
 async function openEditor(id, run) {
   await closeEditor();
@@ -252,6 +259,7 @@ function drawEditor(editor, view = null) {
       iconButton('present', t('top.present'), () => present(editor, canvas), { 'data-testid': 'present' }),
       iconButton('speaker', t('top.presenterView'), () => presenterView(editor, canvas), { 'data-testid': 'presenter-view-btn' }),
       iconButton('save', t('top.saveFile'), () => saveProjectFile(editor.doc), { 'data-testid': 'save-file' }),
+      iconButton('link', t('top.share'), () => shareDialog(editor.doc), { 'data-testid': 'share-btn' }),
       iconButton('search', t('top.find'), () => findDialog(editor), { 'data-testid': 'find-btn' }),
       iconButton('history', t('top.history'), () => historyDialog(editor), { 'data-testid': 'history-btn' }),
       menuButton({ iconName: 'ruler', label: t('top.view'), testid: 'view', content: () => viewMenu(editor) }),
