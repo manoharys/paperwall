@@ -452,3 +452,131 @@ test('[DOC-13] a shared link from a newer Paperwall is explained, not silent', a
   assert.equal(await page.locator('[data-testid="share-open-dialog"]').count(), 0);
   await context.close();
 });
+
+const goHome = async (page) => {
+  await page.evaluate(() => (location.hash = '#/'));
+  await page.waitForSelector('[data-testid="presets"]');
+};
+
+test('[DOC-14] back up every design in one file and restore them in a fresh browser, once', async () => {
+  const { page, context, errors } = await newDesign('square');
+  const first = await addText(page, 'heading');
+  await goHome(page);
+  await page.click('[data-testid="preset-story"]');
+  await waitForEditor(page);
+  const second = await addText(page, 'body');
+  await goHome(page);
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid="design-card"]').length === 2);
+
+  const dl = page.waitForEvent('download');
+  await page.click('[data-testid="backup-all"]');
+  const d = await dl;
+  assert.match(d.suggestedFilename(), /^paperwall-backup-\d{4}-\d\d-\d\d\.json$/);
+  const file = readFileSync(await d.path());
+  const backup = JSON.parse(file.toString());
+  assert.equal(backup.kind, 'paperwall-backup');
+  assert.equal(backup.designs.length, 2);
+  await context.close();
+
+  // A new browser: Open a file takes the backup and keeps every design.
+  const fresh = await openApp();
+  const restore = async () => {
+    const chooser = fresh.page.waitForEvent('filechooser');
+    await fresh.page.click('[data-testid="open-file"]');
+    await (await chooser).setFiles({ name: d.suggestedFilename(), mimeType: 'application/json', buffer: file });
+  };
+  await restore();
+  await fresh.page.waitForFunction(() => document.querySelectorAll('[data-testid="design-card"]').length === 2);
+  assert.match(await fresh.page.locator('.toast').last().textContent(), /Designs restored: 2/);
+  // The same backup again: nothing doubled.
+  await restore();
+  await fresh.page.waitForFunction(() => [...document.querySelectorAll('.toast')].some((el) => /Already on this device: 2/.test(el.textContent)));
+  assert.equal(await fresh.page.locator('[data-testid="design-card"]').count(), 2);
+  // And they open, words and all.
+  const texts = [];
+  for (const id of backup.designs.map((x) => x.id)) {
+    await fresh.page.evaluate((i) => (location.hash = `#/d/${i}`), id);
+    await waitForEditor(fresh.page);
+    texts.push(...(await elements(fresh.page)).filter((e) => e.type === 'text').map((e) => e.text));
+    await goHome(fresh.page);
+  }
+  assert.ok(texts.includes(first.text) && texts.includes(second.text), texts.join(' | '));
+  // Opened and closed, but not changed: still the very same designs.
+  await restore();
+  await fresh.page.waitForFunction(() => [...document.querySelectorAll('.toast')].filter((el) => /Already on this device: 2/.test(el.textContent)).length === 2);
+  assert.equal(await fresh.page.locator('[data-testid="design-card"]').count(), 2);
+  assert.deepEqual(fresh.errors, []);
+  assert.deepEqual(errors, []);
+  await fresh.context.close();
+});
+
+test('[DOC-14] backing up with no designs says so; a damaged design in a backup is skipped and counted', async () => {
+  const { page, context } = await openApp();
+  await page.click('[data-testid="backup-all"]');
+  await page.waitForSelector('.toast');
+  assert.match(await page.locator('.toast').last().textContent(), /no designs to back up/);
+
+  const good = (await newDesign('square'));
+  await addText(good.page, 'heading');
+  const saved = await good.page.evaluate(() => JSON.parse(JSON.stringify(window.paperwall.editor.doc)));
+  await good.context.close();
+  const buffer = Buffer.from(JSON.stringify({ kind: 'paperwall-backup', version: 1, savedAt: Date.now(), designs: [saved, { broken: true }] }));
+  const chooser = page.waitForEvent('filechooser');
+  await page.click('[data-testid="open-file"]');
+  await (await chooser).setFiles({ name: 'backup.json', mimeType: 'application/json', buffer });
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid="design-card"]').length === 1);
+  assert.match(await page.locator('.toast').last().textContent(), /Designs restored: 1 · Couldn't be read: 1/);
+  await context.close();
+});
+
+test('[DOC-14] a backup brings photos back, and keeps an older version beside a changed design as a copy', async () => {
+  const { page, context, errors } = await newDesign('square');
+  // A photo, saved with the design.
+  await page.evaluate(async () => {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 8;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#3a86ff';
+    g.fillRect(0, 0, 8, 8);
+    const ed = window.paperwall.editor;
+    ed.doc.assets.pic = { type: 'image', dataUrl: cv.toDataURL('image/png') };
+    ed.doc.pages[0].elements.push({ id: 'photo', type: 'image', assetId: 'pic', x: 10, y: 10, w: 200, h: 200, rotation: 0, opacity: 1 });
+    ed.afterChange();
+    await ed.flush();
+  });
+  const title = await addText(page, 'heading');
+  await goHome(page);
+  const dl = page.waitForEvent('download');
+  await page.click('[data-testid="backup-all"]');
+  const file = readFileSync(await (await dl).path());
+
+  // The design changes after the backup was made.
+  await page.click('[data-testid="design-card"] .design-open');
+  await waitForEditor(page);
+  await page.evaluate(async () => {
+    const ed = window.paperwall.editor;
+    ed.doc.pages[0].elements.find((e) => e.type === 'text').text = 'Changed since the backup';
+    ed.afterChange();
+    await ed.flush();
+  });
+  await goHome(page);
+  const chooser = page.waitForEvent('filechooser');
+  await page.click('[data-testid="open-file"]');
+  await (await chooser).setFiles({ name: 'backup.json', mimeType: 'application/json', buffer: file });
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid="design-card"]').length === 2);
+  const names = await page.locator('[data-testid="design-card"] .design-name').allTextContents();
+  assert.ok(names.some((n) => / \(copy\)$/.test(n)), names.join(' | '));
+
+  // The copy is the design as it was, photo and all.
+  const copyCard = page.locator('[data-testid="design-card"]', { hasText: '(copy)' });
+  await copyCard.locator('.design-open').click();
+  await waitForEditor(page);
+  const restored = await page.evaluate(() => {
+    const doc = window.paperwall.editor.doc;
+    return { text: doc.pages[0].elements.find((e) => e.type === 'text')?.text, photo: doc.assets.pic?.dataUrl?.slice(0, 22) };
+  });
+  assert.equal(restored.text, title.text);
+  assert.equal(restored.photo, 'data:image/png;base64,');
+  assert.deepEqual(errors, []);
+  await context.close();
+});

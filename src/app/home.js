@@ -1,11 +1,13 @@
 // The home screen: start a design, pick a template, see your designs.
 
-import { h, icon, iconButton, clear, toast, pickFile, dialog, forget } from './ui.js';
+import { h, icon, iconButton, clear, toast, pickFile, dialog, forget, download } from './ui.js';
 import { PRESETS, DOC_STYLES, createDesign, createDesignFromPreset, toPx, uid, clone } from '../model/doc.js';
 import { templateBrowser } from './insert.js';
 import { readyTemplate } from './templates.js';
 import * as store from './store.js';
-import { readProjectFile } from './export.js';
+import { readDesignFile } from './export.js';
+import { BACKUP_KIND, BACKUP_VERSION, backupFileName, planRestore } from '../model/backup.js';
+import { keptAssets } from '../model/doc.js';
 import { aiDesignBlock } from './ai-design.js';
 import { openOnlineSettings } from './online-settings.js';
 import { isOn } from './online.js';
@@ -40,6 +42,54 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, changeLan
   };
   window.addEventListener('paperwall:online-changed', showAi);
   showAi();
+
+  // Every design in one file: the copy that survives clearing this browser's data.
+  // (Designs are read one at a time and the file is built in pieces: one with
+  // long videos needn't fit in memory as a single string.)
+  const backUpAll = async () => {
+    try {
+      const rows = await store.listDesigns();
+      if (!rows.length) return toast(t('backup.none'));
+      const savedAt = Date.now();
+      const parts = [`{"kind":${JSON.stringify(BACKUP_KIND)},"version":${BACKUP_VERSION},"savedAt":${savedAt},"designs":[`];
+      let n = 0;
+      for (const row of rows) {
+        const doc = await store.loadDesign(row.id);
+        if (!doc) continue; // (deleted in another tab meanwhile)
+        parts.push(n++ ? ',' : '', JSON.stringify(keptAssets(doc)));
+      }
+      parts.push(']}');
+      download(new Blob(parts, { type: 'application/json' }), backupFileName(savedAt));
+      toast(t('backup.saved', { n }));
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+
+  // A backup opened: each design kept here, unless the very same one is here
+  // already. If storing fails partway, the ones kept so far are said, and shown.
+  const restoreBackup = async ({ designs, unreadable }) => {
+    const here = new Map((await store.listDesigns()).map((r) => [r.id, r.updatedAt]));
+    const withHistory = new Set();
+    for (const doc of designs) if (typeof doc.id === 'string' && !here.has(doc.id) && (await store.hasVersions(doc.id))) withHistory.add(doc.id);
+    const { save, same } = planRestore(designs, { here, withHistory, newId: () => uid('d'), copyName: (name) => t('home.copyName', { name }) });
+    let restored = 0;
+    let failed = null;
+    try {
+      for (const doc of save) {
+        await store.saveDesign(doc, null);
+        restored++;
+      }
+    } catch (e) {
+      failed = e;
+    }
+    fillDesigns();
+    const parts = [t('backup.restored', { n: restored })];
+    if (same) parts.push(t('backup.alreadyHere', { n: same }));
+    if (unreadable) parts.push(t('backup.unreadable', { n: unreadable }));
+    if (failed) parts.push(failed.message);
+    toast(parts.join(' · '), unreadable || failed ? 'error' : undefined);
+  };
 
   const fillDesigns = async () => {
     const rows = await store.listDesigns();
@@ -95,10 +145,12 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, changeLan
           const [file] = await pickFile('.json,.paperwall,application/json');
           if (!file) return;
           try {
-            const doc = await readProjectFile(file);
+            const read = await readDesignFile(file);
+            if (read.designs) return await restoreBackup(read);
+            const { doc } = read;
             // A new id if the design is here already, or if history from a
             // deleted copy is still kept under its id (it would attach to this one).
-            if ((await store.hasDesign(doc.id)) || (await store.hasVersions(doc.id))) doc.id = uid('d');
+            if (typeof doc.id !== 'string' || !/^[\w-]{1,100}$/.test(doc.id) || (await store.hasDesign(doc.id)) || (await store.hasVersions(doc.id))) doc.id = uid('d');
             newDesign(doc);
           } catch (e) {
             toast(e.message, 'error');
@@ -124,7 +176,10 @@ export function renderHome(root, { openDesign, newDesign, toggleTheme, changeLan
         h('div', { class: 'block-head' }, h('h2', null, t('home.templates'))),
         ...templates,
         h('p', { class: 'fine' }, t('home.templatesFine'))),
-      h('section', { class: 'block' }, h('h2', null, t('home.yours')), designsGrid)),
+      h('section', { class: 'block' },
+        h('div', { class: 'block-head' }, h('h2', null, t('home.yours')),
+          h('button', { type: 'button', class: 'link-btn', 'data-testid': 'backup-all', onClick: backUpAll }, t('home.backup'))),
+        designsGrid)),
     h('footer', { class: 'home-foot' },
       h('p', null, icon('lock', 16), ' ', t('home.private')),
       h('p', null, ...tn('home.footer', { code: h('a', { href: 'https://github.com/manoharys/paperwall', rel: 'noopener', target: '_blank' }, t('home.code')) }))));
